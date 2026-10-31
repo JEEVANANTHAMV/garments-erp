@@ -65,14 +65,14 @@ export function GeneralPurchasesPage() {
         actions={
           <div className="flex items-center gap-2">
             {/* Mode Switcher Pills */}
-            <div className="flex items-center rounded-lg bg-slate-100 p-1 border border-slate-200 text-xs">
+            <div className="flex items-center rounded-lg bg-surface-header p-1 border border-surface-border text-xs">
               <button
                 type="button"
                 onClick={() => nav('/procurement/general-orders')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
                   isPoMode
                     ? 'bg-white text-brand-700 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-ink-secondary hover:text-ink'
                 }`}
               >
                 <ShoppingCart size={13} />
@@ -84,7 +84,7 @@ export function GeneralPurchasesPage() {
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
                   !isPoMode
                     ? 'bg-white text-emerald-700 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-ink-secondary hover:text-ink'
                 }`}
               >
                 <Receipt size={13} />
@@ -162,8 +162,8 @@ export function GeneralPurchasesPage() {
           </div>
         </div>
 
-        <div className="text-xs text-slate-500 font-medium">
-          Total: <span className="font-bold text-slate-800">{list.data?.pagination?.total ?? 0}</span> records
+        <div className="text-xs text-ink-secondary font-medium">
+          Total: <span className="font-bold text-ink">{list.data?.pagination?.total ?? 0}</span> records
         </div>
       </div>
 
@@ -199,7 +199,7 @@ export function GeneralPurchasesPage() {
             key: 'supplier_name',
             header: 'Supplier',
             render: (r: any) => (
-              <span className="font-medium text-slate-800">{r.supplier_name || '—'}</span>
+              <span className="font-medium text-ink">{r.supplier_name || '—'}</span>
             ),
           },
           {
@@ -217,13 +217,13 @@ export function GeneralPurchasesPage() {
             render: (r: any) => (
               r.supplier_inv_no ? (
                 <div className="text-xs">
-                  <span className="tabular-nums font-medium text-slate-700">{r.supplier_inv_no}</span>
+                  <span className="tabular-nums font-medium text-ink">{r.supplier_inv_no}</span>
                   {r.supplier_inv_date && (
-                    <div className="text-micro text-slate-400">{fmtDate(r.supplier_inv_date)}</div>
+                    <div className="text-micro text-ink-muted">{fmtDate(r.supplier_inv_date)}</div>
                   )}
                 </div>
               ) : (
-                <span className="text-slate-400 text-xs">—</span>
+                <span className="text-ink-muted text-xs">—</span>
               )
             ),
           },
@@ -232,7 +232,7 @@ export function GeneralPurchasesPage() {
             header: 'Items',
             align: 'center',
             render: (r: any) => (
-              <span className="inline-flex items-center justify-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+              <span className="inline-flex items-center justify-center rounded-full bg-surface-header px-2 py-0.5 text-xs font-semibold text-ink">
                 {r.item_count || 0}
               </span>
             ),
@@ -243,7 +243,7 @@ export function GeneralPurchasesPage() {
             align: 'right',
             sortable: true,
             render: (r: any) => (
-              <span className="font-semibold text-slate-900 tabular-nums">
+              <span className="font-semibold text-ink tabular-nums">
                 {r.currency_code || 'INR'} {fmtDecimal(r.grand_total, 2)}
               </span>
             ),

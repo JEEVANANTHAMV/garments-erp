@@ -102,18 +102,18 @@ function OpeningEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: ()
         <Select label="Sale order / job (optional)" className="sm:col-span-2" value={h.so_id} placeholder="General stock" onChange={(e) => setH({ ...h, so_id: e.target.value })} options={toOptions(sos.data)} />
         <Input label="Remarks" className="sm:col-span-2" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
       </FormSection>
-      <div className="mb-2 flex items-end justify-between border-b border-slate-100 pb-1.5">
+      <div className="mb-2 flex items-end justify-between border-b border-surface-divider pb-1.5">
         <h3 className={tableHead}>Items</h3>
         <Button size="sm" id="opening-add-line" onClick={() => setLines((ls) => [...ls, blank(ls[ls.length - 1]?.material_type ?? 'YARN')])}><Plus size={13} className="mr-1 inline" /> Add item</Button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>
             {['Material', 'Item', 'Colour', 'Sizes', 'Lot no', 'Roll no', 'UOM', 'Qty', 'Rate', 'Amount', 'Remarks', ''].map((t) => <th key={t} className={`${TH} text-left`}>{t}</th>)}
           </tr></thead>
           <tbody>
             {lines.map((l, i) => (
-              <tr key={i} className="border-t border-slate-100 opening-line">
+              <tr key={i} className="border-t border-surface-divider opening-line">
                 <td className={TD}><select className="input w-32" value={l.material_type} onChange={(e) => set(i, { ...blank(e.target.value as Mat), qty: l.qty, rate: l.rate })}>{MAT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></td>
                 <td className={TD}>
                   {l.material_type === 'GENERAL'
@@ -131,7 +131,7 @@ function OpeningEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: ()
                 <td className={TD}><input className="input w-24 text-right line-rate" type="number" min="0" step="any" value={l.rate} onChange={(e) => set(i, { rate: e.target.value })} /></td>
                 <td className={`${TD} text-right tabular-nums`}>{fmtDecimal(num(l.qty) * num(l.rate), 2)}</td>
                 <td className={TD}><input className="input w-32" value={l.remarks} onChange={(e) => set(i, { remarks: e.target.value })} /></td>
-                <td className={TD}>{lines.length > 1 && <button className="rounded p-1 text-slate-400 hover:text-red-600" aria-label="Remove item" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button>}</td>
+                <td className={TD}>{lines.length > 1 && <button className="rounded p-1 text-ink-muted hover:text-red-600" aria-label="Remove item" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button>}</td>
               </tr>
             ))}
           </tbody>

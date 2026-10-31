@@ -42,9 +42,9 @@ export function PackingRulesPage() {
               <th className="th">Mixing</th><th className="th">Packaging</th><th className="th">Valid</th><th className="th">Used</th><th className="th" /></tr></thead>
             <tbody>{rules.data.map((r) => (
               <tr key={r.id} className={n(r.is_active) ? '' : 'opacity-50'}>
-                <td className="td tabular-nums">{r.rule_code} <span className="text-slate-400">r{r.revision}</span></td><td className="td">{r.rule_name}</td><td className="td">{scope(r)}</td>
+                <td className="td tabular-nums">{r.rule_code} <span className="text-ink-muted">r{r.revision}</span></td><td className="td">{r.rule_name}</td><td className="td">{scope(r)}</td>
                 <td className="td">{UNIT_LABEL[r.packing_unit ?? 'SINGLE']}{r.packing_unit === 'MASTER_POLYBAG' && r.pieces_per_master_bag ? ` (${r.pieces_per_master_bag} / bag)` : ''}
-                  <div className="text-caption text-slate-500">{r.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'bundle / qty'}</div></td><td className="td text-right">{r.pieces_per_polybag}</td><td className="td text-right">{r.standard_pieces_per_carton}</td>
+                  <div className="text-caption text-ink-secondary">{r.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'bundle / qty'}</div></td><td className="td text-right">{r.pieces_per_polybag}</td><td className="td text-right">{r.standard_pieces_per_carton}</td>
                 <td className="td">{[n(r.allow_mixed_sizes) && 'sizes', n(r.allow_mixed_colours) && 'colours'].filter(Boolean).join(' + ') || 'solid'}{n(r.allow_partial_carton) ? ' · partial' : ''}{n(r.allow_overpack) ? ' · overpack' : ''}</td>
                 <td className="td">{r.polybag_trim_name ?? '—'} / {r.carton_trim_name ?? '—'}</td>
                 <td className="td">{r.effective_from ? fmtDate(r.effective_from) : '…'} – {r.effective_to ? fmtDate(r.effective_to) : '…'}</td>
@@ -52,7 +52,7 @@ export function PackingRulesPage() {
                   {n(r.open_old_rev) ? <div className="text-caption text-amber-700" data-old-rev={r.id} title="Open packing orders made before the last change keep the older revision — open the order → Apply latest rule">{r.open_old_rev} open on an older revision</div> : null}</td>
                 <td className="td whitespace-nowrap text-right">
                   {can('PACKING.UPDATE') && <button className="mr-2 text-brand-700 hover:underline" onClick={() => setEditing(r)}>Edit</button>}
-                  {can('PACKING.UPDATE') && <button className="text-slate-600 hover:underline" onClick={() => toggle(r)}>{n(r.is_active) ? 'Deactivate' : 'Activate'}</button>}
+                  {can('PACKING.UPDATE') && <button className="text-ink-secondary hover:underline" onClick={() => toggle(r)}>{n(r.is_active) ? 'Deactivate' : 'Activate'}</button>}
                 </td>
               </tr>
             ))}</tbody>

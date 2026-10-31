@@ -59,15 +59,15 @@ export default function YarnGRNsPage() {
   return (
     <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-lg bg-amber-100 text-amber-700">
               <PackageCheck size={20} />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Yarn Goods Receipt Notes (GRN)</h1>
-              <p className="text-xs text-slate-500">
+              <h1 className="text-xl font-bold text-ink tracking-tight">Yarn Goods Receipt Notes (GRN)</h1>
+              <p className="text-xs text-ink-secondary">
                 Weighed KG verification, bag/pack counting, lot quality check, and yarn stock ledger inward
               </p>
             </div>
@@ -77,7 +77,7 @@ export default function YarnGRNsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => nav('/procurement/yarn/orders')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <Disc size={14} className="text-amber-600" />
             <span>Yarn Orders</span>
@@ -94,42 +94,42 @@ export default function YarnGRNsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Total Yarn Inward Batches</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.totalGrns)}</div>
-          <div className="text-caption text-slate-400 mt-0.5">Recorded GRN shipments</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Total Yarn Inward Batches</div>
+          <div className="text-2xl font-bold text-ink mt-1">{fmtNumber(kpis.totalGrns)}</div>
+          <div className="text-caption text-ink-muted mt-0.5">Recorded GRN shipments</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Total Weighed Yarn (KG)</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Total Weighed Yarn (KG)</div>
           <div className="text-2xl font-bold text-amber-600 mt-1">{fmtDecimal(kpis.totalKg)} KG</div>
-          <div className="text-caption text-slate-400 mt-0.5">Actual net inward weight</div>
+          <div className="text-caption text-ink-muted mt-0.5">Actual net inward weight</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Total Bags / Packs Received</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Total Bags / Packs Received</div>
           <div className="text-2xl font-bold text-indigo-600 mt-1">{fmtNumber(kpis.totalPacks)} Bags</div>
-          <div className="text-caption text-slate-400 mt-0.5">Physical pack count</div>
+          <div className="text-caption text-ink-muted mt-0.5">Physical pack count</div>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-surface-border/80 shadow-sm">
         <div className="relative w-full sm:w-80">
-          <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-2.5 text-ink-muted" />
           <input
             type="text"
             placeholder="Search GRN, PO, Gate Entry, Mill, Style, IO No..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-surface-input focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter size={15} className="text-slate-400" />
+          <Filter size={15} className="text-ink-muted" />
           <select
             value={qcFilter}
             onChange={(e) => setQcFilter(e.target.value)}
-            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+            className="text-xs rounded-lg border border-surface-input py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
           >
             <option value="ALL">All QC Status</option>
             <option value="ACCEPTED">Accepted</option>
@@ -139,7 +139,7 @@ export default function YarnGRNsPage() {
 
           <button
             onClick={() => refetch()}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600 transition"
+            className="p-1.5 rounded-lg border border-surface-input hover:bg-surface-muted text-ink-secondary transition"
             title="Refresh list"
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
@@ -148,11 +148,11 @@ export default function YarnGRNsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
+              <tr className="bg-surface-muted/80 text-ink-secondary font-semibold border-b border-surface-border">
                 <th className="py-3 px-4">GRN No & Date</th>
                 <th className="py-3 px-3">PO & IO No</th>
                 <th className="py-3 px-3">Gate Entry</th>
@@ -165,19 +165,19 @@ export default function YarnGRNsPage() {
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-slate-400">
+                  <td colSpan={10} className="py-10 text-center text-ink-muted">
                     Loading yarn GRNs...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
-                    <PackageCheck size={36} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-sm font-medium text-slate-600">No yarn GRN records found</p>
-                    <p className="text-xs text-slate-400 mt-1">Inward received yarn against approved POs</p>
+                  <td colSpan={10} className="py-12 text-center text-ink-muted">
+                    <PackageCheck size={36} className="mx-auto text-ink-disabled mb-2" />
+                    <p className="text-sm font-medium text-ink-secondary">No yarn GRN records found</p>
+                    <p className="text-xs text-ink-muted mt-1">Inward received yarn against approved POs</p>
                   </td>
                 </tr>
               ) : (
@@ -185,15 +185,15 @@ export default function YarnGRNsPage() {
                   <tr
                     key={g.id}
                     onClick={() => nav(`/procurement/yarn/grn/${g.id}`)}
-                    className="hover:bg-slate-50/70 transition cursor-pointer"
+                    className="hover:bg-surface-muted/70 transition cursor-pointer"
                   >
                     <td className="py-3 px-4">
                       <div className="font-semibold text-amber-700">{g.grn_no}</div>
-                      <div className="text-caption text-slate-400">{fmtDate(g.grn_date)}</div>
+                      <div className="text-caption text-ink-muted">{fmtDate(g.grn_date)}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <div className="font-medium text-slate-800">{g.po_no || '—'}</div>
-                      <div className="text-micro text-slate-500 tabular-nums">{g.internal_ir_no || '—'}</div>
+                      <div className="font-medium text-ink">{g.po_no || '—'}</div>
+                      <div className="text-micro text-ink-secondary tabular-nums">{g.internal_ir_no || '—'}</div>
                     </td>
                     <td className="py-3 px-3">
                       {g.gate_entry_no ? (
@@ -201,27 +201,27 @@ export default function YarnGRNsPage() {
                           {g.gate_entry_no}
                         </span>
                       ) : (
-                        <span className="text-slate-400 text-caption">—</span>
+                        <span className="text-ink-muted text-caption">—</span>
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      <div className="font-medium text-slate-800">{g.supplier_name || 'Spinning Mill'}</div>
+                      <div className="font-medium text-ink">{g.supplier_name || 'Spinning Mill'}</div>
                       {g.supplier_dc_no && (
-                        <div className="text-micro text-slate-400">DC: {g.supplier_dc_no}</div>
+                        <div className="text-micro text-ink-muted">DC: {g.supplier_dc_no}</div>
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      <span className="tabular-nums text-caption text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <span className="tabular-nums text-caption text-ink bg-surface-header px-1.5 py-0.5 rounded">
                         {g.style_code || 'GEN'}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-slate-600 text-caption">
+                    <td className="py-3 px-3 text-ink-secondary text-caption">
                       {g.warehouse_name || 'Yarn Store'}
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-amber-700">
                       {fmtDecimal(g.total_kg)} KG
                     </td>
-                    <td className="py-3 px-3 text-center font-medium text-slate-800">
+                    <td className="py-3 px-3 text-center font-medium text-ink">
                       {fmtNumber(g.total_packs)} Bags
                     </td>
                     <td className="py-3 px-3 text-center">
@@ -233,7 +233,7 @@ export default function YarnGRNsPage() {
                           e.stopPropagation();
                           nav(`/procurement/yarn/grn/${g.id}`);
                         }}
-                        className="p-1 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded transition"
+                        className="p-1 text-ink-muted hover:text-amber-700 hover:bg-amber-50 rounded transition"
                         title="View GRN"
                       >
                         <Eye size={15} />

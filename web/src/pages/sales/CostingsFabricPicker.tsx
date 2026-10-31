@@ -69,18 +69,18 @@ export function FabricPicker({
         </span>
       )}
       {open && !disabled && (
-        <ul className="absolute z-30 mt-1 max-h-56 w-full min-w-[240px] overflow-auto rounded-md border border-slate-200 bg-white py-1 text-xs shadow-lg">
+        <ul className="absolute z-30 mt-1 max-h-56 w-full min-w-[240px] overflow-auto rounded-md border border-surface-border bg-white py-1 text-xs shadow-lg">
           {matches.length === 0 && (
-            <li className="px-2.5 py-1.5 text-slate-400">No fabric in master matches “{query}”</li>
+            <li className="px-2.5 py-1.5 text-ink-muted">No fabric in master matches “{query}”</li>
           )}
           {matches.map((o, i) => (
             <li
               key={o.id}
               onMouseDown={(e) => { e.preventDefault(); pick(o); }}
               onMouseEnter={() => setHi(i)}
-              className={`cursor-pointer px-2.5 py-1.5 ${i === hi ? 'bg-brand-50 text-brand-900' : 'text-slate-700'}`}
+              className={`cursor-pointer px-2.5 py-1.5 ${i === hi ? 'bg-brand-50 text-brand-900' : 'text-ink'}`}
             >
-              {o.code && <span className="tabular-nums text-caption text-slate-400 mr-1.5">{String(o.code)}</span>}
+              {o.code && <span className="tabular-nums text-caption text-ink-muted mr-1.5">{String(o.code)}</span>}
               <span className="font-semibold">{o.label}</span>
             </li>
           ))}

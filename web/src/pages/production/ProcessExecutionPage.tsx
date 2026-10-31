@@ -139,7 +139,7 @@ export default function ProcessExecutionPage() {
               <span className="tabular-nums font-semibold text-brand-700">
                 {selected?.[DOC_SOURCE[srcType].no]}
               </span>
-              <span className="ml-2 text-slate-500">{DOC_SOURCE[srcType].extra?.(selected) ?? ''}</span>
+              <span className="ml-2 text-ink-secondary">{DOC_SOURCE[srcType].extra?.(selected) ?? ''}</span>
               {Number(selected?.revision_no) > 0 && (
                 <Badge tone="amber" className="ml-2">Rev {selected.revision_no}</Badge>
               )}
@@ -187,7 +187,7 @@ export default function ProcessExecutionPage() {
                   i.lot_no ?? '—', i.yarn_po_no ?? '—', fmtDecimal(i.issued_qty_kg, 3),
                   i.is_override
                     ? <Badge tone="amber">Yes</Badge>
-                    : <span className="text-slate-400">No</span>,
+                    : <span className="text-ink-muted">No</span>,
                 ])} empty="No material issued yet" />
             )}
             {tab === 'receipt' && collar && (
@@ -215,9 +215,9 @@ export default function ProcessExecutionPage() {
                 ])} empty="No output received yet" />
             )}
             {tab === 'qc' && (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-surface-divider">
                 {qcRows.length === 0 ? (
-                  <p className="py-8 text-center text-small text-slate-400">No QC recorded</p>
+                  <p className="py-8 text-center text-small text-ink-muted">No QC recorded</p>
                 ) : qcRows.map((q: any) => (
                   <div key={q.id} className="p-3">
                     <div className="flex items-center justify-between">
@@ -331,7 +331,7 @@ function IssueModal({ open, onClose, srcType, srcId, yarns, warehouses, onSaved 
         </FormSection>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-          <label className="flex items-center gap-2 text-small text-slate-700">
+          <label className="flex items-center gap-2 text-small text-ink">
             <input type="checkbox" checked={f.allow_override}
               onChange={(e) => setF({ ...f, allow_override: e.target.checked })} id="is-override" />
             Issue beyond available stock (needs authorisation)
@@ -387,9 +387,9 @@ function ReceiptModal({ open, onClose, srcType, srcId, warehouses, onSaved }: an
       subtitle="Output received back from the process; loss is derived"
       icon={<PackagePlus size={16} />}
       footerStart={<>
-        <span className="font-semibold text-slate-600">Process loss (derived): </span>
-        <span className="tabular-nums font-bold text-slate-900">{fmtDecimal(loss, 3)}</span>
-        <span className="ml-2 text-micro text-slate-500">input − output − rejected</span>
+        <span className="font-semibold text-ink-secondary">Process loss (derived): </span>
+        <span className="tabular-nums font-bold text-ink">{fmtDecimal(loss, 3)}</span>
+        <span className="ml-2 text-micro text-ink-secondary">input − output − rejected</span>
       </>}
       footer={<Footer saving={saving} onClose={onClose} onSave={save} label="Record" id="btn-save-receipt" />}>
       <div className="space-y-3">
@@ -418,11 +418,11 @@ function ReceiptModal({ open, onClose, srcType, srcId, warehouses, onSaved }: an
             {['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((q) => <option key={q} value={q}>{q}</option>)}
           </Select>
           <div className="flex items-end pb-2">
-            <label className="flex items-center gap-2 text-small text-slate-700">
+            <label className="flex items-center gap-2 text-small text-ink">
               <input type="checkbox" checked={f.post_stock} disabled={f.qc_status !== 'PASSED'}
                 onChange={(e) => setF({ ...f, post_stock: e.target.checked })} id="rc-post" />
               Post to stock now
-              {f.qc_status !== 'PASSED' && <span className="text-micro text-slate-400">(needs QC passed)</span>}
+              {f.qc_status !== 'PASSED' && <span className="text-micro text-ink-muted">(needs QC passed)</span>}
             </label>
           </div>
         </FormSection>
@@ -498,8 +498,8 @@ function QcModal({ open, onClose, srcType, srcId, receipts, onSaved }: any) {
         </FormSection>
 
         <div>
-          <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <h4 className="text-small font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mb-2 flex items-center justify-between border-b border-surface-divider pb-1.5">
+            <h4 className="text-small font-semibold uppercase tracking-wider text-ink-secondary">
               QC Parameters
             </h4>
             <button className="btn-secondary btn-sm"
@@ -507,9 +507,9 @@ function QcModal({ open, onClose, srcType, srcId, receipts, onSaved }: any) {
               <Plus size={13} /> Add
             </button>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <div className="overflow-x-auto rounded-lg border border-surface-border">
             <table className="w-full text-small">
-              <thead className="bg-slate-50">
+              <thead className="bg-surface-muted">
                 <tr>
                   <th className="th text-left">Parameter</th>
                   <th className="th w-32">Expected</th>
@@ -520,7 +520,7 @@ function QcModal({ open, onClose, srcType, srcId, receipts, onSaved }: any) {
               </thead>
               <tbody>
                 {lines.map((l, i) => (
-                  <tr key={i} className="border-t border-slate-100">
+                  <tr key={i} className="border-t border-surface-divider">
                     <td className="td p-1">
                       <input className="input text-small" value={l.parameter}
                         onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, parameter: e.target.value } : x))} />
@@ -604,8 +604,8 @@ function RevisionModal({ open, onClose, srcType, srcId, onSaved }: any) {
           onChange={(e) => setReason(e.target.value)} id="rev-reason" />
 
         <div>
-          <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <h4 className="text-small font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mb-2 flex items-center justify-between border-b border-surface-divider pb-1.5">
+            <h4 className="text-small font-semibold uppercase tracking-wider text-ink-secondary">
               Field changes (optional)
             </h4>
             <button className="btn-secondary btn-sm"
@@ -614,7 +614,7 @@ function RevisionModal({ open, onClose, srcType, srcId, onSaved }: any) {
             </button>
           </div>
           {changes.length === 0 ? (
-            <p className="py-2 text-center text-caption text-slate-400">
+            <p className="py-2 text-center text-caption text-ink-muted">
               No field changes — the revision will only record the reason.
             </p>
           ) : changes.map((c, i) => (
@@ -656,17 +656,17 @@ function Footer({ saving, onClose, onSave, label, id }: any) {
 
 function Table({ head, rows, empty }: { head: string[]; rows: React.ReactNode[][]; empty: string }) {
   if (!rows.length) {
-    return empty ? <p className="py-8 text-center text-small text-slate-400">{empty}</p> : null;
+    return empty ? <p className="py-8 text-center text-small text-ink-muted">{empty}</p> : null;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-small">
-        <thead className="bg-slate-50">
+        <thead className="bg-surface-muted">
           <tr>{head.map((h) => <th key={h} className="th text-left">{h}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="border-t border-slate-100 hover:bg-slate-50/60">
+            <tr key={i} className="border-t border-surface-divider hover:bg-surface-muted/60">
               {r.map((c, j) => <td key={j} className="td">{c}</td>)}
             </tr>
           ))}

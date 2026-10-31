@@ -75,7 +75,7 @@ export function ProductionOrdersPage() {
       { key: 'so_no', header: 'Sales order' },
       { key: 'style_code', header: 'Style',
         render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
-          <p className="text-caption text-slate-500">{r.color_name}</p></div> },
+          <p className="text-caption text-ink-secondary">{r.color_name}</p></div> },
       { key: 'unit_name', header: 'Unit' },
       { key: 'order_qty', header: 'Order qty', align: 'right', render: (r: any) => fmtNumber(r.order_qty) },
       { key: 'progress', header: 'Produced', align: 'right', render: (r: any) => {
@@ -84,9 +84,9 @@ export function ProductionOrdersPage() {
           <div className="min-w-[100px]">
             <div className="mb-1 flex justify-between text-caption">
               <span className="tabular-nums">{fmtNumber(r.produced_qty)}</span>
-              <span className="text-slate-400">{pct.toFixed(0)}%</span>
+              <span className="text-ink-muted">{pct.toFixed(0)}%</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-1.5 overflow-hidden rounded-full bg-surface-header">
               <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-brand-500'}`}
                 style={{ width: `${Math.min(100, pct)}%` }} />
             </div>

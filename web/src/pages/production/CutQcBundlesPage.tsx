@@ -273,8 +273,8 @@ export function CutQcBundlesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Cut Piece QC & Bundles</h1>
-          <p className="text-sm text-slate-500">Component QC, garment part barcode generation (TOP / BOTTOM / FOLDING), and floor stage tracking</p>
+          <h1 className="text-2xl font-bold text-ink">Cut Piece QC & Bundles</h1>
+          <p className="text-sm text-ink-secondary">Component QC, garment part barcode generation (TOP / BOTTOM / FOLDING), and floor stage tracking</p>
         </div>
         <div className="flex gap-2">
           {activeTab === 'bundles' && bMeta.summary.bundles > 0 && (
@@ -292,22 +292,22 @@ export function CutQcBundlesPage() {
         </div>
       </div>
 
-      <div className="flex border-b border-slate-200 gap-6 text-sm font-medium">
+      <div className="flex border-b border-surface-border gap-6 text-sm font-medium">
         <button
           onClick={() => setActiveTab('bundles')}
-          className={`pb-3 ${activeTab === 'bundles' ? 'border-b-2 border-brand-600 text-brand-700 font-bold' : 'text-slate-500'}`}
+          className={`pb-3 ${activeTab === 'bundles' ? 'border-b-2 border-brand-600 text-brand-700 font-bold' : 'text-ink-secondary'}`}
         >
           Bundles List ({bMeta.summary.bundles})
         </button>
         <button
           onClick={() => setActiveTab('scanner')}
-          className={`pb-3 ${activeTab === 'scanner' ? 'border-b-2 border-brand-600 text-brand-700 font-bold' : 'text-slate-500'}`}
+          className={`pb-3 ${activeTab === 'scanner' ? 'border-b-2 border-brand-600 text-brand-700 font-bold' : 'text-ink-secondary'}`}
         >
           🔍 Barcode Scanner & Floor Movement
         </button>
         <button
           onClick={() => setActiveTab('cut_qc')}
-          className={`pb-3 ${activeTab === 'cut_qc' ? 'border-b-2 border-brand-600 text-brand-700 font-bold' : 'text-slate-500'}`}
+          className={`pb-3 ${activeTab === 'cut_qc' ? 'border-b-2 border-brand-600 text-brand-700 font-bold' : 'text-ink-secondary'}`}
         >
           Cut Piece QC ({cutQcs.length})
         </button>
@@ -316,9 +316,9 @@ export function CutQcBundlesPage() {
       {activeTab === 'bundles' && (
         <Card>
           {/* Part Filter Bar */}
-          <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <div className="p-3 bg-surface-muted border-b border-surface-border flex items-center justify-between flex-wrap gap-2 text-xs">
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-slate-600 mr-1">Filter by Part:</span>
+              <span className="font-semibold text-ink-secondary mr-1">Filter by Part:</span>
               {['ALL', 'TOP', 'BOTTOM', 'FOLDING', 'COLLAR'].map(p => (
                 <button
                   key={p}
@@ -326,14 +326,14 @@ export function CutQcBundlesPage() {
                   className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
                     selectedPartFilter === p
                       ? 'bg-brand-600 text-white shadow-xs'
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      : 'bg-white text-ink-secondary border border-surface-border hover:bg-surface-header'
                   }`}
                 >
                   {p === 'ALL' ? 'All Parts' : p}
                 </button>
               ))}
             </div>
-            <div className="text-slate-500 tabular-nums">
+            <div className="text-ink-secondary tabular-nums">
               {fmtNumber(bMeta.summary.bundles)} bundles · {fmtNumber(bMeta.summary.qty)} PCS
             </div>
           </div>
@@ -349,32 +349,32 @@ export function CutQcBundlesPage() {
           )}
 
           {/* Server-side filters: job, stage, bundle / barcode, date */}
-          <div className="flex flex-wrap items-end gap-2 border-b border-slate-200 bg-white p-3 text-xs">
-            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">Job / IO</span>
+          <div className="flex flex-wrap items-end gap-2 border-b border-surface-border bg-white p-3 text-xs">
+            <label className="flex flex-col gap-1"><span className="font-semibold text-ink-secondary">Job / IO</span>
               <select className="input h-8 w-44 text-xs" value={bf.io_no} onChange={(e) => setBf({ ...bf, io_no: e.target.value })}>
                 <option value="">All jobs</option>
                 {(bMeta.summary.jobs || []).map((j: any) => <option key={j.io_no ?? '-'} value={j.io_no ?? ''}>{j.io_no ?? '—'} ({j.bundles})</option>)}
               </select>
             </label>
-            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">Stage</span>
+            <label className="flex flex-col gap-1"><span className="font-semibold text-ink-secondary">Stage</span>
               <select className="input h-8 w-36 text-xs" value={bf.status} onChange={(e) => setBf({ ...bf, status: e.target.value })}>
                 <option value="">All stages</option>
                 {['GENERATED', 'CHECKED', 'ISSUED', 'IN_SEWING', 'COMPLETED', 'FINISHING', 'PACKED', 'CLOSED'].map((st) => <option key={st} value={st}>{st}</option>)}
               </select>
             </label>
-            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">From</span>
+            <label className="flex flex-col gap-1"><span className="font-semibold text-ink-secondary">From</span>
               <input type="date" className="input h-8 w-36 text-xs" value={bf.from} onChange={(e) => setBf({ ...bf, from: e.target.value })} /></label>
-            <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">To</span>
+            <label className="flex flex-col gap-1"><span className="font-semibold text-ink-secondary">To</span>
               <input type="date" className="input h-8 w-36 text-xs" value={bf.to} onChange={(e) => setBf({ ...bf, to: e.target.value })} /></label>
             <form className="flex items-end gap-1" onSubmit={(e) => { e.preventDefault(); setBPage(1); loadBundles(1); }}>
-              <label className="flex flex-col gap-1"><span className="font-semibold text-slate-600">Bundle / barcode</span>
+              <label className="flex flex-col gap-1"><span className="font-semibold text-ink-secondary">Bundle / barcode</span>
                 <input className="input h-8 w-44 text-xs" placeholder="Search…" value={bf.q} onChange={(e) => setBf({ ...bf, q: e.target.value })} /></label>
               <Button size="sm" variant="outline" type="submit">Search</Button>
             </form>
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
               {(bMeta.summary.by_status || []).map((st: any) => (
                 <button key={st.status} type="button" onClick={() => setBf({ ...bf, status: bf.status === st.status ? '' : st.status })}
-                  className={`rounded-md border px-2 py-1 tabular-nums ${bf.status === st.status ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600'}`}>
+                  className={`rounded-md border px-2 py-1 tabular-nums ${bf.status === st.status ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-surface-border text-ink-secondary'}`}>
                   {st.status} {fmtNumber(st.bundles)}
                 </button>
               ))}
@@ -400,12 +400,12 @@ export function CutQcBundlesPage() {
                   <div className="flex items-center gap-1.5">
                     <span className="tabular-nums text-xs font-bold text-brand-700">{r.bundle_no}</span>
                     {r.bundle_seq ? (
-                      <span className="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5 text-micro tabular-nums font-bold">
+                      <span className="rounded bg-surface-header text-ink px-1.5 py-0.5 text-micro tabular-nums font-bold">
                         #{r.bundle_seq} / {r.total_bundles || '?'}
                       </span>
                     ) : null}
                   </div>
-                  {r.barcode && <p className="tabular-nums text-micro text-slate-400">{r.barcode}</p>}
+                  {r.barcode && <p className="tabular-nums text-micro text-ink-muted">{r.barcode}</p>}
                 </div>
               ) },
               { key: 'part_name', header: 'Part', sortable: true, render: (r: any) => {
@@ -425,13 +425,13 @@ export function CutQcBundlesPage() {
               { key: 'size_code', header: 'Size' },
               { key: 'lay_no', header: 'Cut Order / Lay', render: (r: any) => (
                 <div className="text-caption"><p className="tabular-nums">{r.plan_no || r.cut_no || '—'}</p>
-                  <p className="text-slate-400">{r.lay_no || ''}{r.marker_no ? ` · ${r.marker_no} v${r.marker_version}` : ''}</p></div>) },
+                  <p className="text-ink-muted">{r.lay_no || ''}{r.marker_no ? ` · ${r.marker_no} v${r.marker_version}` : ''}</p></div>) },
               { key: 'qty', header: 'Qty', align: 'right' as const, render: (r: any) => <Qty v={r.qty} uom="PCS" className="font-semibold text-blue-700" /> },
               { key: 'balance_qty', header: 'Balance', align: 'right' as const, render: (r: any) => <Qty v={r.balance_qty ?? r.qty} uom="PCS" /> },
               { key: 'allocated_kg', header: 'Allocated KG*', align: 'right' as const, render: (r: any) => (
                 <span title={`${ALLOCATED_KG_LABEL}${r.allocation_source ? ' — ' + r.allocation_source : ''}`}>
                   <Qty v={r.allocated_kg} uom="KG" dp={3} />
-                  {r.allocation_method && <span className="block text-micro text-slate-400">{r.allocation_method === 'LAY_AVERAGE' ? 'lay average' : 'size consumption'}</span>}
+                  {r.allocation_method && <span className="block text-micro text-ink-muted">{r.allocation_method === 'LAY_AVERAGE' ? 'lay average' : 'size consumption'}</span>}
                 </span>) },
               { key: 'status', header: 'Stage', render: (r: any) => {
                 const colors: Record<string, string> = {
@@ -452,7 +452,7 @@ export function CutQcBundlesPage() {
               ) },
             ]}
           />
-          <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-xs text-slate-600">
+          <div className="flex items-center justify-between border-t border-surface-border px-3 py-2 text-xs text-ink-secondary">
             <span>Page {bMeta.pagination.page} of {bMeta.pagination.totalPages} · {fmtNumber(bMeta.pagination.total)} bundles{bSel.size ? ` · ${bSel.size} ticked` : ''}</span>
             <span className="flex gap-2">
               <Button size="sm" variant="outline" disabled={bPage <= 1} onClick={() => { const p = bPage - 1; setBPage(p); loadBundles(p); }}>‹ Prev</Button>
@@ -479,9 +479,9 @@ export function CutQcBundlesPage() {
           {scannedBundle && (
             <Card title={`Bundle Information — ${scannedBundle.bundle_no}`}>
               <div className="p-6 space-y-4">
-                <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
+                <div className="grid grid-cols-4 gap-4 p-4 bg-surface-muted rounded-lg">
                   <div>
-                    <span className="text-xs text-slate-500">Garment Part</span>
+                    <span className="text-xs text-ink-secondary">Garment Part</span>
                     <p className="mt-1">
                       <Badge color={(scannedBundle.part_name || 'TOP').toUpperCase() === 'BOTTOM' ? 'emerald' : 'blue'} size="lg">
                         {(scannedBundle.part_name || 'TOP').toUpperCase()}
@@ -489,26 +489,26 @@ export function CutQcBundlesPage() {
                     </p>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500">Bundle Seq</span>
-                    <p className="tabular-nums font-bold text-slate-800 text-lg">
+                    <span className="text-xs text-ink-secondary">Bundle Seq</span>
+                    <p className="tabular-nums font-bold text-ink text-lg">
                       {scannedBundle.bundle_seq ? `#${scannedBundle.bundle_seq} / ${scannedBundle.total_bundles || '?'}` : scannedBundle.bundle_no}
                     </p>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500">I/O No & Style</span>
-                    <p className="font-semibold text-slate-800">{scannedBundle.io_no} — {scannedBundle.style_code} ({scannedBundle.color_name} - {scannedBundle.size_code})</p>
+                    <span className="text-xs text-ink-secondary">I/O No & Style</span>
+                    <p className="font-semibold text-ink">{scannedBundle.io_no} — {scannedBundle.style_code} ({scannedBundle.color_name} - {scannedBundle.size_code})</p>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-500">Quantity</span>
+                    <span className="text-xs text-ink-secondary">Quantity</span>
                     <p className="text-xl font-bold text-blue-700">{scannedBundle.qty} PCS</p>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Components in this Bundle</h4>
+                  <h4 className="text-xs font-bold text-ink-secondary uppercase tracking-wider mb-2">Components in this Bundle</h4>
                   <div className="flex flex-wrap gap-2">
                     {scannedBundle.components?.map((c: any) => (
-                      <span key={c.id} className="px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs tabular-nums font-medium text-slate-700">
+                      <span key={c.id} className="px-2.5 py-1 bg-white border border-surface-border rounded-md text-xs tabular-nums font-medium text-ink">
                         {c.component} ({c.piece_qty} pcs)
                       </span>
                     ))}
@@ -517,7 +517,7 @@ export function CutQcBundlesPage() {
 
                 <div className="border-t pt-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-600">Current Stage:</span>
+                    <span className="text-xs font-semibold text-ink-secondary">Current Stage:</span>
                     <Badge color="blue" size="lg">{scannedBundle.status}</Badge>
                   </div>
 
@@ -525,7 +525,7 @@ export function CutQcBundlesPage() {
                     {scannedBundle.status === 'GENERATED' ? (
                       <Button size="sm" variant="outline" onClick={() => handleMoveBundle(scannedBundle.id, 'CHECKED')}>→ CHECKED (verify)</Button>
                     ) : (
-                      <span className="text-xs text-slate-500">Issue / sewing / finishing / packing moves are posted from the Sewing &amp; Finishing floor and DC screens.</span>
+                      <span className="text-xs text-ink-secondary">Issue / sewing / finishing / packing moves are posted from the Sewing &amp; Finishing floor and DC screens.</span>
                     )}
                   </div>
                 </div>
@@ -569,9 +569,9 @@ export function CutQcBundlesPage() {
             <Button variant="secondary" onClick={() => setShowBundleModal(false)}>Cancel</Button>
             <Button onClick={genMode === 'OUTPUT' ? handleGenerateFromOutput : handleGenerateBundles} loading={saving}>Generate</Button>
           </>}>
-            <div className="-mt-1 mb-4 flex gap-4 border-b border-slate-100 text-xs font-semibold">
-              <button className={`pb-2 ${genMode === 'OUTPUT' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-slate-500'}`} onClick={() => setGenMode('OUTPUT')}>From cut output (lay)</button>
-              <button className={`pb-2 ${genMode === 'LEGACY' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-slate-500'}`} onClick={() => setGenMode('LEGACY')}>Legacy cutting entry</button>
+            <div className="-mt-1 mb-4 flex gap-4 border-b border-surface-divider text-xs font-semibold">
+              <button className={`pb-2 ${genMode === 'OUTPUT' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-ink-secondary'}`} onClick={() => setGenMode('OUTPUT')}>From cut output (lay)</button>
+              <button className={`pb-2 ${genMode === 'LEGACY' ? 'border-b-2 border-brand-600 text-brand-700' : 'text-ink-secondary'}`} onClick={() => setGenMode('LEGACY')}>Legacy cutting entry</button>
             </div>
 
             {genMode === 'OUTPUT' ? (() => {
@@ -638,9 +638,9 @@ export function CutQcBundlesPage() {
               {/* Garment Part Selector */}
               <FormSection title="Garment part" cols={2}>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Garment Part *</label>
+                  <label className="block text-xs font-semibold text-ink mb-1">Garment Part *</label>
                   <select
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full rounded-lg border border-surface-input px-3 py-2 text-sm bg-white font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-brand-500"
                     value={bundleForm.part_name || 'TOP'}
                     onChange={e => setBundleForm({ ...bundleForm, part_name: e.target.value })}
                   >
@@ -661,8 +661,8 @@ export function CutQcBundlesPage() {
                   />
                 ) : (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Selected Part Code</label>
-                    <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold tabular-nums text-brand-700">
+                    <label className="block text-xs font-semibold text-ink-secondary mb-1">Selected Part Code</label>
+                    <div className="px-3 py-2 bg-white border border-surface-border rounded-lg text-sm font-bold tabular-nums text-brand-700">
                       PART: {bundleForm.part_name || 'TOP'}
                     </div>
                   </div>
@@ -680,7 +680,7 @@ export function CutQcBundlesPage() {
                   value={bundleForm.components}
                   onChange={e => setBundleForm({ ...bundleForm, components: e.target.value })}
                 />
-                <p className="text-caption text-slate-400 mt-1">Each bundle will create piece tickets for every listed component.</p>
+                <p className="text-caption text-ink-muted mt-1">Each bundle will create piece tickets for every listed component.</p>
                 </div>
               </FormSection>
             </div>

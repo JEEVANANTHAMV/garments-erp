@@ -109,7 +109,7 @@ export function ImageUpload({
     <div className={className}>
       {label && (
         <div className="mb-1.5 flex items-center justify-between">
-          <label className="text-small font-semibold text-slate-700">{label}</label>
+          <label className="text-small font-semibold text-ink">{label}</label>
           {!disabled && (
             <button
               type="button"
@@ -160,7 +160,7 @@ export function ImageUpload({
 
       {value ? (
         /* Image Preview Box */
-        <div className="relative group overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-2xs aspect-4/3 max-h-[260px] flex items-center justify-center">
+        <div className="relative group overflow-hidden rounded-xl border border-surface-border bg-surface-muted shadow-2xs aspect-4/3 max-h-[260px] flex items-center justify-center">
           <img
             src={value}
             alt={label}
@@ -172,7 +172,7 @@ export function ImageUpload({
             <button
               type="button"
               onClick={() => setIsZoomOpen(true)}
-              className="rounded-lg bg-white/90 p-2 text-slate-800 hover:bg-white hover:text-brand-700 shadow-md transition"
+              className="rounded-lg bg-white/90 p-2 text-ink hover:bg-white hover:text-brand-700 shadow-md transition"
               title="Zoom in"
             >
               <ZoomIn size={16} />
@@ -183,7 +183,7 @@ export function ImageUpload({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="rounded-lg bg-white/90 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white hover:text-brand-700 shadow-md transition flex items-center gap-1.5"
+                  className="rounded-lg bg-white/90 px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-white hover:text-brand-700 shadow-md transition flex items-center gap-1.5"
                   title="Replace image"
                 >
                   <UploadCloud size={14} /> Replace
@@ -211,23 +211,23 @@ export function ImageUpload({
           className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all ${
             isDragging
               ? 'border-brand-500 bg-brand-50/60 ring-4 ring-brand-100'
-              : 'border-slate-200/90 bg-slate-50/50 hover:bg-slate-50 hover:border-brand-300'
+              : 'border-surface-border/90 bg-surface-muted/50 hover:bg-surface-muted hover:border-brand-300'
           } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
         >
           {uploading ? (
             <div className="flex flex-col items-center py-3">
               <Loader2 className="h-8 w-8 animate-spin text-brand-600 mb-2" />
-              <p className="text-xs font-semibold text-slate-700">Uploading garment image…</p>
+              <p className="text-xs font-semibold text-ink">Uploading garment image…</p>
             </div>
           ) : (
             <div className="flex flex-col items-center py-2">
-              <div className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-xl bg-white border border-slate-200 text-brand-600 shadow-2xs">
+              <div className="mb-2.5 flex h-11 w-11 items-center justify-center rounded-xl bg-white border border-surface-border text-brand-600 shadow-2xs">
                 <UploadCloud size={20} />
               </div>
-              <p className="text-xs font-semibold text-slate-800">
+              <p className="text-xs font-semibold text-ink">
                 <span className="text-brand-600 hover:underline">Click to upload</span> or drag and drop
               </p>
-              <p className="mt-1 text-caption text-slate-400">{hint}</p>
+              <p className="mt-1 text-caption text-ink-muted">{hint}</p>
             </div>
           )}
         </div>
@@ -243,12 +243,12 @@ export function ImageUpload({
             className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-2xl bg-white p-3 shadow-2xl border border-slate-700/50"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2 px-1">
-              <span className="text-xs font-semibold text-slate-700">{label}</span>
+            <div className="flex items-center justify-between pb-2 border-b border-surface-divider mb-2 px-1">
+              <span className="text-xs font-semibold text-ink">{label}</span>
               <button
                 type="button"
                 onClick={() => setIsZoomOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                className="rounded-lg p-1 text-ink-muted hover:bg-surface-header hover:text-ink"
               >
                 <X size={18} />
               </button>
@@ -304,7 +304,7 @@ export function ImageThumbnail({
     <>
       <div
         onClick={handleClick}
-        className={`${sizeClasses} shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center ${
+        className={`${sizeClasses} shrink-0 overflow-hidden rounded-lg border border-surface-border bg-surface-header flex items-center justify-center ${
           url ? 'cursor-pointer hover:ring-2 hover:ring-brand-400/50 transition shadow-2xs group relative' : ''
         }`}
         title={title || alt || 'Garment Photo'}
@@ -317,7 +317,7 @@ export function ImageThumbnail({
             </div>
           </>
         ) : (
-          <ImageIcon className="h-4 w-4 text-slate-300" />
+          <ImageIcon className="h-4 w-4 text-ink-disabled" />
         )}
       </div>
 
@@ -330,12 +330,12 @@ export function ImageThumbnail({
             className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-2xl bg-white p-3 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 mb-2 px-1">
-              <span className="text-xs font-semibold text-slate-700">{title || alt || 'Garment Photo'}</span>
+            <div className="flex items-center justify-between pb-2 border-b border-surface-divider mb-2 px-1">
+              <span className="text-xs font-semibold text-ink">{title || alt || 'Garment Photo'}</span>
               <button
                 type="button"
                 onClick={() => setZoomOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                className="rounded-lg p-1 text-ink-muted hover:bg-surface-header hover:text-ink"
               >
                 <X size={18} />
               </button>

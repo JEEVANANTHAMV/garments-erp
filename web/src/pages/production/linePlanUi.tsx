@@ -78,11 +78,11 @@ export function JobHeaderRow({ group, colSpan, qty, extra, checked, onCheck, ope
           )}
           {onCheck && <input type="checkbox" checked={!!checked} onChange={onCheck} />}
           <span>Job / IO: <b className="tabular-nums text-brand-800">{group.io_no}</b></span>
-          <span>Style: <b>{group.style_no}</b>{group.style_description ? <span className="text-slate-500"> · {group.style_description}</span> : null}</span>
+          <span>Style: <b>{group.style_no}</b>{group.style_description ? <span className="text-ink-secondary"> · {group.style_description}</span> : null}</span>
           {group.buyer && <span>Buyer: <b>{group.buyer}</b></span>}
           {group.po_no && <span>PO: <b>{group.po_no}</b></span>}
           {group.colours.length > 0 && <span>Colour: <b>{group.colours.join(', ')}</b></span>}
-          <span className="ml-auto text-slate-600">{group.rows.length} bundle(s) · <b>{fmtNumber(qty)}</b> PCS</span>
+          <span className="ml-auto text-ink-secondary">{group.rows.length} bundle(s) · <b>{fmtNumber(qty)}</b> PCS</span>
           {extra}
         </div>
       </td>
@@ -107,7 +107,7 @@ export function UtilBar({ value, width = 'w-20' }: { value: number; width?: stri
   const tone = value > 100 ? 'bg-red-500' : value >= 90 ? 'bg-emerald-500' : value >= 70 ? 'bg-blue-500' : value >= 50 ? 'bg-amber-500' : 'bg-slate-400';
   return (
     <div className="flex items-center gap-2">
-      <div className={`h-2.5 ${width} overflow-hidden rounded-full bg-slate-100`}>
+      <div className={`h-2.5 ${width} overflow-hidden rounded-full bg-surface-header`}>
         <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.min(100, value)}%` }} />
       </div>
       <span className={`text-caption font-medium ${value > 100 ? 'text-red-600' : ''}`}>{value}%</span>
@@ -247,7 +247,7 @@ export type CascadingFilters = ReturnType<typeof useCascadingFilters>;
 /** The filter dropdowns + "Clear filters" link for a cascading filter set. */
 export function CascadingFilterBar({ cf, width = 'w-36', children }: { cf: CascadingFilters; width?: string; children?: ReactNode }) {
   return (
-    <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-2" data-filter-bar>
+    <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-surface-divider pt-2" data-filter-bar>
       {FILTER_FIELDS.map((d) => {
         const isAuto = cf.auto.includes(d.key);
         return (
@@ -274,10 +274,10 @@ export function SelectShown<K>({ shown, selected, onChange, disabled }: {
   return (
     <span className="flex items-center gap-2 text-xs">
       <button type="button" data-select-shown disabled={disabled || !shown.length || picked === shown.length}
-        className="font-medium text-brand-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-400"
+        className="font-medium text-brand-600 hover:underline disabled:cursor-not-allowed disabled:text-ink-muted"
         onClick={() => onChange(new Set([...selected, ...shown]))}>Select all shown ({shown.length})</button>
       {selected.size > 0 && (
-        <button type="button" data-clear-selection disabled={disabled} className="text-slate-500 hover:underline"
+        <button type="button" data-clear-selection disabled={disabled} className="text-ink-secondary hover:underline"
           onClick={() => onChange(new Set())}>Clear selection ({selected.size})</button>
       )}
     </span>
@@ -312,9 +312,9 @@ export function SummaryTable({ title, keyLabel, labelHeader, data }: {
 }) {
   return (
     <div className="overflow-x-auto">
-      {title && <p className="px-3 pt-3 text-xs font-semibold text-slate-700">{title}</p>}
+      {title && <p className="px-3 pt-3 text-xs font-semibold text-ink">{title}</p>}
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500">
+        <thead className="bg-surface-muted text-ink-secondary">
           <tr>
             <th className="px-3 py-2 text-left">{keyLabel}</th>
             {labelHeader && <th className="px-3 py-2 text-left">{labelHeader}</th>}
@@ -325,18 +325,18 @@ export function SummaryTable({ title, keyLabel, labelHeader, data }: {
         </thead>
         <tbody>
           {data.rows.map((r) => (
-            <tr key={r.key} className="border-t border-slate-100">
+            <tr key={r.key} className="border-t border-surface-divider">
               <td className="px-3 py-1.5 font-medium">{r.key}</td>
-              {labelHeader && <td className="px-3 py-1.5 text-slate-500">{r.label || '—'}</td>}
+              {labelHeader && <td className="px-3 py-1.5 text-ink-secondary">{r.label || '—'}</td>}
               <td className="px-3 py-1.5 text-right">{r.bundles}</td>
               <td className="px-3 py-1.5 text-right font-medium">{fmtNumber(r.qty)}</td>
               <td className="px-3 py-1.5"><UtilBar value={r.pct} width="w-16" /></td>
             </tr>
           ))}
-          {!data.rows.length && <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-400">No data</td></tr>}
+          {!data.rows.length && <tr><td colSpan={5} className="px-3 py-6 text-center text-ink-muted">No data</td></tr>}
         </tbody>
         {data.rows.length > 0 && (
-          <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold">
+          <tfoot className="border-t border-surface-border bg-surface-muted font-semibold">
             <tr>
               <td className="px-3 py-1.5" colSpan={labelHeader ? 3 : 2}>Total</td>
               <td className="px-3 py-1.5 text-right">{fmtNumber(data.total)}</td>
@@ -369,7 +369,7 @@ export function DocumentsModal({ open, onClose, url, title, noKey, dateKey, onPi
       <SearchInput value={search} onChange={setSearch} placeholder="Search document no…" className="mb-3 w-full" />
       {loading && !rows.length ? <LoadingBlock /> : (
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500">
+        <thead className="bg-surface-muted text-ink-secondary">
           <tr>
             <th className="px-2 py-2 text-left">Document</th>
             <th className="px-2 py-2 text-left">Date</th>
@@ -381,7 +381,7 @@ export function DocumentsModal({ open, onClose, url, title, noKey, dateKey, onPi
         </thead>
         <tbody>
           {shown.map((r) => (
-            <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
+            <tr key={r.id} className="border-t border-surface-divider hover:bg-surface-muted">
               <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{r[noKey]}</td>
               <td className="px-2 py-1.5">{fmtDate(r[dateKey])}</td>
               <td className="px-2 py-1.5">{r.shift_name || '—'}</td>
@@ -390,7 +390,7 @@ export function DocumentsModal({ open, onClose, url, title, noKey, dateKey, onPi
               <td className="px-2 py-1.5 text-right"><Button size="sm" variant="secondary" onClick={() => { onPick(r); onClose(); }}>Open</Button></td>
             </tr>
           ))}
-          {!shown.length && <tr><td colSpan={6 + (columns?.length ?? 0)} className="px-3 py-8 text-center text-slate-400">{loading ? 'Loading…' : 'No documents yet'}</td></tr>}
+          {!shown.length && <tr><td colSpan={6 + (columns?.length ?? 0)} className="px-3 py-8 text-center text-ink-muted">{loading ? 'Loading…' : 'No documents yet'}</td></tr>}
         </tbody>
       </table>
       )}

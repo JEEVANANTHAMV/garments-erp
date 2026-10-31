@@ -67,11 +67,11 @@ export function PolybagEntryPage() {
         <Card title="Entry">
           <div className="space-y-3 p-4">
             <OrderPicker value={orderId} onChange={(v) => setSp(v ? { order: String(v) } : {})} />
-            {o && <div className="rounded-lg bg-surface-muted px-3 py-2 text-small text-slate-600">
+            {o && <div className="rounded-lg bg-surface-muted px-3 py-2 text-small text-ink-secondary">
               {o.job_no} · {o.style_code}{o.buyer_po_no ? ` · PO ${o.buyer_po_no}` : ''}<br />
               Mode <b>{individual ? 'Individual piece' : 'Bundle / quantity'}</b> · {ppp} pc / polybag · <PkStatus value={o.order_status} />
             </div>}
-            {individual && <p className="text-small text-slate-500"><b>Bag</b> in the list bags everything that row can take (up to the plan) in one entry — polybags = pieces ÷ {ppp}. Type Pieces first to bag less. A barcode scan bags one polybag ({ppp} pc).</p>}
+            {individual && <p className="text-small text-ink-secondary"><b>Bag</b> in the list bags everything that row can take (up to the plan) in one entry — polybags = pieces ÷ {ppp}. Type Pieces first to bag less. A barcode scan bags one polybag ({ppp} pc).</p>}
             <Input id="bundle-scan" ref={scanRef} label="Bundle barcode" value={code} disabled={!o || busy} autoFocus placeholder="Scan or type, then Enter"
               onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && code.trim()) submit({ barcode: code.trim() }); }} />
             <div className="grid grid-cols-2 gap-3">
@@ -96,7 +96,7 @@ export function PolybagEntryPage() {
               <TableHead title={fgStore ? 'FG store — ready to bag' : 'Bundles ready to bag'} />
               {fgStore && orderId && !bundles.isLoading ? (
                 <>
-                  <p className="mb-2 text-small text-slate-500">Only PCS received on an <b>FG Receipt</b> can be bagged. "Waiting for FG receipt" = finished (ironed) PCS not yet received into the store.</p>
+                  <p className="mb-2 text-small text-ink-secondary">Only PCS received on an <b>FG Receipt</b> can be bagged. "Waiting for FG receipt" = finished (ironed) PCS not yet received into the store.</p>
                   <table className="w-full text-body" id="fg-store-pick">
                     <thead><tr><th className="th">Colour / size</th><th className="th text-right">Planned</th><th className="th text-right">In FG store</th><th className="th text-right">Bagged</th><th className="th text-right">Can bag</th><th className="th text-right">Packed</th><th className="th text-right">Waiting for FG receipt</th><th className="th" /></tr></thead>
                     <tbody>{bundles.data!.map((b) => (
@@ -122,11 +122,11 @@ export function PolybagEntryPage() {
           {orderId && <Card>
             <div className="p-3">
               <TableHead title="Entries on this order" />
-              {!entries.data?.length ? <p className="text-small text-slate-400">No entries yet.</p> : (
+              {!entries.data?.length ? <p className="text-small text-ink-muted">No entries yet.</p> : (
                 <table className="w-full text-body" id="polybag-entries">
                   <thead><tr><th className="th">Time</th><th className="th">Bundle</th><th className="th">Colour / size</th><th className="th text-right">Pcs</th><th className="th text-right">Bags</th><th className="th text-right">In cartons</th><th className="th">Operator</th><th className="th">Status</th><th className="th" /></tr></thead>
                   <tbody>{entries.data.map((b) => (
-                    <tr key={b.id} className={b.status === 'VOID' ? 'opacity-50' : ''}><td className="td">{fmtDateTime(b.created_at)}</td><td className="td tabular-nums">{b.bundle_no ?? <span className="font-sans text-slate-400">FG store</span>}</td><td className="td">{b.color_name} / {b.size_code}</td>
+                    <tr key={b.id} className={b.status === 'VOID' ? 'opacity-50' : ''}><td className="td">{fmtDateTime(b.created_at)}</td><td className="td tabular-nums">{b.bundle_no ?? <span className="font-sans text-ink-muted">FG store</span>}</td><td className="td">{b.color_name} / {b.size_code}</td>
                       <td className="td text-right">{fmtNumber(b.pieces)}</td><td className="td text-right">{b.polybag_qty}</td><td className="td text-right">{b.cartoned_qty}</td><td className="td">{b.operator_name}</td><td className="td"><PkStatus value={b.status} /></td>
                       <td className="td text-right">{b.status === 'OPEN' && !n(b.cartoned_qty) && can('PACKING.UPDATE') && <button className="text-small text-red-600 hover:underline" onClick={() => setVoiding(b)}>Void</button>}</td></tr>
                   ))}</tbody>

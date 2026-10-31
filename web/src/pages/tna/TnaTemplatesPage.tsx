@@ -25,17 +25,17 @@ export default function TnaTemplatesPage() {
   return (
     <div className="space-y-4 pb-12">
       {/* 1. Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
         <div className="flex items-center gap-3">
           <button type="button" className="btn-ghost btn-sm" onClick={() => nav('/tna')}>
             <ArrowLeft size={16} /> Back to Orders
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-xl font-bold text-ink flex items-center gap-2">
               <Layers className="text-brand-600" size={22} />
               Time & Action Activity Templates & Lead Time Master
             </h1>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-secondary">
               Pre-configured manufacturing milestone sequences, lead-times and predecessor dependencies
             </p>
           </div>
@@ -46,7 +46,7 @@ export default function TnaTemplatesPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Template selector cards */}
         <div className="space-y-2.5">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink-secondary px-1">
             Standard Garment Workflows
           </h3>
           {templates.map((tpl) => (
@@ -56,18 +56,18 @@ export default function TnaTemplatesPage() {
               className={`p-3.5 rounded-xl border cursor-pointer transition-all shadow-xs ${
                 selectedTplId === tpl.id
                   ? 'bg-brand-50/70 border-brand-500 ring-1 ring-brand-500'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
+                  : 'bg-white border-surface-border hover:border-surface-input'
               }`}
             >
               <div className="flex justify-between items-start">
-                <span className="tabular-nums text-caption font-bold text-slate-400">{tpl.template_code}</span>
+                <span className="tabular-nums text-caption font-bold text-ink-muted">{tpl.template_code}</span>
                 <span className="rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-micro font-bold text-indigo-700">
                   {tpl.product_type}
                 </span>
               </div>
-              <h4 className="font-bold text-slate-900 mt-1 text-sm">{tpl.template_name}</h4>
-              <p className="text-caption text-slate-500 mt-1 line-clamp-2">{tpl.description}</p>
-              <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-100 text-caption text-slate-600">
+              <h4 className="font-bold text-ink mt-1 text-sm">{tpl.template_name}</h4>
+              <p className="text-caption text-ink-secondary mt-1 line-clamp-2">{tpl.description}</p>
+              <div className="flex justify-between items-center mt-3 pt-2 border-t border-surface-divider text-caption text-ink-secondary">
                 <span>{tpl.activity_count || 21} Activities</span>
                 <span className="font-semibold text-brand-600 flex items-center gap-0.5">
                   View Sequence <ChevronRight size={13} />
@@ -78,13 +78,13 @@ export default function TnaTemplatesPage() {
         </div>
 
         {/* Right: Selected Template Activity Sequence */}
-        <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-          <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+        <div className="md:col-span-2 rounded-xl border border-surface-border bg-white shadow-xs overflow-hidden">
+          <div className="p-4 bg-surface-muted border-b border-surface-border flex justify-between items-center">
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">
+              <h3 className="font-bold text-ink text-sm">
                 {selectedTemplate?.template_name || 'Loading sequence…'}
               </h3>
-              <p className="text-xs text-slate-500">{selectedTemplate?.description}</p>
+              <p className="text-xs text-ink-secondary">{selectedTemplate?.description}</p>
             </div>
             <span className="rounded-full bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 text-xs">
               Active Template
@@ -93,7 +93,7 @@ export default function TnaTemplatesPage() {
 
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-caption sticky top-0">
+              <thead className="bg-surface-header/80 border-b border-surface-border text-ink-secondary font-semibold uppercase tracking-wider text-caption sticky top-0">
                 <tr>
                   <th className="py-2.5 px-3 w-12 text-center">Seq</th>
                   <th className="py-2.5 px-3">Milestone Activity</th>
@@ -105,44 +105,44 @@ export default function TnaTemplatesPage() {
                   <th className="py-2.5 px-3 text-center">Mandatory</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-surface-divider text-ink">
                 {(!selectedTemplate?.activities || selectedTemplate.activities.length === 0) ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400">
+                    <td colSpan={8} className="py-8 text-center text-ink-muted">
                       Loading activity sequence…
                     </td>
                   </tr>
                 ) : (
                   selectedTemplate.activities.map((act: any) => (
-                    <tr key={act.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3 text-center tabular-nums font-medium text-slate-500">
+                    <tr key={act.id} className="hover:bg-surface-muted/80 transition-colors">
+                      <td className="py-2.5 px-3 text-center tabular-nums font-medium text-ink-secondary">
                         {act.sequence_no}
                       </td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-900">
+                      <td className="py-2.5 px-3 font-semibold text-ink">
                         {act.activity_name}
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="rounded px-1.5 py-0.5 text-micro font-semibold bg-slate-100 text-slate-700">
+                        <span className="rounded px-1.5 py-0.5 text-micro font-semibold bg-surface-header text-ink">
                           {act.category}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-center tabular-nums font-bold text-indigo-700">
                         {act.default_duration} {act.duration_uom || 'days'}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-600">
+                      <td className="py-2.5 px-3 text-ink-secondary">
                         {act.department_name || '—'}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-600">
+                      <td className="py-2.5 px-3 text-ink-secondary">
                         {act.default_owner_role || '—'}
                       </td>
-                      <td className="py-2.5 px-3 text-center tabular-nums text-slate-500">
+                      <td className="py-2.5 px-3 text-center tabular-nums text-ink-secondary">
                         {act.dependency_sequence ? `Seq #${act.dependency_sequence}` : 'None (Start)'}
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         {Boolean(act.mandatory) ? (
                           <span className="text-emerald-700 font-bold">Yes</span>
                         ) : (
-                          <span className="text-slate-400">Optional</span>
+                          <span className="text-ink-muted">Optional</span>
                         )}
                       </td>
                     </tr>

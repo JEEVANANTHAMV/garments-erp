@@ -164,9 +164,9 @@ export default function ProcessRoutePage() {
           message="Create a route to define the sequence a yarn follows through the factory."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-surface-border bg-white">
           <table className="w-full text-small">
-            <thead className="bg-slate-50">
+            <thead className="bg-surface-muted">
               <tr>
                 <th className="th text-left">Code</th>
                 <th className="th text-left">Route Name</th>
@@ -179,20 +179,20 @@ export default function ProcessRoutePage() {
             </thead>
             <tbody>
               {routes.map((r: any) => (
-                <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                <tr key={r.id} className="border-t border-surface-divider hover:bg-surface-muted/60">
                   <td className="td tabular-nums font-semibold text-brand-700">{r.route_code}</td>
                   <td className="td font-medium">{r.route_name}</td>
                   <td className="td">
                     <div className="flex flex-wrap gap-1">
                       {String(r.sequence_text || '').split(' → ').filter(Boolean).map((p, i) => (
                         <span key={i}
-                          className={`inline-flex items-center rounded border px-1.5 py-0.5 text-micro font-semibold ${PROCESS_COLORS[p] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                          className={`inline-flex items-center rounded border px-1.5 py-0.5 text-micro font-semibold ${PROCESS_COLORS[p] ?? 'bg-surface-header text-ink border-surface-border'}`}>
                           {p.replace(/_/g, ' ')}
                         </span>
                       ))}
                     </div>
                   </td>
-                  <td className="td text-slate-600">{r.yarn_name || r.fabric_name || '— any —'}</td>
+                  <td className="td text-ink-secondary">{r.yarn_name || r.fabric_name || '— any —'}</td>
                   <td className="td text-center tabular-nums">{r.step_count}</td>
                   <td className="td text-center">
                     <Badge tone={r.is_active ? 'success' : 'neutral'}>{r.is_active ? 'Yes' : 'No'}</Badge>
@@ -248,8 +248,8 @@ export default function ProcessRoutePage() {
           </FormSection>
 
           <div className="mt-5">
-            <div className="mb-2.5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-              <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">
+            <div className="mb-2.5 flex flex-wrap items-end gap-2 border-b border-surface-divider pb-1.5">
+              <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-ink-secondary">
                 Process Sequence
               </h3>
               <button className="btn-primary btn-sm"
@@ -260,13 +260,13 @@ export default function ProcessRoutePage() {
             </div>
 
             {form.lines.length === 0 ? (
-              <p className="py-4 text-center text-small text-slate-400">
+              <p className="py-4 text-center text-small text-ink-muted">
                 No steps yet — add the processes this route runs through.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <div className="overflow-x-auto rounded-lg border border-surface-border">
                 <table className="w-full text-small">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-surface-muted">
                     <tr>
                       <th className="th w-12">#</th>
                       <th className="th text-left">Process</th>
@@ -278,8 +278,8 @@ export default function ProcessRoutePage() {
                   </thead>
                   <tbody>
                     {form.lines.map((l, i) => (
-                      <tr key={l._key} className="border-t border-slate-100">
-                        <td className="td text-center font-semibold text-slate-500">{i + 1}</td>
+                      <tr key={l._key} className="border-t border-surface-divider">
+                        <td className="td text-center font-semibold text-ink-secondary">{i + 1}</td>
                         <td className="td p-1">
                           <select className="input text-small" value={l.process_type}
                             onChange={(e) => setStep(l._key, { process_type: e.target.value })}

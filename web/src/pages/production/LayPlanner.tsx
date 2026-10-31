@@ -25,12 +25,12 @@ const n = (v: unknown) => Number(v) || 0;
 
 function FlowChip({ status }: { status: string }) {
   const tone: Record<string, string> = {
-    GENERATED: 'bg-slate-100 text-slate-700', ROLL_RESERVED: 'bg-sky-100 text-sky-800', PLAN_APPROVED: 'bg-indigo-100 text-indigo-800',
+    GENERATED: 'bg-surface-header text-ink', ROLL_RESERVED: 'bg-sky-100 text-sky-800', PLAN_APPROVED: 'bg-indigo-100 text-indigo-800',
     ISSUED: 'bg-violet-100 text-violet-800', RECEIVED: 'bg-teal-100 text-teal-800', SPREADING: 'bg-amber-100 text-amber-800',
     READY_FOR_CUTTING: 'bg-orange-100 text-orange-800', CUT: 'bg-emerald-100 text-emerald-800', APPROVED: 'bg-emerald-200 text-emerald-900',
     CANCELLED: 'bg-red-100 text-red-700',
   };
-  return <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold ${tone[status] ?? 'bg-slate-100 text-slate-700'}`}>{flowLabel(status)}</span>;
+  return <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-caption font-semibold ${tone[status] ?? 'bg-surface-header text-ink'}`}>{flowLabel(status)}</span>;
 }
 
 /* ================================================================== workbench */
@@ -133,7 +133,7 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
           <SearchSelect className="md:col-span-2" label="Cut order (colour)" value={planId} onChange={setPlanId}
             placeholder={plans.length ? 'Select the cut order' : 'No open cut order — create one in Cutting Plans'}
             options={plans.map((p: any) => ({ value: p.id, label: `${p.plan_no} · ${p.style_code || ''} · ${p.color_name || 'all colours'}`, sub: p.fabric_name || undefined, right: p.status }))} />
-          <div className="text-xs text-slate-500">{loading ? 'Loading…' : wb ? `${wb.lays.length} lay(s) on this cut order` : 'Pick the job, then the cut order'}</div>
+          <div className="text-xs text-ink-secondary">{loading ? 'Loading…' : wb ? `${wb.lays.length} lay(s) on this cut order` : 'Pick the job, then the cut order'}</div>
         </div>
       </Card>
 
@@ -155,24 +155,24 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
           <Card title="CAD markers" subtitle={wb.cad ? `CAD ${wb.cad.req_no} (${wb.cad.status}) · efficiency ${wb.cad.marker_efficiency}% · rejection ${wb.cad.rejection_pct}% — only an APPROVED marker version plans lays` : 'No CAD linked to this job + style — import markers in the Marker Versions tab'}>
             <div className="overflow-x-auto">
               <table className="w-full text-xs" id="lp-markers">
-                <thead className="border-b bg-slate-50 text-left text-slate-600">
+                <thead className="border-b bg-surface-muted text-left text-ink-secondary">
                   <tr><th className="p-2 w-8">Use</th><th className="p-2">Marker</th><th className="p-2">Version</th><th className="p-2">Approval</th><th className="p-2">Fabric</th>
                     <th className="p-2">Size ratio</th><th className="p-2 text-right">PCS/marker</th><th className="p-2 text-right">Length</th><th className="p-2 text-right">Width</th>
                     <th className="p-2 text-right">KG/ply</th><th className="p-2 text-right">Efficiency</th><th className="p-2 text-right">CAD plies</th><th className="p-2" /></tr>
                 </thead>
                 <tbody>
-                  {wb.markers.length === 0 && <tr><td colSpan={13} className="p-3 text-center text-slate-400">No marker for this style.</td></tr>}
+                  {wb.markers.length === 0 && <tr><td colSpan={13} className="p-3 text-center text-ink-muted">No marker for this style.</td></tr>}
                   {wb.markers.map((m: any) => {
                     const v = m.usable ?? m.latest;
                     const checked = !!m.usable && sel.includes(m.usable.id);
                     return (
-                      <tr key={m.key} className={`border-b ${m.fabric_match === false || !m.has_colour ? 'text-slate-400' : ''}`}>
+                      <tr key={m.key} className={`border-b ${m.fabric_match === false || !m.has_colour ? 'text-ink-muted' : ''}`}>
                         <td className="p-2"><input type="checkbox" disabled={!m.usable} checked={checked} id={`lp-use-${m.marker_ref}`}
                           onChange={(e) => setSel((s) => (e.target.checked ? [...s, m.usable.id] : s.filter((x) => x !== m.usable.id)))} /></td>
-                        <td className="p-2 font-semibold">{m.marker_ref} <span className="font-normal text-slate-400">{m.source}</span></td>
-                        <td className="p-2">{v ? `v${v.version}` : '—'}{m.versions.length > 1 && <span className="text-slate-400"> ({m.versions.length})</span>}</td>
+                        <td className="p-2 font-semibold">{m.marker_ref} <span className="font-normal text-ink-muted">{m.source}</span></td>
+                        <td className="p-2">{v ? `v${v.version}` : '—'}{m.versions.length > 1 && <span className="text-ink-muted"> ({m.versions.length})</span>}</td>
                         <td className="p-2">{v ? <span className={`rounded px-1.5 py-0.5 text-micro font-bold ${v.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{v.status}</span> : <span className="text-amber-700">not imported</span>}
-                          {v?.approved_by_name && <span className="block text-micro text-slate-400">{v.approved_by_name}</span>}</td>
+                          {v?.approved_by_name && <span className="block text-micro text-ink-muted">{v.approved_by_name}</span>}</td>
                         <td className="p-2">{m.fabric_type || '—'}{m.fabric_match === false && <span className="block text-micro text-red-600">other fabric</span>}{!m.has_colour && <span className="block text-micro text-red-600">colour not on marker</span>}</td>
                         <td className="p-2 tabular-nums">{ratioText(m.sizes, m.ratios)}</td>
                         <td className="p-2 text-right"><Qty v={m.ppm} uom="PCS" /></td>
@@ -206,7 +206,7 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
             </div>
             <div className="overflow-x-auto px-4">
               <table className="w-full text-xs">
-                <thead className="border-b text-slate-500"><tr><th className="p-1.5 text-left">Size</th>{req.sizes.map((x: any) => <th key={x.size_id} className="p-1.5 text-right">{x.size_code}</th>)}</tr></thead>
+                <thead className="border-b text-ink-secondary"><tr><th className="p-1.5 text-left">Size</th>{req.sizes.map((x: any) => <th key={x.size_id} className="p-1.5 text-right">{x.size_code}</th>)}</tr></thead>
                 <tbody>
                   {[['Target', 'target'], ['Cut', 'cut'], ['On open lays', 'on_open_lays'], ['Pending', 'pending']].map(([l, k]) => (
                     <tr key={k} className={`border-b ${k === 'pending' ? 'font-semibold text-indigo-700' : ''}`}><td className="p-1.5">{l}</td>{req.sizes.map((x: any) => <td key={x.size_id} className="p-1.5 text-right tabular-nums">{fmtNumber(x[k])}</td>)}</tr>
@@ -235,7 +235,7 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
                 <Button size="sm" variant="outline" id="lp-recalc" loading={busy} onClick={() => runPreview(edit)}>Recalculate</Button></>}>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs" id="lp-proposal">
-                  <thead className="border-b bg-slate-50 text-left text-slate-600">
+                  <thead className="border-b bg-surface-muted text-left text-ink-secondary">
                     <tr><th className="p-2">Lay</th><th className="p-2">Marker</th><th className="p-2 w-28">Ply</th><th className="p-2 text-right">Output</th>
                       {(preview.requirement?.sizes || []).map((x: any) => <th key={x.size_id} className="p-2 text-right">{x.size_code}</th>)}
                       <th className="p-2 text-right">Length</th><th className="p-2 text-right">Fabric</th><th className="p-2 text-right">PCS left</th><th className="p-2 text-right">Fabric left</th><th className="w-8" /></tr>
@@ -269,15 +269,15 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
               </div>
               <div className="grid gap-4 p-4 md:grid-cols-2">
                 <div>
-                  <h4 className="mb-1 text-xs font-semibold text-slate-600">Size ratio validation (doc §7)</h4>
+                  <h4 className="mb-1 text-xs font-semibold text-ink-secondary">Size ratio validation (doc §7)</h4>
                   <table className="w-full text-xs" id="lp-size-check">
-                    <thead className="border-b text-slate-500"><tr><th className="p-1 text-left">Size</th><th className="p-1 text-right">Required</th><th className="p-1 text-right">Planned</th><th className="p-1 text-right">Residual</th><th className="p-1 text-right">Over</th></tr></thead>
+                    <thead className="border-b text-ink-secondary"><tr><th className="p-1 text-left">Size</th><th className="p-1 text-right">Required</th><th className="p-1 text-right">Planned</th><th className="p-1 text-right">Residual</th><th className="p-1 text-right">Over</th></tr></thead>
                     <tbody>{preview.sizes.map((x: any) => (
                       <tr key={x.size} className={`border-b ${x.over_tolerance ? 'bg-red-50 text-red-700' : ''}`}><td className="p-1 font-semibold">{x.size}</td><td className="p-1 text-right">{fmtNumber(x.required)}</td>
                         <td className="p-1 text-right">{fmtNumber(x.planned)}</td><td className={`p-1 text-right ${x.residual > 0 ? 'font-semibold text-amber-700' : ''}`}>{fmtNumber(x.residual)}</td>
                         <td className="p-1 text-right">{x.over > 0 ? `+${fmtNumber(x.over)} (${x.over_pct}%)` : '—'}</td></tr>))}</tbody>
                   </table>
-                  <p className="mt-1 text-caption text-slate-500">Tolerance {preview.settings?.size_tolerance_pct}% per size (Admin › Settings › CUT_SIZE_TOLERANCE_PCT).</p>
+                  <p className="mt-1 text-caption text-ink-secondary">Tolerance {preview.settings?.size_tolerance_pct}% per size (Admin › Settings › CUT_SIZE_TOLERANCE_PCT).</p>
                 </div>
                 <div className="space-y-2">
                   {preview.markers.map((m: any) => <p key={m.marker_version_id} className="text-xs">Marker <b>{m.marker_no} v{m.version}</b>: {m.ppm} PCS/marker · required marker units <b>{m.required_marker_units}</b> · {m.plies} plies in {m.lays} lay(s) · {fmtNumber(m.output_pcs)} PCS</p>)}
@@ -310,15 +310,15 @@ export function LayGrid({ lays, onExecute, onDone }: { lays: any[]; onExecute: (
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs" id="lp-lays">
-        <thead className="border-b bg-slate-50 text-left text-slate-600">
+        <thead className="border-b bg-surface-muted text-left text-ink-secondary">
           <tr><th className="p-2">Lay No</th><th className="p-2">Marker</th><th className="p-2 text-right">Ply</th><th className="p-2 text-right">Output</th><th className="p-2 text-right">Length</th>
             <th className="p-2 text-right">Fabric</th><th className="p-2">Rolls</th><th className="p-2">Shade / Lot</th><th className="p-2">DC</th><th className="p-2">Status</th><th className="p-2 text-right">Actions</th></tr>
         </thead>
         <tbody>
-          {lays.length === 0 && <tr><td colSpan={11} className="p-3 text-center text-slate-400">No lays yet.</td></tr>}
+          {lays.length === 0 && <tr><td colSpan={11} className="p-3 text-center text-ink-muted">No lays yet.</td></tr>}
           {lays.map((l) => (
-            <tr key={l.id} className={`border-b ${l.status === 'CANCELLED' ? 'text-slate-400 line-through' : ''}`} id={`lay-row-${l.lay_no}`}>
-              <td className="p-2 tabular-nums font-semibold">{l.lay_no}{l.lay_seq ? <span className="ml-1 text-slate-400">#{l.lay_seq}</span> : null}</td>
+            <tr key={l.id} className={`border-b ${l.status === 'CANCELLED' ? 'text-ink-muted line-through' : ''}`} id={`lay-row-${l.lay_no}`}>
+              <td className="p-2 tabular-nums font-semibold">{l.lay_no}{l.lay_seq ? <span className="ml-1 text-ink-muted">#{l.lay_seq}</span> : null}</td>
               <td className="p-2">{l.marker_no ? `${l.marker_no} v${l.marker_version}` : (l.marker_ref || '—')}</td>
               <td className="p-2 text-right">{l.ply_count}{l.actual_ply && n(l.actual_ply) !== n(l.ply_count) ? <span className="text-amber-700"> → {l.actual_ply}</span> : null}</td>
               <td className="p-2 text-right"><Qty v={l.expected_pieces} uom="PCS" />{n(l.actual_cut_qty) > 0 && <div className="text-emerald-700"><Qty v={l.actual_cut_qty} uom="cut" /></div>}</td>
@@ -434,20 +434,20 @@ function RollAllocationModal({ lay, onClose, onSaved }: { lay: any; onClose: () 
           <MetricTile label="Eligible rolls" value={eligible.length} sub={`${fmtNumber(eligible.reduce((a, r) => a + r.available_kg, 0), 2)} KG free`} tone="emerald" />
           <MetricTile label="Not eligible" value={ineligible.length} tone={ineligible.length ? 'amber' : 'slate'} />
         </div>
-        <p className="text-slate-500">Rule (doc §8–§10): same job, colour, fabric, QC passed, GSM / width within tolerance; same shade / lot for one lay first, then FIFO; the last roll is taken partly and keeps its balance. Nothing is consumed until the lay is cut.</p>
-        <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Eligible rolls</h3>
+        <p className="text-ink-secondary">Rule (doc §8–§10): same job, colour, fabric, QC passed, GSM / width within tolerance; same shade / lot for one lay first, then FIFO; the last roll is taken partly and keeps its balance. Nothing is consumed until the lay is cut.</p>
+        <h3 className="border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Eligible rolls</h3>
         <table className="w-full border" id="alloc-rolls">
-          <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">GRN</th><th className="p-1.5 text-right">GSM</th><th className="p-1.5 text-right">Width</th>
+          <thead className="bg-surface-muted text-left text-ink-secondary"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">GRN</th><th className="p-1.5 text-right">GSM</th><th className="p-1.5 text-right">Width</th>
             <th className="p-1.5 text-right">Roll KG</th><th className="p-1.5 text-right">Free KG</th><th className="p-1.5 text-right">Free M</th><th className="p-1.5">Store</th><th className="p-1.5 w-36">Allocate (KG)</th><th className="p-1.5 text-right">Balance after</th></tr></thead>
           <tbody>
-            {eligible.length === 0 && <tr><td colSpan={11} className="p-3 text-center text-slate-400">No eligible roll for this cut order — see the rolls that are not eligible below.</td></tr>}
+            {eligible.length === 0 && <tr><td colSpan={11} className="p-3 text-center text-ink-muted">No eligible roll for this cut order — see the rolls that are not eligible below.</td></tr>}
             {eligible.map((r) => {
               const v = picked[r.id] ?? '';
               const bal = r.available_kg - n(v);
               return (
                 <tr key={r.id} className={`border-t ${n(v) > 0 ? 'bg-emerald-50/50' : ''}`}>
                   <td className="p-1.5 tabular-nums font-semibold">{r.roll_no}</td><td className="p-1.5">{r.shade || '—'} / {r.lot_no || '—'}</td>
-                  <td className="p-1.5">{r.grn_no || '—'} <span className="text-slate-400">{r.grn_date ? fmtDate(r.grn_date) : ''}</span></td>
+                  <td className="p-1.5">{r.grn_no || '—'} <span className="text-ink-muted">{r.grn_date ? fmtDate(r.grn_date) : ''}</span></td>
                   <td className="p-1.5 text-right">{r.gsm ?? '—'}</td><td className="p-1.5 text-right">{r.width_in ? `${r.width_in}"` : '—'}</td>
                   <td className="p-1.5 text-right"><Qty v={r.weight_kg} uom="KG" dp={2} /></td><td className="p-1.5 text-right font-semibold"><Qty v={r.available_kg} uom="KG" dp={3} /></td>
                   <td className="p-1.5 text-right"><Qty v={r.available_m} uom="M" dp={1} /></td><td className="p-1.5">{r.warehouse_name}{r.location_bin ? ` · ${r.location_bin}` : ''}</td>
@@ -460,8 +460,8 @@ function RollAllocationModal({ lay, onClose, onSaved }: { lay: any; onClose: () 
         </table>
         <button className="text-xs font-semibold text-brand-700 hover:underline" onClick={() => setShowAll(!showAll)}>{showAll ? 'Hide' : 'Show'} {ineligible.length} roll(s) that are not eligible</button>
         {showAll && (
-          <table className="w-full border text-slate-500" id="alloc-ineligible">
-            <thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Job</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5 text-right">Free KG</th><th className="p-1.5">Why not</th></tr></thead>
+          <table className="w-full border text-ink-secondary" id="alloc-ineligible">
+            <thead className="bg-surface-muted text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Job</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5 text-right">Free KG</th><th className="p-1.5">Why not</th></tr></thead>
             <tbody>{ineligible.map((r) => <tr key={r.id} className="border-t"><td className="p-1.5 tabular-nums">{r.roll_no}</td><td className="p-1.5">{r.roll_job || 'general'}</td><td className="p-1.5">{r.shade || '—'} / {r.lot_no || '—'}</td>
               <td className="p-1.5 text-right"><Qty v={r.available_kg} uom="KG" dp={2} /></td><td className="p-1.5 text-red-700">{r.reasons.join('; ')}</td></tr>)}</tbody>
           </table>
@@ -495,12 +495,12 @@ function IssueModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void; 
           <Input label="From" value={f.from_location} onChange={(e) => setF({ ...f, from_location: e.target.value })} />
           <Input label="To" value={f.to_location} onChange={(e) => setF({ ...f, to_location: e.target.value })} />
         </FormSection>
-        <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Reserved rolls</h3>
-        <table className="w-full border"><thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">Store</th><th className="p-1.5 text-right">Issue KG</th><th className="p-1.5 text-right">Issue M</th><th className="p-1.5 text-right">Stays on roll</th></tr></thead>
+        <h3 className="border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Reserved rolls</h3>
+        <table className="w-full border"><thead className="bg-surface-muted text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">Store</th><th className="p-1.5 text-right">Issue KG</th><th className="p-1.5 text-right">Issue M</th><th className="p-1.5 text-right">Stays on roll</th></tr></thead>
           <tbody>{allocs.map((a) => <tr key={a.id} className="border-t"><td className="p-1.5 tabular-nums">{a.roll_no}</td><td className="p-1.5">{a.shade || '—'} / {a.lot_no || '—'}</td><td className="p-1.5">{a.warehouse_name}{a.location_bin ? ` · ${a.location_bin}` : ''}</td>
             <td className="p-1.5 text-right font-semibold"><Qty v={a.alloc_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={a.alloc_m} uom="M" dp={1} /></td><td className="p-1.5 text-right"><Qty v={a.roll_balance_kg} uom="KG" dp={3} /></td></tr>)}</tbody>
           <tfoot><tr className="font-semibold"><td className="p-1.5" colSpan={3}>Total</td><td className="p-1.5 text-right"><Qty v={allocs.reduce((x, a) => x + n(a.alloc_kg), 0)} uom="KG" dp={3} /></td><td colSpan={2} /></tr></tfoot></table>
-        <p className="text-slate-500">The reserved KG goes out on a cutting DC. A partly used roll keeps its balance in store; leftovers at cutting come back with a fabric return.</p>
+        <p className="text-ink-secondary">The reserved KG goes out on a cutting DC. A partly used roll keeps its balance in store; leftovers at cutting come back with a fabric return.</p>
       </div>
     </Modal>
   );
@@ -577,16 +577,16 @@ function FlowSpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () =
             <Input className="sm:col-span-2" label={`Variance reason${plyChanged || overFabric ? ' *' : ''}`} value={reason} onChange={(e) => setReason(e.target.value)} id="sp-reason"
               hint={plyChanged ? `Ply ${ply} differs from the planned ${sp.ply_planned}` : overFabric ? 'Fabric is over the plan' : 'Only when the ply or fabric differs from the plan'} />
           </FormSection>
-          <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Roll-wise actuals</h3>
+          <h3 className="border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Roll-wise actuals</h3>
           <table className="w-full border" id="sp-rolls">
-            <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-1.5">Roll</th><th className="p-1.5 text-right">Planned KG</th><th className="p-1.5 text-right">Planned M</th>
+            <thead className="bg-surface-muted text-left text-ink-secondary"><tr><th className="p-1.5">Roll</th><th className="p-1.5 text-right">Planned KG</th><th className="p-1.5 text-right">Planned M</th>
               <th className="p-1.5 w-24">Plies</th><th className="p-1.5 w-32">Actual KG</th><th className="p-1.5 w-32">Actual M</th><th className="p-1.5 w-28">End loss M</th><th className="p-1.5 w-28">Splice loss M</th></tr></thead>
             <tbody>{sp.rolls.map((x: any) => {
               const v = rows[x.id] || {};
               const set = (k: string, val: string) => setRows({ ...rows, [x.id]: { ...v, [k]: val } });
               return (
                 <tr key={x.id} className="border-t">
-                  <td className="p-1.5 tabular-nums font-semibold">{x.roll_no} <span className="font-normal text-slate-400">{x.shade || ''} {x.lot_no || ''}</span></td>
+                  <td className="p-1.5 tabular-nums font-semibold">{x.roll_no} <span className="font-normal text-ink-muted">{x.shade || ''} {x.lot_no || ''}</span></td>
                   <td className="p-1.5 text-right"><Qty v={x.planned_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={x.planned_m} uom="M" dp={1} /></td>
                   <td className="p-1"><UomInput uom="PLY" value={v.plies ?? ''} step="1" min={0} onChange={(val) => set('plies', val)} /></td>
                   <td className="p-1"><UomInput uom="KG" value={v.actual_kg ?? ''} min={0} onChange={(val) => set('actual_kg', val)} /></td>
@@ -597,7 +597,7 @@ function FlowSpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () =
               );
             })}</tbody>
           </table>
-          <p className="text-slate-500">Planned values come from the lay; key only what differs. Spreading records the actuals — stock is consumed when the lay is cut.</p>
+          <p className="text-ink-secondary">Planned values come from the lay; key only what differs. Spreading records the actuals — stock is consumed when the lay is cut.</p>
         </div>
       )}
     </Modal>
@@ -652,7 +652,7 @@ function LaySheetModal({ lay, onClose }: { lay: any; onClose: () => void }) {
 function GenealogyModal({ lay, onClose }: { lay: any; onClose: () => void }) {
   const g = useGenealogy(lay.id);
   const Step = ({ title, children }: { title: string; children: any }) => (
-    <div className="border-l-2 border-indigo-300 pb-3 pl-4"><p className="-ml-[23px] mb-1 flex items-center gap-2 text-xs font-bold text-indigo-800"><span className="h-3 w-3 rounded-full bg-indigo-400" />{title}</p><div className="text-xs text-slate-700">{children}</div></div>
+    <div className="border-l-2 border-indigo-300 pb-3 pl-4"><p className="-ml-[23px] mb-1 flex items-center gap-2 text-xs font-bold text-indigo-800"><span className="h-3 w-3 rounded-full bg-indigo-400" />{title}</p><div className="text-xs text-ink">{children}</div></div>
   );
   return (
     <Modal open onClose={onClose} title={`Genealogy — lay ${lay.lay_no}`} size="xl">
@@ -666,7 +666,7 @@ function GenealogyModal({ lay, onClose }: { lay: any; onClose: () => void }) {
           <Step title="Cutting DC">{g.fabric_issue ? `${g.fabric_issue.issue_no} · ${g.fabric_issue.status}${g.fabric_issue.received_at ? ` · received ${fmtDateTime(g.fabric_issue.received_at)}` : ''}` : '—'}</Step>
           <Step title="Spreading">{g.spreading.length ? g.spreading.map((s: any) => <div key={s.id}>{s.spreading_no} · {s.status} · {s.ply_count} ply · {s.actual_kg ?? '—'} KG · end {s.end_loss_m ?? 0} m · splice {s.splice_loss_m ?? 0} m</div>) : '—'}</Step>
           <Step title="Cutting">{g.cutting.length ? g.cutting.map((c: any) => <div key={c.id}>{c.cut_no} · {c.total_pieces} PCS · {c.fabric_used_kg} KG</div>) : '—'}{g.outputs.length > 0 && <div className="mt-1">{g.outputs.map((o: any) => `${o.size_code}: ${o.good_qty}${o.reject_qty ? ` (+${o.reject_qty} rej)` : ''}`).join(' · ')}</div>}</Step>
-          <Step title="Bundles → sewing">{g.bundles.length ? <>{g.totals.bundles} bundles · {g.totals.bundle_qty} PCS · {g.totals.in_sewing_or_beyond} moved on the floor<div className="mt-1 flex flex-wrap gap-1">{g.bundles.slice(0, 40).map((b: any) => <span key={b.id} className="rounded bg-slate-100 px-1 tabular-nums">{b.bundle_no}</span>)}</div></> : '—'}</Step>
+          <Step title="Bundles → sewing">{g.bundles.length ? <>{g.totals.bundles} bundles · {g.totals.bundle_qty} PCS · {g.totals.in_sewing_or_beyond} moved on the floor<div className="mt-1 flex flex-wrap gap-1">{g.bundles.slice(0, 40).map((b: any) => <span key={b.id} className="rounded bg-surface-header px-1 tabular-nums">{b.bundle_no}</span>)}</div></> : '—'}</Step>
         </div>
       )}
     </Modal>
@@ -680,20 +680,20 @@ export function PlannedVsActual({ planId }: { planId: string }) {
   useEffect(() => { if (planId) api.get(`/cutting-plans/${planId}/planned-vs-actual`).then((r) => setD(r.data.data)); }, [planId]);
   if (!d || !d.lays.length) return null;
   const pa = (x: { planned: any; actual: any }, dp = 0, uom = '') => (
-    <span className="whitespace-nowrap">{x.planned != null ? fmtNumber(x.planned, dp) : '—'} <span className="text-slate-400">/</span> <b className={x.actual != null && x.planned != null && n(x.actual) !== n(x.planned) ? 'text-amber-700' : 'text-emerald-700'}>{x.actual != null ? fmtNumber(x.actual, dp) : '—'}</b>{uom ? <span className="text-micro text-slate-400"> {uom}</span> : null}</span>
+    <span className="whitespace-nowrap">{x.planned != null ? fmtNumber(x.planned, dp) : '—'} <span className="text-ink-muted">/</span> <b className={x.actual != null && x.planned != null && n(x.actual) !== n(x.planned) ? 'text-amber-700' : 'text-emerald-700'}>{x.actual != null ? fmtNumber(x.actual, dp) : '—'}</b>{uom ? <span className="text-micro text-ink-muted"> {uom}</span> : null}</span>
   );
   return (
     <Card title="Planned vs actual (CAD plan / actual)" subtitle={d.notes}>
       <div className="overflow-x-auto">
         <table className="w-full text-xs" id="lp-pva">
-          <thead className="border-b bg-slate-50 text-left text-slate-600"><tr><th className="p-2">Lay</th><th className="p-2">Status</th><th className="p-2">Garment qty</th><th className="p-2">Marker length</th><th className="p-2">Ply</th>
+          <thead className="border-b bg-surface-muted text-left text-ink-secondary"><tr><th className="p-2">Lay</th><th className="p-2">Status</th><th className="p-2">Garment qty</th><th className="p-2">Marker length</th><th className="p-2">Ply</th>
             <th className="p-2">Fabric M</th><th className="p-2">Fabric KG</th><th className="p-2">Waste KG</th><th className="p-2">Efficiency %</th><th className="p-2">Variance reason</th></tr></thead>
           <tbody>{d.lays.map((l: any) => (
             <tr key={l.lay_id} className="border-b"><td className="p-2 tabular-nums">{l.lay_no}</td><td className="p-2"><FlowChip status={l.status} /></td>
               <td className="p-2">{pa(l.garment_qty, 0, 'PCS')}</td><td className="p-2">{pa(l.marker_length_m, 3, 'm')}</td><td className="p-2">{pa(l.ply)}</td>
               <td className="p-2">{pa(l.fabric_m, 2, 'm')}</td><td className="p-2">{pa(l.fabric_kg, 3, 'KG')}</td>
-              <td className="p-2">{pa(l.waste_kg, 3, 'KG')}{l.waste_kg.recorded_losses ? <div className="text-micro text-slate-500">recorded loss {l.waste_kg.recorded_losses} KG</div> : null}</td>
-              <td className="p-2">{pa(l.efficiency_pct, 2)}</td><td className="p-2 text-slate-600">{l.variance_reason || ''}</td></tr>
+              <td className="p-2">{pa(l.waste_kg, 3, 'KG')}{l.waste_kg.recorded_losses ? <div className="text-micro text-ink-secondary">recorded loss {l.waste_kg.recorded_losses} KG</div> : null}</td>
+              <td className="p-2">{pa(l.efficiency_pct, 2)}</td><td className="p-2 text-ink-secondary">{l.variance_reason || ''}</td></tr>
           ))}</tbody>
           <tfoot><tr className="font-semibold"><td className="p-2" colSpan={2}>Total</td><td className="p-2">{pa({ planned: d.totals.garment_planned, actual: d.totals.garment_actual })}</td><td />
             <td className="p-2">{pa({ planned: d.totals.ply_planned, actual: d.totals.ply_actual })}</td><td className="p-2">{pa({ planned: d.totals.fabric_m_planned, actual: d.totals.fabric_m_actual }, 2)}</td>
@@ -709,7 +709,7 @@ export function PlannedVsActual({ planId }: { planId: string }) {
 export function CuttingDashboard() {
   const [d, setD] = useState<any>(null);
   useEffect(() => { api.get('/cutting-dashboard').then((r) => setD(r.data.data)); }, []);
-  if (!d) return <p className="text-xs text-slate-500">Loading…</p>;
+  if (!d) return <p className="text-xs text-ink-secondary">Loading…</p>;
   const t = d.tiles;
   return (
     <div className="space-y-4" id="cut-dashboard">
@@ -741,12 +741,12 @@ export function CuttingDashboard() {
         </Card>
         <Card title="Pending lays">
           <div className="max-h-64 space-y-1 overflow-y-auto p-4 text-xs">{d.pending_lays.map((l: any) => <div key={l.id} className="flex justify-between gap-2"><span className="tabular-nums">{l.lay_no}</span><span className="truncate">{l.plan_no} · {l.io_no}</span><FlowChip status={l.status} /></div>)}
-            {!d.pending_lays.length && <p className="text-slate-400">None.</p>}</div>
+            {!d.pending_lays.length && <p className="text-ink-muted">None.</p>}</div>
         </Card>
       </div>
       <Card title="Size-wise cut balance (open cut orders)">
         <div className="max-h-80 overflow-auto">
-          <table className="w-full text-xs"><thead className="sticky top-0 border-b bg-slate-50 text-left"><tr><th className="p-1.5">Cut order</th><th className="p-1.5">Job</th><th className="p-1.5">Style</th><th className="p-1.5">Colour</th><th className="p-1.5">Size</th><th className="p-1.5 text-right">Target</th><th className="p-1.5 text-right">Cut</th><th className="p-1.5 text-right">Balance</th></tr></thead>
+          <table className="w-full text-xs"><thead className="sticky top-0 border-b bg-surface-muted text-left"><tr><th className="p-1.5">Cut order</th><th className="p-1.5">Job</th><th className="p-1.5">Style</th><th className="p-1.5">Colour</th><th className="p-1.5">Size</th><th className="p-1.5 text-right">Target</th><th className="p-1.5 text-right">Cut</th><th className="p-1.5 text-right">Balance</th></tr></thead>
             <tbody>{d.size_balance.map((x: any, i: number) => <tr key={i} className="border-b"><td className="p-1.5 tabular-nums">{x.plan_no}</td><td className="p-1.5">{x.io_no}</td><td className="p-1.5">{x.style_code}</td><td className="p-1.5">{x.color_name || '—'}</td><td className="p-1.5 font-semibold">{x.size_code}</td>
               <td className="p-1.5 text-right">{fmtNumber(x.target)}</td><td className="p-1.5 text-right">{fmtNumber(x.cut)}</td><td className={`p-1.5 text-right font-semibold ${x.balance < 0 ? 'text-red-600' : 'text-indigo-700'}`}>{fmtNumber(x.balance)}</td></tr>)}</tbody></table>
         </div>
@@ -773,11 +773,11 @@ export function CuttingTables() {
   return (
     <Card title="Cutting tables" subtitle="Max / min ply and the longest marker a table takes — the lay engine splits plies by the table's max ply." actions={<Button size="sm" id="tbl-new" onClick={() => setF({ table_code: '', table_name: '', length_m: '', width_in: '', max_ply: 60, min_ply: 1, is_active: true })}>+ Table</Button>}>
       <table className="w-full text-xs" id="tbl-list">
-        <thead className="border-b bg-slate-50 text-left"><tr><th className="p-2">Code</th><th className="p-2">Name</th><th className="p-2 text-right">Length</th><th className="p-2 text-right">Width</th><th className="p-2 text-right">Max ply</th><th className="p-2 text-right">Min ply</th><th className="p-2">Active</th><th /></tr></thead>
+        <thead className="border-b bg-surface-muted text-left"><tr><th className="p-2">Code</th><th className="p-2">Name</th><th className="p-2 text-right">Length</th><th className="p-2 text-right">Width</th><th className="p-2 text-right">Max ply</th><th className="p-2 text-right">Min ply</th><th className="p-2">Active</th><th /></tr></thead>
         <tbody>{rows.map((t) => <tr key={t.id} className="border-b"><td className="p-2 font-semibold">{t.table_code}</td><td className="p-2">{t.table_name}</td><td className="p-2 text-right"><Qty v={t.length_m} uom="M" dp={2} /></td>
           <td className="p-2 text-right"><Qty v={t.width_in} uom="IN" dp={1} /></td><td className="p-2 text-right">{t.max_ply}</td><td className="p-2 text-right">{t.min_ply}</td><td className="p-2">{t.is_active ? 'Yes' : 'No'}</td>
           <td className="p-2 text-right"><Button size="sm" variant="ghost" onClick={() => setF({ ...t, is_active: !!t.is_active })}>Edit</Button></td></tr>)}
-          {!rows.length && <tr><td colSpan={8} className="p-3 text-center text-slate-400">No tables — the default max ply (Admin › Settings › CUT_MAX_PLY) is used.</td></tr>}</tbody>
+          {!rows.length && <tr><td colSpan={8} className="p-3 text-center text-ink-muted">No tables — the default max ply (Admin › Settings › CUT_MAX_PLY) is used.</td></tr>}</tbody>
       </table>
       {f && (
         <Modal open onClose={() => setF(null)} title={f.id ? `Edit cutting table ${f.table_code}` : 'New cutting table'} size="md" footer={<><Button variant="secondary" onClick={() => setF(null)}>Cancel</Button><Button id="tbl-save" onClick={save}>Save</Button></>}>
@@ -846,12 +846,12 @@ export function MarkerImportCard({ onImported }: { onImported: () => void }) {
         <Button variant="outline" size="sm" onClick={template}>Download template</Button>
         <Button variant="outline" size="sm" id="mi-validate" loading={busy} disabled={!rows.length} onClick={() => run(true)}>Validate</Button>
         <Button size="sm" id="mi-import" loading={busy} disabled={!rows.length} onClick={() => run(false)}>Import</Button>
-        {file && <span className="text-xs text-slate-500">{file.name} · {rows.length} row(s){file.url ? ' · original stored' : ''}</span>}
+        {file && <span className="text-xs text-ink-secondary">{file.name} · {rows.length} row(s){file.url ? ' · original stored' : ''}</span>}
       </div>
       {result && (
         <div className="px-4 pb-4">
           <table className="w-full border text-xs" id="mi-result">
-            <thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Row</th><th className="p-1.5">Marker</th><th className="p-1.5">Result</th><th className="p-1.5">Detail</th></tr></thead>
+            <thead className="bg-surface-muted text-left"><tr><th className="p-1.5">Row</th><th className="p-1.5">Marker</th><th className="p-1.5">Result</th><th className="p-1.5">Detail</th></tr></thead>
             <tbody>{result.rows.map((x: any) => <tr key={x.row} className="border-t"><td className="p-1.5">{x.row}</td><td className="p-1.5 tabular-nums">{x.marker_no}</td>
               <td className="p-1.5"><Badge color={x.status === 'ERROR' ? 'red' : x.status === 'DUPLICATE' ? 'amber' : 'emerald'}>{x.status}</Badge></td>
               <td className="p-1.5">{x.errors?.join('; ') || x.message || (x.version ? `v${x.version}` : '') || (x.kg_per_ply ? `${x.kg_per_ply} KG/ply` : '')}</td></tr>)}</tbody>

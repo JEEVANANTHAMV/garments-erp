@@ -61,7 +61,7 @@ export function QuotationPicker({ vendorId, material, process, value, onChange, 
       )}
       <div className="pb-1 text-xs">
         {value.quotation_id ? <span className="rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-800">Rate ₹{fmtDecimal(Number(value.rate_per_kg) || 0, 2)} / KG</span>
-          : required ? <span className="text-amber-700">Required — the DC goes out only against an approved process quotation</span> : <span className="text-slate-400">optional</span>}
+          : required ? <span className="text-amber-700">Required — the DC goes out only against an approved process quotation</span> : <span className="text-ink-muted">optional</span>}
       </div>
     </div>
   );

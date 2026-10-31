@@ -51,13 +51,13 @@ export function ProcessMasterPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Process &amp; Operations</h1>
-          <p className="text-sm text-slate-500">Processes, the operations inside each (power table, singer, overlock …) and contractor rates per operation</p>
+          <h1 className="text-2xl font-bold text-ink">Process &amp; Operations</h1>
+          <p className="text-sm text-ink-secondary">Processes, the operations inside each (power table, singer, overlock …) and contractor rates per operation</p>
         </div>
-        <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="flex gap-1 rounded-lg bg-surface-header p-1">
           {([['process', 'Processes & operations'], ['rates', 'Contractor rates']] as const).map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`rounded-md px-3 py-1.5 text-xs font-semibold ${tab === k ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>{l}</button>
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold ${tab === k ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary'}`}>{l}</button>
           ))}
         </div>
       </div>
@@ -67,18 +67,18 @@ export function ProcessMasterPage() {
           <Card className="lg:col-span-2" title="Processes"
             actions={<Button size="sm" onClick={() => setEditStage({ stage_code: '', stage_name: '', sort_order: (stages.at(-1)?.sort_order ?? 0) + 1, is_outsourceable: 1, bill_include_mistake: 0, is_active: 1 })}>
               <Plus size={13} className="inline mr-1" />Process</Button>}>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-surface-divider">
               {stages.map((st) => (
                 <button key={st.id} onClick={() => setSelId(st.id)}
-                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm ${st.id === selId ? 'bg-brand-50' : 'hover:bg-slate-50'}`}>
-                  <span className="w-8 text-xs text-slate-400">{st.sort_order}</span>
+                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm ${st.id === selId ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}>
+                  <span className="w-8 text-xs text-ink-muted">{st.sort_order}</span>
                   <span className="flex-1">
-                    <span className="font-semibold text-slate-800">{st.stage_name}</span>
-                    <span className="ml-2 tabular-nums text-caption text-slate-400">{st.stage_code}</span>
+                    <span className="font-semibold text-ink">{st.stage_name}</span>
+                    <span className="ml-2 tabular-nums text-caption text-ink-muted">{st.stage_code}</span>
                   </span>
                   {!!st.bill_include_mistake && <Badge tone="amber">Bill incl. mistake</Badge>}
                   {!st.is_active && <Badge tone="slate">Inactive</Badge>}
-                  <span className="text-xs text-slate-500">{st.operations.length} ops</span>
+                  <span className="text-xs text-ink-secondary">{st.operations.length} ops</span>
                 </button>
               ))}
             </div>
@@ -95,7 +95,7 @@ export function ProcessMasterPage() {
               emptyMessage="Add the operations of this process, e.g. Power Table, Singer, Overlock."
               onRowClick={(o: any) => setEditOp(o)}
               columns={[
-                { key: 'sort_order', header: '#', render: (o: any) => <span className="text-slate-400">{o.sort_order}</span> },
+                { key: 'sort_order', header: '#', render: (o: any) => <span className="text-ink-muted">{o.sort_order}</span> },
                 { key: 'op_name', header: 'Operation', render: (o: any) => <span className="font-medium">{o.op_name}</span> },
                 { key: 'op_code', header: 'Code', render: (o: any) => <span className="tabular-nums text-caption">{o.op_code}</span> },
                 { key: 'default_rate', header: 'Default rate (₹ / PCS)', align: 'right' as const, render: (o: any) => num(o.default_rate).toFixed(2) },
@@ -138,7 +138,7 @@ function StageModal({ stage, onClose, onSaved }: { stage: Partial<Stage>; onClos
         {([['is_outsourceable', 'Can go out on a DC (job work / contractor)'],
           ['bill_include_mistake', 'Bill passing includes mistake qty (contractor paid for rejects)'],
           ['is_active', 'Active']] as const).map(([k, l]) => (
-          <label key={k} className="flex items-center gap-2 text-sm text-slate-700">
+          <label key={k} className="flex items-center gap-2 text-sm text-ink">
             <input type="checkbox" checked={!!f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked ? 1 : 0 })} />{l}
           </label>
         ))}
@@ -173,7 +173,7 @@ function OperationModal({ op, stages, onClose, onSaved }: { op: Partial<Operatio
           <Input label="Default rate (₹ / PCS)" type="number" min={0} step="0.01" value={f.default_rate} onChange={(e) => setF({ ...f, default_rate: e.target.value })} />
           <Input label="Sequence" type="number" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: e.target.value })} />
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 text-sm text-ink">
           <input type="checkbox" checked={!!f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked ? 1 : 0 })} />Active
         </label>
       </div>
@@ -219,17 +219,17 @@ function ContractorRates({ stages }: { stages: Stage[] }) {
           options={contractors.map((c) => ({ value: c.id, label: c.label }))} className="max-w-md" />
         {vendorId && byStage.map(({ st, ops }) => (
           <div key={st.id} className="mt-4">
-            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">{st.stage_name}</p>
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-secondary">{st.stage_name}</p>
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500"><tr>
+              <thead className="bg-surface-muted text-xs text-ink-secondary"><tr>
                 <th className="px-3 py-1.5 text-left">Operation</th><th className="px-3 py-1.5 text-right">Default (₹ / PCS)</th>
                 <th className="px-3 py-1.5 text-right">Contractor rate (₹ / PCS)</th>
               </tr></thead>
               <tbody>
                 {ops.map((o) => (
-                  <tr key={o.id} className="border-t border-slate-100">
+                  <tr key={o.id} className="border-t border-surface-divider">
                     <td className="px-3 py-1.5">{o.op_name}</td>
-                    <td className="px-3 py-1.5 text-right text-slate-400">{num(o.default_rate).toFixed(2)}</td>
+                    <td className="px-3 py-1.5 text-right text-ink-muted">{num(o.default_rate).toFixed(2)}</td>
                     <td className="px-3 py-1.5 text-right">
                       <input type="number" min={0} step="0.01" value={edit[o.id] ?? ''} placeholder={num(o.default_rate).toFixed(2)}
                         onChange={(e) => setEdit((cur) => ({ ...cur, [o.id]: e.target.value }))} className="input h-7 w-28 px-1.5 text-right" />
@@ -268,8 +268,8 @@ export function ContractorBillsPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Contractor Bills</h1>
-          <p className="text-sm text-slate-500">Pass process inwards for payment — PCS × job rate card (else DC rate), contractor's rate checked, less TDS, % deduction, advance and debit notes</p>
+          <h1 className="text-2xl font-bold text-ink">Contractor Bills</h1>
+          <p className="text-sm text-ink-secondary">Pass process inwards for payment — PCS × job rate card (else DC rate), contractor's rate checked, less TDS, % deduction, advance and debit notes</p>
         </div>
         <Button onClick={() => setCreating(true)}><Plus size={14} className="inline mr-1" />New bill</Button>
       </div>
@@ -420,7 +420,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
       <FormSection title="Tax & deductions">
         <Select label="GST % (job work)" value={f.gst_pct} onChange={(e) => setF({ ...f, gst_pct: e.target.value })}
           options={['0', '5', '12', '18'].map((v) => ({ value: v, label: v === '0' ? 'No GST' : `${v}%` }))} />
-        <label className="flex items-center gap-2 text-sm text-slate-700 sm:mt-6">
+        <label className="flex items-center gap-2 text-sm text-ink sm:mt-6">
           <input type="checkbox" checked={!!f.is_interstate} onChange={(e) => setF({ ...f, is_interstate: e.target.checked })} />Inter-state (IGST)
         </label>
         <Input label="TDS %" type="number" min={0} step="0.01" value={f.tds_pct} hint="194C: 1% individual / 2% others" onChange={(e) => setF({ ...f, tds_pct: e.target.value })} />
@@ -431,9 +431,9 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
         <Input label="Other deduction" value={f.other_deduction_label} placeholder="Label" onChange={(e) => setF({ ...f, other_deduction_label: e.target.value })} />
         <Input label="Other deduction (₹)" type="number" min={0} step="0.01" value={f.other_deduction} onChange={(e) => setF({ ...f, other_deduction: e.target.value })} />
       </FormSection>
-      <h3 className="mt-5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Inwards to bill</h3>
+      <h3 className="mt-5 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Inwards to bill</h3>
       <table className="mt-2.5 w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500"><tr>
+        <thead className="bg-surface-muted text-ink-secondary"><tr>
           <th className="w-8 px-2 py-1.5">
             <input type="checkbox" checked={rows.length > 0 && picked.size === rows.length}
               onChange={(e) => setPicked(e.target.checked ? new Set(rows.map((r) => r.receipt_id)) : new Set())} />
@@ -444,23 +444,23 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
           <th className="px-2 py-1.5 text-right">Pay rate</th><th className="px-2 py-1.5 text-right">Amount</th>
         </tr></thead>
         <tbody>
-          {!f.vendor_id && <tr><td colSpan={11} className="py-6 text-center text-slate-400">Choose the contractor to see inwards not billed yet.</td></tr>}
-          {f.vendor_id && !rows.length && <tr><td colSpan={11} className="py-6 text-center text-slate-400">No unbilled inwards for this contractor.</td></tr>}
+          {!f.vendor_id && <tr><td colSpan={11} className="py-6 text-center text-ink-muted">Choose the contractor to see inwards not billed yet.</td></tr>}
+          {f.vendor_id && !rows.length && <tr><td colSpan={11} className="py-6 text-center text-ink-muted">No unbilled inwards for this contractor.</td></tr>}
           {rows.map((r) => {
             const p = priced.find((x) => x.receipt_id === r.receipt_id);
             const inp = billRates[r.receipt_id] ?? { bill_rate: '', action: 'NONE' };
             return (
-              <tr key={r.receipt_id} className={`border-t border-slate-100 ${p?.over && p.action === 'NONE' ? 'bg-red-50' : p?.over ? 'bg-amber-50/60' : ''}`}>
+              <tr key={r.receipt_id} className={`border-t border-surface-divider ${p?.over && p.action === 'NONE' ? 'bg-red-50' : p?.over ? 'bg-amber-50/60' : ''}`}>
                 <td className="px-2 py-1 text-center">
                   <input type="checkbox" checked={picked.has(r.receipt_id)} onChange={() => setPicked((cur) => {
                     const s2 = new Set(cur); if (s2.has(r.receipt_id)) s2.delete(r.receipt_id); else s2.add(r.receipt_id); return s2;
                   })} />
                 </td>
-                <td className="px-2 py-1"><span className="tabular-nums">{r.receipt_no}</span><span className="block text-caption text-slate-400">{fmtDate(r.receipt_date)}</span></td>
-                <td className="px-2 py-1"><span className="tabular-nums">{r.challan_no}</span> · {r.stage_name}{r.operations && <span className="block text-caption text-slate-400">{r.operations}</span>}</td>
+                <td className="px-2 py-1"><span className="tabular-nums">{r.receipt_no}</span><span className="block text-caption text-ink-muted">{fmtDate(r.receipt_date)}</span></td>
+                <td className="px-2 py-1"><span className="tabular-nums">{r.challan_no}</span> · {r.stage_name}{r.operations && <span className="block text-caption text-ink-muted">{r.operations}</span>}</td>
                 <td className="px-2 py-1">{(r.jobs || []).map((j: any) => <span key={j.io_no} className="block">{j.io_no}: {fmtNumber(j.qty)} × ₹{num(j.rate).toFixed(2)}</span>)}{!(r.jobs || []).length && (r.io_list ?? '—')}</td>
-                <td className="px-2 py-1 text-right text-slate-500">Good {fmtNumber(r.received_qty)}{r.rejected_qty ? <span className="text-red-600 block">Mistake {r.rejected_qty}</span> : null}</td>
-                <td className="px-2 py-1 text-right font-semibold"><span className="text-brand-700">{fmtNumber(r.billed_qty)}</span><span className="block text-micro text-slate-400">{r.bill_basis_label ?? r.bill_basis}</span></td>
+                <td className="px-2 py-1 text-right text-ink-secondary">Good {fmtNumber(r.received_qty)}{r.rejected_qty ? <span className="text-red-600 block">Mistake {r.rejected_qty}</span> : null}</td>
+                <td className="px-2 py-1 text-right font-semibold"><span className="text-brand-700">{fmtNumber(r.billed_qty)}</span><span className="block text-micro text-ink-muted">{r.bill_basis_label ?? r.bill_basis}</span></td>
                 <td className="px-2 py-1 text-right">{num(r.our_rate).toFixed(2)}</td>
                 <td className="px-2 py-1 text-right">
                   <input type="number" min={0} step="0.01" className="input h-6 w-20 text-right text-caption" placeholder={num(r.our_rate).toFixed(2)}
@@ -472,7 +472,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
                       onChange={(e) => setBillRates((cur) => ({ ...cur, [r.receipt_id]: { ...inp, action: e.target.value } }))}>
                       {Object.entries(VARIANCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                     </select>
-                  ) : <span className="text-slate-400">—</span>}
+                  ) : <span className="text-ink-muted">—</span>}
                   {p?.over && <span className="block text-micro text-amber-700">excess {money(p.excess)}</span>}
                 </td>
                 <td className="px-2 py-1 text-right">{p ? p.payRate.toFixed(2) : '—'}</td>
@@ -484,7 +484,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
       </table>
       {dns.length > 0 && (
         <div className="mt-5 text-xs">
-          <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Debit notes to deduct</h3>
+          <h3 className="mb-2 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Debit notes to deduct</h3>
           {dns.map((d) => (
             <label key={d.id} className="flex items-center gap-2 py-0.5">
               <input type="checkbox" checked={dnSel.has(Number(d.id))} onChange={() => setDnSel((cur) => { const s2 = new Set(cur); s2.has(Number(d.id)) ? s2.delete(Number(d.id)) : s2.add(Number(d.id)); return s2; })} />
@@ -501,7 +501,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
         {num(f.other_deduction) > 0 && <div className="flex justify-between text-red-600"><span>{f.other_deduction_label || 'Other deduction'}</span><span>− {money(f.other_deduction)}</span></div>}
         {num(f.advance_adjust) > 0 && <div className="flex justify-between text-red-600"><span>Advance adjusted</span><span>− {money(f.advance_adjust)}</span></div>}
         {dnAmt > 0 && <div className="flex justify-between text-red-600"><span>Debit notes</span><span>− {money(dnAmt)}</span></div>}
-        <div className="flex justify-between border-t border-slate-200 pt-1 font-bold"><span>Net payable</span><span>{money(net)}</span></div>
+        <div className="flex justify-between border-t border-surface-border pt-1 font-bold"><span>Net payable</span><span>{money(net)}</span></div>
       </div>
       <Textarea label="Remarks" value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} rows={2} className="mt-3" />
     </Modal>
@@ -536,15 +536,15 @@ function BillDetail({ id, onClose, onChanged, onRevise }: { id: number; onClose:
         {b.status === 'DRAFT' && <Button loading={busy} onClick={() => act('approve', {}, 'Bill approved')}><CheckCircle2 size={13} className="inline mr-1" />Approve</Button>}
       </>}>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm md:grid-cols-4">
-        <div><p className="text-caption uppercase text-slate-400">Contractor</p><p className="font-medium">{b.vendor_name}</p></div>
-        <div><p className="text-caption uppercase text-slate-400">Bill date</p><p className="font-medium">{fmtDate(b.bill_date)}</p></div>
-        <div><p className="text-caption uppercase text-slate-400">Status</p><Badge tone={BILL_TONE[b.status] ?? 'slate'}>{b.status}</Badge></div>
-        <div><p className="text-caption uppercase text-slate-400">Approved</p><p className="font-medium">{b.approved_by_name ?? '—'}</p></div>
+        <div><p className="text-caption uppercase text-ink-muted">Contractor</p><p className="font-medium">{b.vendor_name}</p></div>
+        <div><p className="text-caption uppercase text-ink-muted">Bill date</p><p className="font-medium">{fmtDate(b.bill_date)}</p></div>
+        <div><p className="text-caption uppercase text-ink-muted">Status</p><Badge tone={BILL_TONE[b.status] ?? 'slate'}>{b.status}</Badge></div>
+        <div><p className="text-caption uppercase text-ink-muted">Approved</p><p className="font-medium">{b.approved_by_name ?? '—'}</p></div>
       </div>
       {b.cancel_reason && <p className="mt-2 rounded bg-red-50 px-3 py-1.5 text-xs text-red-700">Cancelled: {b.cancel_reason}</p>}
-      <h3 className="mt-5 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Inwards on this bill</h3>
+      <h3 className="mt-5 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Inwards on this bill</h3>
       <table className="mt-2.5 w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500"><tr>
+        <thead className="bg-surface-muted text-ink-secondary"><tr>
           <th className="px-2 py-1.5 text-left">Inward</th><th className="px-2 py-1.5 text-left">Date</th><th className="px-2 py-1.5 text-left">DC</th>
           <th className="px-2 py-1.5 text-left">Process / operations</th><th className="px-2 py-1.5 text-left">Jobs</th>
           <th className="px-2 py-1.5 text-right">Good</th><th className="px-2 py-1.5 text-right">Mistake</th><th className="px-2 py-1.5 text-right">Billed</th>
@@ -553,10 +553,10 @@ function BillDetail({ id, onClose, onChanged, onRevise }: { id: number; onClose:
         </tr></thead>
         <tbody>
           {b.lines.map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-100">
+            <tr key={l.id} className="border-t border-surface-divider">
               <td className="px-2 py-1 tabular-nums">{l.receipt_no}</td><td className="px-2 py-1">{fmtDate(l.receipt_date)}</td>
               <td className="px-2 py-1 tabular-nums">{l.challan_no}</td>
-              <td className="px-2 py-1">{l.stage_name}{l.operations && <span className="block text-caption text-slate-400">{l.operations}</span>}</td>
+              <td className="px-2 py-1">{l.stage_name}{l.operations && <span className="block text-caption text-ink-muted">{l.operations}</span>}</td>
               <td className="px-2 py-1">{l.io_list ?? '—'}</td>
               <td className="px-2 py-1 text-right">{fmtNumber(l.good_qty)}</td><td className="px-2 py-1 text-right">{fmtNumber(l.mistake_qty)}</td>
               <td className="px-2 py-1 text-right font-semibold">{fmtNumber(l.billed_qty)}</td>
@@ -579,8 +579,8 @@ function BillDetail({ id, onClose, onChanged, onRevise }: { id: number; onClose:
         {num(b.advance_adjusted) > 0 && <div className="flex justify-between text-red-600"><span>Advance adjusted</span><span>− {money(b.advance_adjusted)}</span></div>}
         {num(b.debit_note_amount) > 0 && <div className="flex justify-between text-red-600"><span>Debit notes ({(b.debit_notes || []).map((d: any) => d.dn_no).join(', ')})</span><span>− {money(b.debit_note_amount)}</span></div>}
         {num(b.excess_as_advance) > 0 && <div className="flex justify-between text-amber-700"><span>Excess kept as advance (recoverable)</span><span>{money(b.excess_as_advance)}</span></div>}
-        <div className="flex justify-between text-slate-500"><span>Round off</span><span>{num(b.round_off).toFixed(2)}</span></div>
-        <div className="flex justify-between border-t border-slate-200 pt-1 font-bold"><span>Net payable</span><span>{money(b.net_amount)}</span></div>
+        <div className="flex justify-between text-ink-secondary"><span>Round off</span><span>{num(b.round_off).toFixed(2)}</span></div>
+        <div className="flex justify-between border-t border-surface-border pt-1 font-bold"><span>Net payable</span><span>{money(b.net_amount)}</span></div>
       </div>
       {cancelling && (
         <Modal open onClose={() => setCancelling(false)} size="sm" title={`Cancel bill ${b.bill_no}`} icon={<Ban size={16} />}

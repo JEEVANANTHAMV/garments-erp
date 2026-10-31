@@ -113,15 +113,15 @@ export function SewingFinishingFloorPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Sewing &amp; Finishing Floor</h1>
-        <p className="text-sm text-slate-500">Scan a bundle, check its balance, post the movement — quantities can never exceed the previous stage</p>
+        <h1 className="text-2xl font-bold text-ink">Sewing &amp; Finishing Floor</h1>
+        <p className="text-sm text-ink-secondary">Scan a bundle, check its balance, post the movement — quantities can never exceed the previous stage</p>
       </div>
 
       <Tabs tabs={TABS} active={tab} onChange={(k) => setTab(k as Tab)} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
-          <form onSubmit={(e) => { e.preventDefault(); scan(code); }} className="flex gap-2 border-b border-slate-100 p-4">
+          <form onSubmit={(e) => { e.preventDefault(); scan(code); }} className="flex gap-2 border-b border-surface-divider p-4">
             <div className="relative flex-1">
               <ScanLine size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-600" />
               <input ref={scanRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)}
@@ -131,22 +131,22 @@ export function SewingFinishingFloorPage() {
             <Button type="submit" loading={scanning}>Scan</Button>
           </form>
 
-          {!bundle && <p className="p-10 text-center text-sm text-slate-400">Scan a bundle to begin.</p>}
+          {!bundle && <p className="p-10 text-center text-sm text-ink-muted">Scan a bundle to begin.</p>}
           {bundle && (
             <div className="p-4 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="tabular-nums text-lg font-bold text-slate-900">{bundle.bundle_no}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="tabular-nums text-lg font-bold text-ink">{bundle.bundle_no}</p>
+                  <p className="text-xs text-ink-secondary">
                     {bundle.style_code} · {bundle.color_name} · Size {bundle.size_code} · {bundle.part_name ?? ''} · IO {bundle.io_no ?? '—'}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-ink-muted">
                     Cut order {bundle.plan_no ?? '—'} · Lay {bundle.lay_no ?? '—'} · Barcode {bundle.barcode}
                   </p>
                 </div>
                 <div className="text-right">
                   <StatusBadge value={bundle.status} />
-                  <p className="mt-1 text-xs text-slate-500">Bundle qty <b>{fmtNumber(bundle.qty)} PCS</b></p>
+                  <p className="mt-1 text-xs text-ink-secondary">Bundle qty <b>{fmtNumber(bundle.qty)} PCS</b></p>
                   <Link to={`/production/traceability?bundle=${encodeURIComponent(bundle.barcode ?? bundle.bundle_no)}`} className="text-xs text-brand-700 hover:underline">Full trace →</Link>
                 </div>
               </div>
@@ -160,7 +160,7 @@ export function SewingFinishingFloorPage() {
                 <Bal label="Ready to pack" v={a.pack} />
               </div>
               {(num(a.out_cut) + num(a.out_sewn) + num(a.out_pack) > 0 || num(a.rejected) > 0 || num(a.packed) > 0) && (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-ink-secondary">
                   {num(a.out_cut) + num(a.out_sewn) + num(a.out_pack) > 0 && <>Out on job-work DC: <b>{num(a.out_cut) + num(a.out_sewn) + num(a.out_pack)} PCS</b> · </>}
                   Rejected / short: <b>{num(a.rejected)} PCS</b> · Packed: <b>{num(a.packed)} PCS</b>
                 </p>
@@ -194,7 +194,7 @@ export function SewingFinishingFloorPage() {
                       <Input label="Reject (PCS)" type="number" min={0} value={form.reject ?? 0} onChange={(e) => setForm({ ...form, reject: e.target.value })} />
                       <Input label="Rework (PCS)" type="number" min={0} value={form.rework ?? 0} onChange={(e) => setForm({ ...form, rework: e.target.value })}
                         hint="Rework PCS stay pending on the input" />
-                      <p className="self-end pb-2 text-xs text-slate-500">Pending on input: <b>{pending} PCS</b></p>
+                      <p className="self-end pb-2 text-xs text-ink-secondary">Pending on input: <b>{pending} PCS</b></p>
                     </>;
                   })()}
                   {tab === 'FINAL_QC' && <>
@@ -215,18 +215,18 @@ export function SewingFinishingFloorPage() {
 
               {bundle.history?.length > 0 && (
                 <div>
-                  <p className="mb-1 text-xs font-semibold text-slate-600">Movement history</p>
-                  <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-100">
+                  <p className="mb-1 text-xs font-semibold text-ink-secondary">Movement history</p>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-surface-divider">
                     <table className="w-full text-caption">
                       <tbody>
                         {[...bundle.history].reverse().map((h: any) => (
-                          <tr key={h.id} className="border-t border-slate-50">
-                            <td className="px-2 py-1 text-slate-400">{fmtDate(h.moved_at)}</td>
+                          <tr key={h.id} className="border-t border-surface-divider">
+                            <td className="px-2 py-1 text-ink-muted">{fmtDate(h.moved_at)}</td>
                             <td className="px-2 py-1"><Badge tone="blue">{String(h.txn_type ?? h.to_stage).replace(/_/g, ' ')}</Badge></td>
                             <td className="px-2 py-1 text-right">{h.moved_qty} PCS</td>
-                            <td className="px-2 py-1 text-slate-500">{h.good_qty != null ? `good ${h.good_qty}` : ''}{h.reject_qty ? ` · rej ${h.reject_qty}` : ''}</td>
-                            <td className="px-2 py-1 text-slate-500">{h.location ?? h.destination ?? ''}</td>
-                            <td className="px-2 py-1 text-slate-400">{h.moved_by_name}</td>
+                            <td className="px-2 py-1 text-ink-secondary">{h.good_qty != null ? `good ${h.good_qty}` : ''}{h.reject_qty ? ` · rej ${h.reject_qty}` : ''}</td>
+                            <td className="px-2 py-1 text-ink-secondary">{h.location ?? h.destination ?? ''}</td>
+                            <td className="px-2 py-1 text-ink-muted">{h.moved_by_name}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -259,7 +259,7 @@ export function SewingFinishingFloorPage() {
                 { key: 'status', header: '', render: (r: any) => <StatusBadge value={r.status} /> },
               ]} />
           </div>
-          <p className="border-t border-slate-100 px-4 py-2 text-caption text-slate-400">All quantities in PCS. Click a row to load its bundle.</p>
+          <p className="border-t border-surface-divider px-4 py-2 text-caption text-ink-muted">All quantities in PCS. Click a row to load its bundle.</p>
         </Card>
       </div>
     </div>
@@ -268,9 +268,9 @@ export function SewingFinishingFloorPage() {
 
 function Bal({ label, v, hi }: { label: string; v?: number; hi?: boolean }) {
   return (
-    <div className={`rounded-lg border px-2.5 py-2 ${hi ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-white'}`}>
-      <p className="text-micro uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`text-lg font-bold ${num(v) > 0 ? 'text-slate-900' : 'text-slate-300'}`}>{fmtNumber(v ?? 0)} <span className="text-micro font-medium text-slate-400">PCS</span></p>
+    <div className={`rounded-lg border px-2.5 py-2 ${hi ? 'border-brand-400 bg-brand-50' : 'border-surface-border bg-white'}`}>
+      <p className="text-micro uppercase tracking-wide text-ink-secondary">{label}</p>
+      <p className={`text-lg font-bold ${num(v) > 0 ? 'text-ink' : 'text-ink-disabled'}`}>{fmtNumber(v ?? 0)} <span className="text-micro font-medium text-ink-muted">PCS</span></p>
     </div>
   );
 }

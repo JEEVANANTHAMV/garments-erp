@@ -59,8 +59,8 @@ export function LaySpreadingPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Lay Plan & Marker Execution</h1>
-          <p className="text-sm text-slate-500">Pick the job — the cutting program and the approved CAD markers load, the lay count comes automatically; enter only what differs and see the balance and the variation.</p>
+          <h1 className="text-2xl font-bold text-ink">Lay Plan & Marker Execution</h1>
+          <p className="text-sm text-ink-secondary">Pick the job — the cutting program and the approved CAD markers load, the lay count comes automatically; enter only what differs and see the balance and the variation.</p>
         </div>
         <Button variant="outline" onClick={() => setShowNew(true)}>+ Manual lay</Button>
       </div>
@@ -79,7 +79,7 @@ export function LaySpreadingPage() {
 
       {tab === 'lays' && (
         <Card>
-          <div className="flex flex-wrap items-end gap-3 border-b bg-slate-50 p-3">
+          <div className="flex flex-wrap items-end gap-3 border-b bg-surface-muted p-3">
             <SearchSelect className="w-80" label="Cut order" value={planFilter} onChange={setPlanFilter}
               placeholder="All cut orders"
               options={plans.map(p => ({ value: p.id, label: `${p.plan_no} · ${p.io_no} · ${p.style_code || ''}`, right: p.status }))} />
@@ -94,7 +94,7 @@ export function LaySpreadingPage() {
               { key: 'plan_no', header: 'Cut Order', render: (r: any) => <span className="tabular-nums text-xs">{r.plan_no}</span> },
               { key: 'marker', header: 'Marker', render: (r: any) => r.marker_no
                 ? <span className="text-xs">{r.marker_no} <b>v{r.marker_version}</b>{r.marker_locked ? ' 🔒' : ''}</span>
-                : <span className="text-xs text-slate-400">{r.marker_ref || '—'}</span> },
+                : <span className="text-xs text-ink-muted">{r.marker_ref || '—'}</span> },
               { key: 'ply_count', header: 'Ply', align: 'right' as const },
               { key: 'expected_pieces', header: 'Expected', align: 'right' as const, render: (r: any) => <Qty v={r.expected_pieces} uom="PCS" /> },
               { key: 'actual_cut_qty', header: 'Good Cut', align: 'right' as const, render: (r: any) => <Qty v={r.actual_cut_qty} uom="PCS" className="font-semibold" /> },
@@ -314,20 +314,20 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
         <FormSection title="Roll-wise consumption" description="Before − Remaining = Actual" cols={1}>
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-xs">
-              <thead className="border-b bg-slate-50 text-left text-slate-600">
+              <thead className="border-b bg-surface-muted text-left text-ink-secondary">
                 <tr><th className="p-2">Roll</th><th className="p-2 text-right">DC remaining</th><th className="p-2 w-36">Before lay (KG)</th>
                   <th className="p-2 w-36">Remaining after (KG)</th><th className="p-2 w-24">Plies</th><th className="p-2 text-right">Consumed</th>
                   <th className="p-2">Roll finished</th><th className="w-8" /></tr>
               </thead>
               <tbody>
-                {rolls.length === 0 && <tr><td colSpan={8} className="p-3 text-center text-slate-400">Add or scan the rolls laid.</td></tr>}
+                {rolls.length === 0 && <tr><td colSpan={8} className="p-3 text-center text-ink-muted">Add or scan the rolls laid.</td></tr>}
                 {rolls.map((r, i) => {
                   const c = (Number(r.before_kg) || 0) - (Number(r.after_kg) || 0);
                   const bad = r.after_kg !== '' && c < 0;
                   const set = (k: string, v: any) => setRolls(rs => rs.map((x, j) => j === i ? { ...x, [k]: v } : x));
                   return (
                     <tr key={r.fabric_issue_roll_id} className="border-b">
-                      <td className="p-2"><span className="tabular-nums font-semibold">{r.dc.roll_no}</span> <span className="text-slate-400">{r.dc.lot_no}</span></td>
+                      <td className="p-2"><span className="tabular-nums font-semibold">{r.dc.roll_no}</span> <span className="text-ink-muted">{r.dc.lot_no}</span></td>
                       <td className="p-2 text-right"><Qty v={r.dc.remaining_kg} uom="KG" dp={3} /></td>
                       <td className="p-1.5"><UomInput uom="KG" value={r.before_kg} min={0} onChange={v => set('before_kg', v)} /></td>
                       <td className="p-1.5"><UomInput uom="KG" value={r.after_kg} min={0} onChange={v => set('after_kg', v)} /></td>
@@ -349,7 +349,7 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
 
         <FormSection title="Losses" description="Recorded separately from garment-use consumption" cols={1}
           actions={<Button size="sm" variant="outline" onClick={() => setLosses(ls => [...ls, { loss_type: 'END_LOSS', qty_kg: '', reason: '' }])}>+ Add loss</Button>}>
-          {losses.length === 0 ? <p className="text-xs text-slate-400">No losses recorded.</p> : (
+          {losses.length === 0 ? <p className="text-xs text-ink-muted">No losses recorded.</p> : (
             <div className="space-y-2">
               {losses.map((l, i) => {
                 const set = (k: string, v: any) => setLosses(ls => ls.map((x, j) => j === i ? { ...x, [k]: v } : x));
@@ -362,7 +362,7 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
                   </div>
                 );
               })}
-              <p className="text-right text-xs font-semibold text-slate-600">Total losses <Qty v={lossKg} uom="KG" dp={3} /></p>
+              <p className="text-right text-xs font-semibold text-ink-secondary">Total losses <Qty v={lossKg} uom="KG" dp={3} /></p>
             </div>
           )}
         </FormSection>
@@ -371,12 +371,12 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
           actions={mv ? <Button size="sm" variant="outline" onClick={fillFromRatio}>Fill good PCS from ratio × ply</Button> : undefined}>
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-xs">
-              <thead className="border-b bg-slate-50 text-left text-slate-600">
+              <thead className="border-b bg-surface-muted text-left text-ink-secondary">
                 <tr><th className="p-2">Size</th><th className="p-2 text-right">Planned</th><th className="p-2 text-right">Already cut</th>
                   <th className="p-2 w-32">Good (PCS)</th><th className="p-2 w-32">Reject (PCS)</th><th className="p-2 w-32">Re-cut (PCS)</th></tr>
               </thead>
               <tbody>
-                {sizes.length === 0 && <tr><td colSpan={6} className="p-3 text-center text-slate-400">The cut order has no size breakdown.</td></tr>}
+                {sizes.length === 0 && <tr><td colSpan={6} className="p-3 text-center text-ink-muted">The cut order has no size breakdown.</td></tr>}
                 {sizes.map((s: any) => {
                   const o = outputs[s.size_id] || { good: '', reject: '', recut: '' };
                   const set = (k: string, v: string) => setOutputs(os => ({ ...os, [s.size_id]: { ...o, [k]: v } }));
@@ -437,7 +437,7 @@ function SpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () => vo
       <FormSection title="Length & ply">
         <UomInput label="Start" uom="MTR" value={f.start_mtr} onChange={v => setF({ ...f, start_mtr: v })} />
         <UomInput label="End" uom="MTR" value={f.end_mtr} onChange={v => setF({ ...f, end_mtr: v })} />
-        <div><label className="label">Used (MTR)</label><div className="input bg-slate-50 text-right font-semibold">{used != null ? fmtNumber(used, 3) : '—'} MTR</div></div>
+        <div><label className="label">Used (MTR)</label><div className="input bg-surface-muted text-right font-semibold">{used != null ? fmtNumber(used, 3) : '—'} MTR</div></div>
         <UomInput label="Ply" uom="PLY" step="1" value={f.ply_count} onChange={v => setF({ ...f, ply_count: v })} />
       </FormSection>
       <FormSection title="Fabric & QC">
@@ -486,11 +486,11 @@ function LayDetailModal({ lay, onClose }: { lay: any; onClose: () => void }) {
         </div>
         {lay.marker_version && <p>Marker <b>{lay.marker_version.marker_no} v{lay.marker_version.version}</b> · ratio {ratioText(lay.marker_version.sizes, lay.marker_version.ratios)} · {lay.marker_version.pieces_per_marker} PCS/marker · {lay.marker_version.is_locked ? 'locked' : 'unlocked'}</p>}
         {lay.executed_at && <p>Executed {fmtDateTime(lay.executed_at)}{lay.override_reason ? ` · override: ${lay.override_reason}` : ''}{lay.cancel_reason ? ` · cancelled: ${lay.cancel_reason}` : ''}</p>}
-        <table className="w-full border"><thead className="bg-slate-50"><tr><th className="p-1.5 text-left">Roll</th><th className="p-1.5 text-right">Before</th><th className="p-1.5 text-right">After</th><th className="p-1.5 text-right">Consumed</th></tr></thead>
-          <tbody>{lay.rolls.map((r: any) => <tr key={r.id} className="border-t"><td className="p-1.5 tabular-nums">{r.roll_no} <span className="text-slate-400">{r.issue_no}</span></td><td className="p-1.5 text-right"><Qty v={r.before_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={r.after_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right font-semibold"><Qty v={r.actual_consumed_kg} uom="KG" dp={3} /></td></tr>)}</tbody></table>
-        {lay.losses.length > 0 && <table className="w-full border"><thead className="bg-slate-50"><tr><th className="p-1.5 text-left">Loss</th><th className="p-1.5 text-right">KG</th><th className="p-1.5 text-left">Reason</th></tr></thead>
-          <tbody>{lay.losses.map((l: any) => <tr key={l.id} className={`border-t ${l.is_reversed ? 'line-through text-slate-400' : ''}`}><td className="p-1.5">{l.loss_type}</td><td className="p-1.5 text-right"><Qty v={l.qty_kg} uom="KG" dp={3} /></td><td className="p-1.5">{l.reason}</td></tr>)}</tbody></table>}
-        <table className="w-full border"><thead className="bg-slate-50"><tr><th className="p-1.5 text-left">Output</th><th className="p-1.5">Size</th><th className="p-1.5 text-right">Good</th><th className="p-1.5 text-right">Reject</th><th className="p-1.5 text-right">Re-cut</th><th className="p-1.5 text-right">Actual KG</th><th className="p-1.5 text-right">Bundled</th><th className="p-1.5">Status</th></tr></thead>
+        <table className="w-full border"><thead className="bg-surface-muted"><tr><th className="p-1.5 text-left">Roll</th><th className="p-1.5 text-right">Before</th><th className="p-1.5 text-right">After</th><th className="p-1.5 text-right">Consumed</th></tr></thead>
+          <tbody>{lay.rolls.map((r: any) => <tr key={r.id} className="border-t"><td className="p-1.5 tabular-nums">{r.roll_no} <span className="text-ink-muted">{r.issue_no}</span></td><td className="p-1.5 text-right"><Qty v={r.before_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={r.after_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right font-semibold"><Qty v={r.actual_consumed_kg} uom="KG" dp={3} /></td></tr>)}</tbody></table>
+        {lay.losses.length > 0 && <table className="w-full border"><thead className="bg-surface-muted"><tr><th className="p-1.5 text-left">Loss</th><th className="p-1.5 text-right">KG</th><th className="p-1.5 text-left">Reason</th></tr></thead>
+          <tbody>{lay.losses.map((l: any) => <tr key={l.id} className={`border-t ${l.is_reversed ? 'line-through text-ink-muted' : ''}`}><td className="p-1.5">{l.loss_type}</td><td className="p-1.5 text-right"><Qty v={l.qty_kg} uom="KG" dp={3} /></td><td className="p-1.5">{l.reason}</td></tr>)}</tbody></table>}
+        <table className="w-full border"><thead className="bg-surface-muted"><tr><th className="p-1.5 text-left">Output</th><th className="p-1.5">Size</th><th className="p-1.5 text-right">Good</th><th className="p-1.5 text-right">Reject</th><th className="p-1.5 text-right">Re-cut</th><th className="p-1.5 text-right">Actual KG</th><th className="p-1.5 text-right">Bundled</th><th className="p-1.5">Status</th></tr></thead>
           <tbody>{lay.outputs.map((o: any) => <tr key={o.id} className="border-t"><td className="p-1.5 tabular-nums">{o.output_no}</td><td className="p-1.5 text-center font-semibold">{o.size_code}</td><td className="p-1.5 text-right"><Qty v={o.good_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.reject_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.recut_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.actual_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={o.bundled_qty} uom="PCS" /></td><td className="p-1.5"><StatusChip status={o.status} /></td></tr>)}</tbody></table>
       </div>
     </Modal>
@@ -573,7 +573,7 @@ function MarkerVersions() {
         </div>
       </Card>
       <Card>
-        <div className="flex items-end gap-3 border-b bg-slate-50 p-3">
+        <div className="flex items-end gap-3 border-b bg-surface-muted p-3">
           <Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
             options={[{ value: '', label: 'All' }, ...['IMPORTED', 'DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'OBSOLETE'].map((x) => ({ value: x, label: x }))]} />
         </div>
@@ -591,7 +591,7 @@ function MarkerVersions() {
           { key: 'size_consumption', header: 'Size-wise', render: (r: any) => r.size_consumption ? <span className="text-caption">{Object.entries(r.size_consumption).map(([k, v]) => `${k}:${v}`).join(' ')}</span> : '—' },
           { key: 'job', header: 'Job / PO', render: (r: any) => <span className="text-caption">{r.io_no || '—'}{r.buyer_po_no ? ` · ${r.buyer_po_no}` : ''}</span> },
           { key: 'eff', header: 'Eff %', align: 'right' as const, render: (r: any) => r.efficiency_pct ?? '—' },
-          { key: 'status', header: 'Status', render: (r: any) => <div><StatusChip status={r.status} />{r.approved_by_name && <div className="text-micro text-slate-400">{r.approved_by_name}</div>}{r.reject_reason && <div className="text-micro text-red-600">{r.reject_reason}</div>}</div> },
+          { key: 'status', header: 'Status', render: (r: any) => <div><StatusChip status={r.status} />{r.approved_by_name && <div className="text-micro text-ink-muted">{r.approved_by_name}</div>}{r.reject_reason && <div className="text-micro text-red-600">{r.reject_reason}</div>}</div> },
           { key: 'lock', header: 'Use', render: (r: any) => <span className="text-xs">{r.is_locked ? '🔒 ' : ''}{r.lay_count} lay(s)</span> },
           { key: 'a', header: '', render: (r: any) => (
             <div className="flex flex-wrap justify-end gap-1">
@@ -611,11 +611,11 @@ function MarkerVersions() {
       )}
       {history && (
         <Modal open onClose={() => setHistory(null)} title={`Marker ${history.marker_no} — version history`} size="xl">
-          <table className="w-full text-xs"><thead className="border-b bg-slate-50 text-left"><tr><th className="p-1.5">Version</th><th className="p-1.5">Status</th><th className="p-1.5">Ratio</th><th className="p-1.5 text-right">PCS/marker</th><th className="p-1.5 text-right">Length</th><th className="p-1.5 text-right">Per ply</th><th className="p-1.5">Source</th><th className="p-1.5">Created</th><th className="p-1.5">File</th></tr></thead>
+          <table className="w-full text-xs"><thead className="border-b bg-surface-muted text-left"><tr><th className="p-1.5">Version</th><th className="p-1.5">Status</th><th className="p-1.5">Ratio</th><th className="p-1.5 text-right">PCS/marker</th><th className="p-1.5 text-right">Length</th><th className="p-1.5 text-right">Per ply</th><th className="p-1.5">Source</th><th className="p-1.5">Created</th><th className="p-1.5">File</th></tr></thead>
             <tbody>{history.history.map((h: any) => <tr key={h.id} className={`border-b ${h.id === history.id ? 'bg-indigo-50' : ''}`}><td className="p-1.5 font-semibold">v{h.version}</td><td className="p-1.5"><StatusChip status={h.status} /></td><td className="p-1.5">{h.ratio_text}</td>
               <td className="p-1.5 text-right">{h.pieces_per_marker}</td><td className="p-1.5 text-right">{h.length_m ?? '—'} m</td><td className="p-1.5 text-right">{h.marker_kg_per_ply ?? '—'} {h.uom}</td><td className="p-1.5">{h.cad_source || h.source}</td><td className="p-1.5">{fmtDateTime(h.created_at)}</td>
               <td className="p-1.5">{h.cad_file_ref && String(h.cad_file_ref).startsWith('/uploads/') ? <a className="text-brand-700 hover:underline" href={h.cad_file_ref} target="_blank" rel="noreferrer">original</a> : (h.cad_file_ref || '—')}</td></tr>)}</tbody></table>
-          <p className="mt-2 text-xs text-slate-500">CAD values are never overwritten — new CAD data is a new version. Lays: {history.lays.map((l: any) => `${l.lay_no} (${l.status})`).join(', ') || 'none'}.</p>
+          <p className="mt-2 text-xs text-ink-secondary">CAD values are never overwritten — new CAD data is a new version. Lays: {history.lays.map((l: any) => `${l.lay_no} (${l.status})`).join(', ') || 'none'}.</p>
         </Modal>
       )}
       {manual && (

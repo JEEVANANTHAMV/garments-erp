@@ -454,13 +454,13 @@ export default function SalesOrderDetail() {
 
       {/* Section 1: Order & Buyer Details */}
       <div className="card mb-3 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
+        <div className="flex items-center gap-2 border-b border-surface-border bg-surface-muted/60 px-4 py-2.5">
           <span className="h-2 w-2 rounded-full bg-brand-500" />
-          <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">Order &amp; Buyer Details</h4>
+          <h4 className="text-small font-bold uppercase tracking-wider text-ink">Order &amp; Buyer Details</h4>
         </div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <div>
-            <label className="mb-1 block text-small font-medium text-slate-700">SO number</label>
+            <label className="mb-1 block text-small font-medium text-ink">SO number</label>
             <input
               className="input tabular-nums font-semibold w-full"
               placeholder={isNew ? (soPreview.data?.so_no ?? 'Auto-generated') : undefined}
@@ -471,7 +471,7 @@ export default function SalesOrderDetail() {
             {errors.so_no ? (
               <p className="text-small text-red-600 mt-1">{errors.so_no}</p>
             ) : isNew ? (
-              <p className="text-caption text-slate-400 mt-1">
+              <p className="text-caption text-ink-muted mt-1">
                 {head.so_no?.trim()
                   ? 'Manual number — clear to auto-generate'
                   : soPreview.data?.so_no
@@ -482,7 +482,7 @@ export default function SalesOrderDetail() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-small font-medium text-slate-700">IO number (Internal Order)</label>
+              <label className="text-small font-medium text-ink">IO number (Internal Order)</label>
               {editable && (
                 <button
                   type="button"
@@ -504,7 +504,7 @@ export default function SalesOrderDetail() {
             {errors.io_no ? (
               <p className="text-small text-red-600 mt-1">{errors.io_no}</p>
             ) : (
-              <p className="text-caption text-slate-400 mt-1">Master factory production &amp; procurement reference</p>
+              <p className="text-caption text-ink-muted mt-1">Master factory production &amp; procurement reference</p>
             )}
           </div>
           <Select
@@ -552,9 +552,9 @@ export default function SalesOrderDetail() {
 
       {/* Section 2: Commercial Terms & Tolerances */}
       <div className="card mb-3 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
+        <div className="flex items-center gap-2 border-b border-surface-border bg-surface-muted/60 px-4 py-2.5">
           <span className="h-2 w-2 rounded-full bg-amber-500" />
-          <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">Commercial Terms &amp; Tolerances</h4>
+          <h4 className="text-small font-bold uppercase tracking-wider text-ink">Commercial Terms &amp; Tolerances</h4>
         </div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <Select label="Currency" required options={toOptions(currencies.data)} placeholder="— Select —"
@@ -604,9 +604,9 @@ export default function SalesOrderDetail() {
 
       {/* Section 3: Shipping Logistics & LC */}
       <div className="card mb-4 overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-surface-border bg-slate-50/60 px-4 py-2.5">
+        <div className="flex items-center gap-2 border-b border-surface-border bg-surface-muted/60 px-4 py-2.5">
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">Shipping &amp; Letter of Credit</h4>
+          <h4 className="text-small font-bold uppercase tracking-wider text-ink">Shipping &amp; Letter of Credit</h4>
         </div>
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <Input label="Port of loading" value={head.port_of_loading ?? ''}
@@ -669,60 +669,60 @@ export default function SalesOrderDetail() {
           )}
 
           {/* Unified Order Totals & Values Card */}
-          <div className="card overflow-hidden border border-slate-200/90 bg-white shadow-sm">
+          <div className="card overflow-hidden border border-surface-border/90 bg-white shadow-sm">
             {/* Contextual Top Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-5 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-divider bg-surface-muted/80 px-5 py-2.5">
               <div className="flex flex-wrap items-center gap-2.5 text-xs">
                 {isForeign ? (
-                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-brand-200 px-2.5 py-1 text-slate-700 shadow-2xs">
-                    <span className="font-semibold text-slate-500">Applied Exchange Rate:</span>
+                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-brand-200 px-2.5 py-1 text-ink shadow-2xs">
+                    <span className="font-semibold text-ink-secondary">Applied Exchange Rate:</span>
                     <span className="tabular-nums font-bold text-brand-800">
                       1 {currencyCode} = ₹ {exchangeRate.toFixed(2)} INR
                     </span>
                   </div>
                 ) : (
-                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-slate-200 px-2.5 py-1 text-slate-700 shadow-2xs">
-                    <span className="font-semibold text-slate-500">Order Currency:</span>
-                    <span className="tabular-nums font-bold text-slate-800">INR (Domestic)</span>
+                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-surface-border px-2.5 py-1 text-ink shadow-2xs">
+                    <span className="font-semibold text-ink-secondary">Order Currency:</span>
+                    <span className="tabular-nums font-bold text-ink">INR (Domestic)</span>
                   </div>
                 )}
                 {totals.qty > 0 && (
-                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-slate-200 px-2.5 py-1 text-slate-700 shadow-2xs">
-                    <span className="font-semibold text-slate-500">Shipment Tolerance Window:</span>
-                    <span className="tabular-nums font-bold text-slate-900">
+                  <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-surface-border px-2.5 py-1 text-ink shadow-2xs">
+                    <span className="font-semibold text-ink-secondary">Shipment Tolerance Window:</span>
+                    <span className="tabular-nums font-bold text-ink">
                       {fmtNumber(totals.minShipment)} – {fmtNumber(totals.maxShipment)} pcs
                     </span>
-                    <span className="text-caption font-medium text-slate-400">
+                    <span className="text-caption font-medium text-ink-muted">
                       (-{totals.tolMinusPct}% / +{totals.tolPlusPct}%)
                     </span>
                   </div>
                 )}
               </div>
 
-              <div className="text-xs font-medium text-slate-500">
+              <div className="text-xs font-medium text-ink-secondary">
                 {lines.filter(l => l.style_id).length} Style Line{lines.filter(l => l.style_id).length === 1 ? '' : 's'}
               </div>
             </div>
 
             {/* Metrics KPI Grid */}
-            <div className="grid grid-cols-2 gap-y-4 gap-x-2 p-5 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+            <div className="grid grid-cols-2 gap-y-4 gap-x-2 p-5 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-surface-divider">
               {/* Tile 1: Order Qty */}
               <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0">
                 <div>
-                  <span className="text-caption font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                  <span className="text-caption font-bold uppercase tracking-wider text-ink-secondary block mb-1">
                     Order Qty
                   </span>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-bold tabular-nums text-slate-900">
+                    <span className="text-2xl font-bold tabular-nums text-ink">
                       {fmtNumber(totals.qty)}
                     </span>
-                    <span className="text-xs font-semibold text-slate-400">pcs</span>
+                    <span className="text-xs font-semibold text-ink-muted">pcs</span>
                   </div>
                   {totals.sets > 0 && (
                     <div className="text-small font-semibold text-indigo-700" data-order-sets>= {fmtNumber(totals.sets)} sets</div>
                   )}
                 </div>
-                <p className="mt-1.5 text-caption text-slate-400">Buyer invoice contracted volume</p>
+                <p className="mt-1.5 text-caption text-ink-muted">Buyer invoice contracted volume</p>
               </div>
 
               {/* Tile 2: Excess Buffer */}
@@ -765,12 +765,12 @@ export default function SalesOrderDetail() {
               {/* Tile 4: Total Value in Foreign Currency */}
               <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
                 <div>
-                  <span className="text-caption font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                  <span className="text-caption font-bold uppercase tracking-wider text-ink-secondary block mb-1">
                     Total Value ({currencyCode})
                   </span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-sm font-bold text-slate-500">{currencySymbol}</span>
-                    <span className="text-2xl font-bold tabular-nums text-slate-900">
+                    <span className="text-sm font-bold text-ink-secondary">{currencySymbol}</span>
+                    <span className="text-2xl font-bold tabular-nums text-ink">
                       {totals.amount.toLocaleString(isForeign ? 'en-US' : 'en-IN', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -778,7 +778,7 @@ export default function SalesOrderDetail() {
                     </span>
                   </div>
                 </div>
-                <p className="mt-1.5 text-caption text-slate-400">Order Qty × Unit Price</p>
+                <p className="mt-1.5 text-caption text-ink-muted">Order Qty × Unit Price</p>
               </div>
 
               {/* Tile 5: Total Value in INR */}
@@ -805,14 +805,14 @@ export default function SalesOrderDetail() {
               ) : (
                 <div className="flex flex-col justify-between px-3 pt-2 sm:pt-0 sm:pl-5">
                   <div>
-                    <span className="text-caption font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    <span className="text-caption font-bold uppercase tracking-wider text-ink-secondary block mb-1">
                       Settlement Mode
                     </span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-lg font-bold text-slate-800">Domestic (INR)</span>
+                      <span className="text-lg font-bold text-ink">Domestic (INR)</span>
                     </div>
                   </div>
-                  <p className="mt-1.5 text-caption text-slate-400">Direct INR billing without FX</p>
+                  <p className="mt-1.5 text-caption text-ink-muted">Direct INR billing without FX</p>
                 </div>
               )}
             </div>
@@ -840,8 +840,8 @@ export default function SalesOrderDetail() {
         <div className="card overflow-hidden">
           {d?.production_orders?.length ? (
             <>
-              <div className="border-b border-slate-100 px-4 py-3">
-                <span className="text-small font-semibold text-slate-700">{d.production_orders.length} work order{d.production_orders.length !== 1 ? 's' : ''} linked to this order</span>
+              <div className="border-b border-surface-divider px-4 py-3">
+                <span className="text-small font-semibold text-ink">{d.production_orders.length} work order{d.production_orders.length !== 1 ? 's' : ''} linked to this order</span>
               </div>
               <table className="w-full">
                 <thead><tr>
@@ -861,13 +861,13 @@ export default function SalesOrderDetail() {
                         <td className="td text-right tabular-nums">{fmtNumber(p.produced_qty)}</td>
                         <td className="td">
                           <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-28 rounded-full bg-slate-100 overflow-hidden">
+                            <div className="h-1.5 w-28 rounded-full bg-surface-header overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-emerald-500' : pct > 50 ? 'bg-brand-500' : 'bg-amber-500'}`}
                                 style={{ width: `${pct}%` }}
                               />
                             </div>
-                            <span className="text-small tabular-nums text-slate-600 font-medium">{pct}%</span>
+                            <span className="text-small tabular-nums text-ink-secondary font-medium">{pct}%</span>
                           </div>
                         </td>
                         <td className="td"><StatusBadge value={p.approval_state} /></td>
@@ -879,11 +879,11 @@ export default function SalesOrderDetail() {
             </>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-14">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-header text-ink-muted">
                 <Layers size={22} />
               </div>
-              <p className="text-body font-medium text-slate-500">No production orders raised yet</p>
-              <p className="text-small text-slate-400">Production orders will appear here once they are created against this sales order.</p>
+              <p className="text-body font-medium text-ink-secondary">No production orders raised yet</p>
+              <p className="text-small text-ink-muted">Production orders will appear here once they are created against this sales order.</p>
             </div>
           )}
         </div>
@@ -910,10 +910,10 @@ export default function SalesOrderDetail() {
             </table>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 py-14">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-header text-ink-muted">
                 <PackageSearch size={22} />
               </div>
-              <p className="text-body font-medium text-slate-500">No invoices raised yet</p>
+              <p className="text-body font-medium text-ink-secondary">No invoices raised yet</p>
             </div>
           )}
         </div>
@@ -941,7 +941,7 @@ export default function SalesOrderDetail() {
       <Modal open={stateModal} onClose={() => setStateModal(false)} title="Change order state" size="sm"
         subtitle="Pick the new approval state for this order"
         footer={<button className="btn-secondary" onClick={() => setStateModal(false)}>Cancel</button>}>
-        <p className="mb-3 text-body text-slate-600">
+        <p className="mb-3 text-body text-ink-secondary">
           Current state: <StatusBadge value={head.approval_state} />
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -997,8 +997,8 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
   if (!styleIds.length) {
     return (
       <div className="card flex flex-col items-center justify-center gap-3 py-14">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><PackageSearch size={22} /></div>
-        <p className="text-body text-slate-500">Add order lines to see Bill of Materials.</p>
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-header text-ink-muted"><PackageSearch size={22} /></div>
+        <p className="text-body text-ink-secondary">Add order lines to see Bill of Materials.</p>
       </div>
     );
   }
@@ -1013,17 +1013,17 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
         return (
           <div key={sid} className="card overflow-hidden">
             {/* Style header */}
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-surface-divider bg-surface-muted/60 px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
                   <Layers size={14} />
                 </div>
                 <div>
-                  <span className="text-body font-bold text-slate-900">
+                  <span className="text-body font-bold text-ink">
                     {bom ? `${bom.style_code} — ${bom.style_name}` : `Style ID ${sid}`}
                   </span>
                   {bom && (
-                    <span className="ml-2 text-caption text-slate-400">BOM {bom.bom_no} · v{bom.version}</span>
+                    <span className="ml-2 text-caption text-ink-muted">BOM {bom.bom_no} · v{bom.version}</span>
                   )}
                 </div>
               </div>
@@ -1073,10 +1073,10 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
                     return (
                       <tr key={l.id} className="row-hover">
                         <td className="td"><Badge tone={typeColor[l.material_type] as any ?? 'blue'}>{l.material_type}</Badge></td>
-                        <td className="td font-medium text-slate-900">{name}</td>
-                        <td className="td text-slate-500">{l.color_name ?? '—'}</td>
+                        <td className="td font-medium text-ink">{name}</td>
+                        <td className="td text-ink-secondary">{l.color_name ?? '—'}</td>
                         <td className="td text-right tabular-nums">{fmtDecimal(l.consumption, 4)}</td>
-                        <td className="td text-slate-500">{l.uom_code}</td>
+                        <td className="td text-ink-secondary">{l.uom_code}</td>
                         <td className="td text-right tabular-nums text-amber-700">
                           {Number(l.wastage_pct) > 0 ? `+${l.wastage_pct}%` : '—'}
                         </td>
@@ -1092,7 +1092,7 @@ function BomTab({ lines }: { lines: Line[]; soId?: number }) {
                 No active BOM found for this style. Create a BOM to enable MRP explosion and material planning.
               </div>
             ) : (
-              <p className="px-4 py-5 text-body text-slate-400">This BOM has no component lines yet.</p>
+              <p className="px-4 py-5 text-body text-ink-muted">This BOM has no component lines yet.</p>
             )}
           </div>
         );
@@ -1159,8 +1159,8 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
             <PlayCircle size={28} />
           </div>
           <div className="text-center">
-            <p className="text-title font-bold text-slate-800">No MRP run for this order</p>
-            <p className="mt-1 text-body text-slate-500 max-w-sm">
+            <p className="text-title font-bold text-ink">No MRP run for this order</p>
+            <p className="mt-1 text-body text-ink-secondary max-w-sm">
               Run Material Requirements Planning to explode the BOM against this order's quantities
               and calculate yarn, fabric and accessory needs.
             </p>
@@ -1180,10 +1180,10 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
     <div className="space-y-3">
       {/* Run summary bar */}
       <div className="card p-0 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-divider bg-surface-muted/60 px-4 py-3">
           <div className="flex flex-wrap items-center gap-4 text-body">
             <span className="tabular-nums font-bold text-brand-700">{latestRun.mrp_no}</span>
-            <span className="text-slate-500">Run date: <strong className="text-slate-800">{fmtDate(latestRun.run_date)}</strong></span>
+            <span className="text-ink-secondary">Run date: <strong className="text-ink">{fmtDate(latestRun.run_date)}</strong></span>
             {shortfalls > 0 ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-200 px-2 py-0.5 text-small font-semibold text-red-700">
                 <AlertCircle size={12} /> {shortfalls} shortfall{shortfalls !== 1 ? 's' : ''}
@@ -1209,7 +1209,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
         </div>
 
         {/* Type filter pills */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-divider">
           {([
             { key: 'ALL', label: `All (${requirements.length})` },
             { key: 'YARN', label: `Yarn (${yarn})` },
@@ -1222,7 +1222,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
               className={`rounded-full px-3 py-1 text-small font-semibold transition-all border ${
                 filter === key
                   ? 'bg-brand-600 text-white border-brand-600 shadow-xs'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300 hover:text-brand-700'
+                  : 'bg-white text-ink-secondary border-surface-border hover:border-brand-300 hover:text-brand-700'
               }`}
             >
               {label}
@@ -1257,8 +1257,8 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
                     <td className="td">
                       <Badge tone={typeColor[r.material_type] as any ?? 'blue'}>{r.material_type}</Badge>
                     </td>
-                    <td className="td font-medium text-slate-900">{name}</td>
-                    <td className="td text-small tabular-nums text-slate-500">{r.style_code ?? '—'}</td>
+                    <td className="td font-medium text-ink">{name}</td>
+                    <td className="td text-small tabular-nums text-ink-secondary">{r.style_code ?? '—'}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.gross_required, 3)}</td>
                     <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.in_stock, 3)}</td>
                     <td className="td text-right tabular-nums text-blue-700">{fmtDecimal(r.on_order, 3)}</td>
@@ -1269,7 +1269,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
                         {net > 0 ? `+${fmtDecimal(net, 3)}` : fmtDecimal(0, 3)}
                       </span>
                     </td>
-                    <td className="td text-slate-500">{r.uom_code}</td>
+                    <td className="td text-ink-secondary">{r.uom_code}</td>
                   </tr>
                 );
               })}
@@ -1278,7 +1278,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 py-10">
             <CheckCircle className="text-emerald-500" size={22} />
-            <p className="text-body text-slate-500">No {filter !== 'ALL' ? filter.toLowerCase() : ''} requirements for this filter.</p>
+            <p className="text-body text-ink-secondary">No {filter !== 'ALL' ? filter.toLowerCase() : ''} requirements for this filter.</p>
           </div>
         )}
       </div>
@@ -1473,8 +1473,8 @@ function RatioSplitAssistant({
             <Sparkles size={16} />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-slate-900">⚡ Ratio-Based Size Split Assistant</h4>
-            <p className="text-xs text-slate-500">Auto-distribute bulk order quantities or pre-pack cartons across sizes</p>
+            <h4 className="text-sm font-bold text-ink">⚡ Ratio-Based Size Split Assistant</h4>
+            <p className="text-xs text-ink-secondary">Auto-distribute bulk order quantities or pre-pack cartons across sizes</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1488,7 +1488,7 @@ function RatioSplitAssistant({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1 text-ink-muted hover:bg-surface-header hover:text-ink-secondary"
           >
             <X size={16} />
           </button>
@@ -1499,17 +1499,17 @@ function RatioSplitAssistant({
       <div className="mt-3.5 grid grid-cols-1 md:grid-cols-3 gap-3.5">
         {/* Mode Selector */}
         <div>
-          <label className="text-small font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+          <label className="text-small font-bold text-ink uppercase tracking-wide block mb-1.5">
             Distribution Mode
           </label>
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-lg border border-slate-200">
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-surface-header rounded-lg border border-surface-border">
             <button
               type="button"
               onClick={() => setMode('target')}
               className={`text-xs py-1.5 px-2 rounded-md font-semibold transition-all ${
                 mode === 'target'
                   ? 'bg-white text-brand-800 shadow-xs border border-brand-200'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-ink-secondary hover:text-ink'
               }`}
             >
               🎯 Total Qty Split
@@ -1520,7 +1520,7 @@ function RatioSplitAssistant({
               className={`text-xs py-1.5 px-2 rounded-md font-semibold transition-all ${
                 mode === 'pack'
                   ? 'bg-white text-brand-800 shadow-xs border border-brand-200'
-                  : 'text-slate-600 hover:text-slate-900'
+                  : 'text-ink-secondary hover:text-ink'
               }`}
             >
               📦 Pack Multiplier
@@ -1530,7 +1530,7 @@ function RatioSplitAssistant({
 
         {/* Input Target */}
         <div>
-          <label className="text-small font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+          <label className="text-small font-bold text-ink uppercase tracking-wide block mb-1.5">
             {mode === 'target' ? 'Target Total Quantity (pcs)' : 'Number of Packs / Cartons'}
           </label>
           <input
@@ -1551,7 +1551,7 @@ function RatioSplitAssistant({
         {/* Colour Scope */}
         {colorGroups.length > 1 && !activeColorId ? (
           <div>
-            <label className="text-small font-bold text-slate-700 uppercase tracking-wide block mb-1.5">
+            <label className="text-small font-bold text-ink uppercase tracking-wide block mb-1.5">
               Apply to Colour
             </label>
             <select
@@ -1565,7 +1565,7 @@ function RatioSplitAssistant({
               ))}
             </select>
             {selectedColor === 'ALL' && mode === 'target' && (
-              <div className="mt-1.5 flex items-center gap-3 text-caption text-slate-600">
+              <div className="mt-1.5 flex items-center gap-3 text-caption text-ink-secondary">
                 <label className="flex items-center gap-1 cursor-pointer">
                   <input
                     type="radio"
@@ -1589,27 +1589,27 @@ function RatioSplitAssistant({
           </div>
         ) : (
           <div className="flex items-center pt-5">
-            <span className="text-xs text-slate-500 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
-              Applying to: <strong className="text-slate-800">{colorGroups[0]?.[0] || 'Selected Colour'}</strong>
+            <span className="text-xs text-ink-secondary bg-surface-header px-3 py-2 rounded-lg border border-surface-border">
+              Applying to: <strong className="text-ink">{colorGroups[0]?.[0] || 'Selected Colour'}</strong>
             </span>
           </div>
         )}
       </div>
 
       {/* Preset Quick Buttons & Text Parser */}
-      <div className="mt-3 pt-3 border-t border-slate-200">
+      <div className="mt-3 pt-3 border-t border-surface-border">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <span className="text-small font-bold text-slate-700 uppercase tracking-wide">
+          <span className="text-small font-bold text-ink uppercase tracking-wide">
             Industry Ratio Presets:
           </span>
           <div className="flex items-center gap-1.5">
-            <span className="text-caption text-slate-500 font-medium">Quick Paste Ratio:</span>
+            <span className="text-caption text-ink-secondary font-medium">Quick Paste Ratio:</span>
             <input
               type="text"
               placeholder="e.g. 1:2:3:2:1"
               value={ratioStr}
               onChange={(e) => applyRatioString(e.target.value)}
-              className="w-28 rounded border border-slate-300 px-2 py-0.5 text-xs tabular-nums focus:border-brand-500 focus:outline-none"
+              className="w-28 rounded border border-surface-input px-2 py-0.5 text-xs tabular-nums focus:border-brand-500 focus:outline-none"
             />
           </div>
         </div>
@@ -1619,7 +1619,7 @@ function RatioSplitAssistant({
               key={p.label}
               type="button"
               onClick={() => applyPreset(p.values)}
-              className="text-xs bg-white hover:bg-brand-50 text-slate-700 hover:text-brand-700 border border-slate-200 hover:border-brand-300 px-2.5 py-1 rounded-lg font-medium shadow-2xs transition-colors"
+              className="text-xs bg-white hover:bg-brand-50 text-ink hover:text-brand-700 border border-surface-border hover:border-brand-300 px-2.5 py-1 rounded-lg font-medium shadow-2xs transition-colors"
             >
               {p.label}
             </button>
@@ -1628,9 +1628,9 @@ function RatioSplitAssistant({
       </div>
 
       {/* Interactive Size Ratio Inputs */}
-      <div className="mt-3.5 rounded-lg bg-slate-50/80 p-3 border border-slate-200">
+      <div className="mt-3.5 rounded-lg bg-surface-muted/80 p-3 border border-surface-border">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold text-slate-800">Set Ratio per Size:</span>
+          <span className="text-xs font-bold text-ink">Set Ratio per Size:</span>
           <span className="text-xs font-semibold px-2.5 py-0.5 bg-brand-100 text-brand-800 rounded-full border border-brand-200">
             Pack Ratio Sum: <strong className="font-bold">{totalRatioUnits}</strong> units
           </span>
@@ -1644,11 +1644,11 @@ function RatioSplitAssistant({
             return (
               <div
                 key={s.size_code}
-                className="flex flex-col rounded-lg bg-white p-2 border border-slate-200 shadow-2xs text-center"
+                className="flex flex-col rounded-lg bg-white p-2 border border-surface-border shadow-2xs text-center"
               >
-                <span className="text-xs font-bold text-slate-900 mb-1">{s.size_code}</span>
+                <span className="text-xs font-bold text-ink mb-1">{s.size_code}</span>
                 <div className="flex items-center justify-center gap-1 mb-1.5">
-                  <span className="text-caption text-slate-400 font-semibold">Ratio:</span>
+                  <span className="text-caption text-ink-muted font-semibold">Ratio:</span>
                   <input
                     type="number"
                     min="0"
@@ -1657,12 +1657,12 @@ function RatioSplitAssistant({
                       const val = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value));
                       setRatios((prev) => ({ ...prev, [s.size_code]: val }));
                     }}
-                    className="w-12 rounded border border-slate-300 py-0.5 px-1 text-center font-bold text-brand-700 text-sm focus:border-brand-500 focus:outline-none"
+                    className="w-12 rounded border border-surface-input py-0.5 px-1 text-center font-bold text-brand-700 text-sm focus:border-brand-500 focus:outline-none"
                   />
                 </div>
-                <div className="mt-auto border-t border-slate-100 pt-1 text-caption">
-                  <p className="font-bold text-slate-800 tabular-nums">{fmtNumber(pieces)} pcs</p>
-                  <p className="text-micro text-slate-400 font-medium">{pct}%</p>
+                <div className="mt-auto border-t border-surface-divider pt-1 text-caption">
+                  <p className="font-bold text-ink tabular-nums">{fmtNumber(pieces)} pcs</p>
+                  <p className="text-micro text-ink-muted font-medium">{pct}%</p>
                 </div>
               </div>
             );
@@ -1672,13 +1672,13 @@ function RatioSplitAssistant({
 
       {/* Live Preview Summary Bar & Apply Button */}
       <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-brand-100">
-        <div className="text-xs text-slate-600">
+        <div className="text-xs text-ink-secondary">
           <span>Will distribute: </span>
           <strong className="text-sm font-bold text-brand-800 tabular-nums">
             {fmtNumber(grandTotalPreview)} pcs
           </strong>
           {previewColorCount > 1 && (
-            <span className="text-slate-500">
+            <span className="text-ink-secondary">
               {' '}({fmtNumber(singleColorTotal)} pcs $\times$ {previewColorCount} colours)
             </span>
           )}
@@ -1792,7 +1792,7 @@ function LineCard({
     <div className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-caption font-semibold text-slate-600">
+          <span className="rounded-md bg-surface-header px-2 py-0.5 text-caption font-semibold text-ink-secondary">
             Line {index + 1}
           </span>
           {line.is_additional ? (
@@ -1807,7 +1807,7 @@ function LineCard({
           ) : null}
         </span>
         {editable && canRemove && (
-          <button onClick={onRemove} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+          <button onClick={onRemove} className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600"
             title="Remove line">
             <Trash2 size={15} />
           </button>
@@ -1832,7 +1832,7 @@ function LineCard({
         {/* Part Name — TOP / BOTTOM / COLLAR / CUFF / FOLDING; a set line covers every part of the set */}
         {setE ? (
           <div data-set-line>
-            <label className="mb-1 block text-small font-medium text-slate-700">Sold as</label>
+            <label className="mb-1 block text-small font-medium text-ink">Sold as</label>
             <div className="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-small font-semibold text-indigo-800"
               title="Saved as one line per part: pieces = sets × pieces per set">
               SET = {setLabel(setE)}
@@ -1840,7 +1840,7 @@ function LineCard({
           </div>
         ) : (
         <div>
-          <label className="mb-1 block text-small font-medium text-slate-700">
+          <label className="mb-1 block text-small font-medium text-ink">
             Part
             {line.part_name && (
               <span className={`ml-2 inline-flex items-center rounded border px-1.5 py-0.5 text-micro font-bold ${
@@ -1849,7 +1849,7 @@ function LineCard({
                 line.part_name === 'COLLAR' ? 'bg-rose-100 text-rose-800 border-rose-200' :
                 line.part_name === 'CUFF'   ? 'bg-amber-100 text-amber-800 border-amber-200' :
                 line.part_name === 'FOLDING'? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                'bg-slate-100 text-slate-700 border-slate-200'
+                'bg-surface-header text-ink border-surface-border'
               }`}>{line.part_name}</span>
             )}
           </label>
@@ -1905,7 +1905,7 @@ function LineCard({
       <div className="mt-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <p className="text-small font-semibold text-slate-700">Size-wise breakdown{setE ? ' — in SETS' : ''}</p>
+            <p className="text-small font-semibold text-ink">Size-wise breakdown{setE ? ' — in SETS' : ''}</p>
             {isSetStyle && editable && (
               <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-small font-semibold text-indigo-800"
                 title="A set style is sold in sets; untick to enter one part (TOP / BOTTOM …) in pieces on this line">
@@ -1937,9 +1937,9 @@ function LineCard({
           </div>
           {lineQty > 0 && (
             <div className="flex flex-wrap items-center gap-2.5 text-small">
-              <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700 border border-slate-200">
-                Order: <strong className="font-bold text-slate-900">{fmtNumber(lineQty)}</strong> {unitWord}
-                {setE && <> = <strong className="font-bold text-slate-900">{fmtNumber(lineQty * pps)}</strong> pcs</>}
+              <span className="inline-flex items-center gap-1 rounded bg-surface-header px-2 py-0.5 font-medium text-ink border border-surface-border">
+                Order: <strong className="font-bold text-ink">{fmtNumber(lineQty)}</strong> {unitWord}
+                {setE && <> = <strong className="font-bold text-ink">{fmtNumber(lineQty * pps)}</strong> pcs</>}
               </span>
               <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 border border-amber-200"
                 title={plan.hasSize ? `Size-wise excess applied (line default +${lineExcessPct}%)` : `Cutting allowance: +${lineExcessPct}%`}>
@@ -1948,7 +1948,7 @@ function LineCard({
               <span className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 border border-brand-200" title="Total planned cutting quantity with buffer">
                 Planned Cut: <strong className="font-bold text-brand-950">{fmtNumber(linePlanCutQty)}</strong> {unitWord}
               </span>
-              <span className="font-semibold text-slate-800 ml-1">
+              <span className="font-semibold text-ink ml-1">
                 {currencyCode} {currencySymbol}{lineAmount.toLocaleString(isForeign ? 'en-US' : 'en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               {isForeign && (
@@ -1983,7 +1983,7 @@ function LineCard({
         )}
 
         {!line.style_id ? (
-          <p className="rounded-lg bg-surface-muted px-3 py-3 text-body text-slate-400">
+          <p className="rounded-lg bg-surface-muted px-3 py-3 text-body text-ink-muted">
             Select a style to enter size-wise quantities.
           </p>
         ) : skus.isLoading ? (
@@ -2012,7 +2012,7 @@ function LineCard({
                       {!line.color_id && (
                         <td className="td whitespace-nowrap font-medium">
                           <span className="inline-flex items-center gap-1.5">
-                            <span className="inline-block h-3 w-3 rounded-sm border border-slate-200"
+                            <span className="inline-block h-3 w-3 rounded-sm border border-surface-border"
                               style={{ background: group[0]?.hex_value ?? '#f1f5f9' }} />
                             {colorName}
                           </span>
@@ -2023,7 +2023,7 @@ function LineCard({
                           <input type="number" min={0} disabled={!editable}
                             className="w-[68px] rounded-md border border-surface-border px-1.5 py-1 text-center
                                        text-body tabular-nums focus:border-brand-500 focus:outline-none
-                                       focus:ring-1 focus:ring-brand-500/25 disabled:bg-slate-50"
+                                       focus:ring-1 focus:ring-brand-500/25 disabled:bg-surface-muted"
                             value={line.skus[s.id] ?? ''}
                             placeholder="0"
                             onChange={(e) => {
@@ -2046,7 +2046,7 @@ function LineCard({
                       <input type="number" min={0} max={100} step="0.1" disabled={!editable}
                         className="w-[68px] rounded-md border border-amber-200 bg-white px-1.5 py-1 text-center
                                    text-small tabular-nums focus:border-amber-500 focus:outline-none
-                                   focus:ring-1 focus:ring-amber-500/25 disabled:bg-slate-50"
+                                   focus:ring-1 focus:ring-amber-500/25 disabled:bg-surface-muted"
                         value={sizeExcessValue(sz.size_code)}
                         placeholder={`${lineExcessPct}`}
                         title={`Excess % for size ${sz.size_code}. Leave blank to use ${lineExcessPct}% (line/order default).`}
@@ -2085,7 +2085,7 @@ function LineCard({
                 Parts of each set — saved as {setE.parts.length} part lines ({setE.parts.map((p) => `${p.part_name} ${fmtNumber(lineQty * p.qty_per_set)} pcs`).join(' · ')})
               </p>
               {setColours.length === 0 ? (
-                <p className="text-small text-slate-500">Enter the sets per colour and size above; the set colour is the {lead} colour.</p>
+                <p className="text-small text-ink-secondary">Enter the sets per colour and size above; the set colour is the {lead} colour.</p>
               ) : (
                 <table className="text-small">
                   <thead>
@@ -2139,17 +2139,17 @@ function SetStatusTab({ soId }: { soId: number }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         {[...STAGES, ['invoiced', 'Invoiced'] as [string, string]].map(([k, label]) => (
           <div key={k} className="card px-3 py-2">
-            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{label}</div>
-            <div className="text-lg font-bold tabular-nums text-slate-900" data-total={k}>{fmtNumber(T[k] ?? 0)} <span className="text-caption font-medium text-slate-400">sets</span></div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{label}</div>
+            <div className="text-lg font-bold tabular-nums text-ink" data-total={k}>{fmtNumber(T[k] ?? 0)} <span className="text-caption font-medium text-ink-muted">sets</span></div>
           </div>
         ))}
       </div>
-      <p className="text-small text-slate-500">
+      <p className="text-small text-ink-secondary">
         Each stage counts complete sets: the smallest number of sets every part can make (pieces ÷ pieces per set). Unmatched = pieces of a part in the FG store waiting for their partner part.
       </p>
       {q.data.groups.map((g: any) => (
         <div key={g.set_group} className="card overflow-x-auto p-0">
-          <div className="border-b border-slate-100 px-4 py-2 text-body font-semibold text-slate-800">
+          <div className="border-b border-surface-divider px-4 py-2 text-body font-semibold text-ink">
             {g.style_code} · Set {g.set_group} = {g.parts.map((p: any) => `${p.qty_per_set > 1 ? `${p.qty_per_set} ` : ''}${p.part}`).join(' + ')}
           </div>
           <table className="w-full text-body">
@@ -2171,7 +2171,7 @@ function SetStatusTab({ soId }: { soId: number }) {
                       <span key={p.part} className="mr-1.5 inline-block rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-amber-800"
                         title={`${p.part} ${p.color_name ?? ''}: ${p.on_hand_pcs} in FG store`}>{p.part} +{fmtNumber(p.unmatched_pcs)}</span>
                     ))}
-                    {!r.parts.some((p: any) => p.unmatched_pcs > 0) && <span className="text-slate-400">—</span>}
+                    {!r.parts.some((p: any) => p.unmatched_pcs > 0) && <span className="text-ink-muted">—</span>}
                   </td>
                 </tr>
               ))}
@@ -2179,7 +2179,7 @@ function SetStatusTab({ soId }: { soId: number }) {
           </table>
         </div>
       ))}
-      {!q.data.groups.length && <p className="text-body text-slate-500">This order has no set lines.</p>}
+      {!q.data.groups.length && <p className="text-body text-ink-secondary">This order has no set lines.</p>}
     </div>
   );
 }
@@ -2212,7 +2212,7 @@ function GoodsDescription({ line, styleRow, editable, lockedEditable, soId, onCh
     } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not save', 'error'); } finally { setBusy(false); }
   };
   return (
-    <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-5" data-goods={line._key}>
+    <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 rounded-lg border border-surface-border bg-surface-muted/60 p-3 sm:grid-cols-5" data-goods={line._key}>
       <Input label="Composition" placeholder={String(styleRow?.composition ?? 'e.g. 95% COTTON 5% ELASTANE').toUpperCase()} value={line.composition} disabled={!can}
         id={`line-composition-${line._key}`} onChange={(e) => set({ composition: e.target.value.toUpperCase() })} hint="From the style's fabric — edit if needed" />
       <Input className="sm:col-span-3" label="Description of goods (invoice / shipping bill)" placeholder={auto || 'Built from composition, knit / woven, gender, garment'}

@@ -22,7 +22,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 export const SAMPLE_STATUSES = Object.keys(STATUS_LABEL);
 export function SampleStatus({ value }: { value?: string | null }) {
-  if (!value) return <span className="text-slate-400">—</span>;
+  if (!value) return <span className="text-ink-muted">—</span>;
   return <Badge tone={STATUS_TONE[value] ?? 'slate'}>{STATUS_LABEL[value] ?? value}</Badge>;
 }
 
@@ -86,9 +86,9 @@ export function Kpi({ label, value, sub, tone = 'slate', onClick, id }: { label:
     <button type="button" id={id} onClick={onClick} disabled={!onClick}
       className={clsx('card relative overflow-hidden p-3.5 text-left transition', onClick && 'hover:border-brand-300 hover:shadow-md cursor-pointer')}>
       <span className={clsx('absolute inset-y-0 left-0 w-1', bar[tone] ?? bar.slate)} />
-      <p className="text-caption font-semibold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 text-page font-bold tracking-tight text-slate-900">{value}</p>
-      {sub && <p className="text-small text-slate-500">{sub}</p>}
+      <p className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{label}</p>
+      <p className="mt-1 text-page font-bold tracking-tight text-ink">{value}</p>
+      {sub && <p className="text-small text-ink-secondary">{sub}</p>}
     </button>
   );
 }
@@ -96,15 +96,15 @@ export function Kpi({ label, value, sub, tone = 'slate', onClick, id }: { label:
 /** Horizontal bars (dashboard distributions). Text values are shown next to each bar. */
 export function BarList({ rows, money, onClick, empty = 'Nothing to show' }: { rows: { label: string; value: number }[]; money?: boolean; onClick?: (label: string) => void; empty?: string }) {
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.value)));
-  if (!rows.length) return <p className="py-6 text-center text-small text-slate-400">{empty}</p>;
+  if (!rows.length) return <p className="py-6 text-center text-small text-ink-muted">{empty}</p>;
   return (
     <div className="space-y-1.5">
       {rows.map((r) => (
         <button key={r.label} type="button" disabled={!onClick} onClick={() => onClick?.(r.label)}
           className={clsx('grid w-full grid-cols-[minmax(90px,38%)_1fr_auto] items-center gap-2 text-left text-small', onClick && 'hover:opacity-80')}>
-          <span className="truncate text-slate-600" title={r.label}>{r.label}</span>
-          <span className="h-2.5 rounded-full bg-slate-100"><span className="block h-2.5 rounded-full bg-brand-500" style={{ width: `${(Math.abs(r.value) / max) * 100}%` }} /></span>
-          <span className="tabular-nums font-semibold text-slate-700">{money ? inr(r.value) : r.value}</span>
+          <span className="truncate text-ink-secondary" title={r.label}>{r.label}</span>
+          <span className="h-2.5 rounded-full bg-surface-header"><span className="block h-2.5 rounded-full bg-brand-500" style={{ width: `${(Math.abs(r.value) / max) * 100}%` }} /></span>
+          <span className="tabular-nums font-semibold text-ink">{money ? inr(r.value) : r.value}</span>
         </button>
       ))}
     </div>
@@ -125,7 +125,7 @@ export function ReasonModal({ open, title, message, label = 'Reason', confirmLab
         <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
         <Button variant={danger ? 'danger' : 'primary'} loading={busy} disabled={short} id="reason-confirm" onClick={() => onConfirm(reason.trim())}>{confirmLabel}</Button>
       </>}>
-      {message && <div className="mb-3 text-body text-slate-600">{message}</div>}
+      {message && <div className="mb-3 text-body text-ink-secondary">{message}</div>}
       <Textarea label={label} required value={reason} id="reason-input" onChange={(e) => setReason(e.target.value)} autoFocus
         hint={short ? `At least ${minLength} characters` : undefined} />
     </Modal>

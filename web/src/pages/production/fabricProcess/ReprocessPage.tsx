@@ -39,19 +39,19 @@ function ReprocessList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Reprocess no', 'Date', 'Process', 'Supplier / Vendor', 'Source', 'Jobs', 'Qty KG', 'Billing', 'Amount', 'Billing status', 'DC', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Reprocess no', 'Date', 'Process', 'Supplier / Vendor', 'Source', 'Jobs', 'Qty KG', 'Billing', 'Amount', 'Billing status', 'DC', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {(list.data ?? []).map((r) => (
-                <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
+                <tr key={r.id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => onOpen(r.id)}>
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.reprocess_no}</td><td className="px-3 py-2">{fmtDate(r.reprocess_date)}</td>
                   <td className="px-3 py-2">{r.process_name}</td><td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.source_type === 'RETURN' ? `Return ${r.return_no}` : 'Stock'}</td>
                   <td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2 text-right">{kg(r.total_kg)}</td>
-                  <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-caption font-semibold ${r.billing_type === 'BILLABLE' ? 'bg-emerald-100 text-emerald-800' : r.billing_type === 'RECOVERY' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'}`}>{BILLING.find((b) => b[0] === r.billing_type)?.[1].split(' —')[0]}</span></td>
+                  <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-caption font-semibold ${r.billing_type === 'BILLABLE' ? 'bg-emerald-100 text-emerald-800' : r.billing_type === 'RECOVERY' ? 'bg-red-100 text-red-800' : 'bg-surface-header text-ink'}`}>{BILLING.find((b) => b[0] === r.billing_type)?.[1].split(' —')[0]}</span></td>
                   <td className="px-3 py-2 text-right">₹{fmtDecimal(r.bill_amount, 2)}</td><td className="px-3 py-2"><FpStatus value={r.billing_status} />{r.bill_no ? <span className="ml-1 tabular-nums text-micro">{r.bill_no}</span> : null}</td>
                   <td className="px-3 py-2 tabular-nums">{r.fpo_no || '—'}</td><td className="px-3 py-2"><FpStatus value={r.status} /></td>
                 </tr>
               ))}
-              {!(list.data ?? []).length && <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-400">No reprocess entries yet</td></tr>}
+              {!(list.data ?? []).length && <tr><td colSpan={12} className="px-3 py-10 text-center text-ink-muted">No reprocess entries yet</td></tr>}
             </tbody>
           </table>
         )}
@@ -140,12 +140,12 @@ function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null
       </div>
       <div className="card mb-3 overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['', 'Job', 'Source roll', 'Colour', 'Eligible KG', 'Reprocess KG'].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['', 'Job', 'Source roll', 'Colour', 'Eligible KG', 'Reprocess KG'].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>
             {rows.map((r) => {
               const on = sel[r.roll_id] !== undefined;
               return (
-                <tr key={r.roll_id} className={`border-t border-slate-100 ${on ? 'bg-purple-50/60' : ''}`}>
+                <tr key={r.roll_id} className={`border-t border-surface-divider ${on ? 'bg-purple-50/60' : ''}`}>
                   <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const c = { ...s }; if (on) delete c[r.roll_id]; else c[r.roll_id] = r.eligible; return c; })} /></td>
                   <td className="px-2 py-1 font-semibold">{r.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1">{r.color || '—'}</td>
                   <td className="px-2 py-1 text-right">{kg(r.eligible)}</td>
@@ -153,20 +153,20 @@ function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null
                 </tr>
               );
             })}
-            {!rows.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">{head.source_type === 'RETURN' ? 'Choose a return with open KG' : 'No returned / rejected rolls in stock'}</td></tr>}
+            {!rows.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-ink-muted">{head.source_type === 'RETURN' ? 'Choose a return with open KG' : 'No returned / rejected rolls in stock'}</td></tr>}
           </tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={5} className="px-2 py-2 text-right">Reprocess qty</td><td className="px-2 py-2 text-right">{kg(qty)}</td></tr></tfoot>
+          <tfoot className="bg-surface-header font-bold"><tr><td colSpan={5} className="px-2 py-2 text-right">Reprocess qty</td><td className="px-2 py-2 text-right">{kg(qty)}</td></tr></tfoot>
         </table>
       </div>
       <div className="card mb-3 p-4">
-        <h3 className="mb-3 text-body font-semibold text-slate-800">Billing details</h3>
+        <h3 className="mb-3 text-body font-semibold text-ink">Billing details</h3>
         <BillingFields b={b} setB={setB} qty={qty} reasons={(reasons.data ?? []).filter((r) => r.kind !== 'RETURN')} />
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="secondary" loading={busy} onClick={() => save(false)}><Save size={14} className="mr-1" /> Save Draft</Button>
         {can('FABRIC_PROCESS.CONFIRM') && <Button loading={busy} onClick={() => save(true)}><CheckCircle2 size={14} className="mr-1" /> Confirm Reprocess</Button>}
       </div>
-      {!can('FABRIC_PROCESS.BILLING_APPROVE') && <p className="mt-2 text-right text-small text-slate-500">The billing treatment is saved as a request — a Process Manager approves it.</p>}
+      {!can('FABRIC_PROCESS.BILLING_APPROVE') && <p className="mt-2 text-right text-small text-ink-secondary">The billing treatment is saved as a request — a Process Manager approves it.</p>}
     </div>
   );
 }
@@ -196,12 +196,12 @@ function ReprocessView({ id, onBack }: { id: number; onBack: () => void }) {
         {[['Qty', `${kg(r.total_kg)} KG`], ['Billing type', BILLING.find((x) => x[0] === r.billing_type)?.[1]], ['Bill required', r.bill_required ? 'Yes' : 'No'], ['Billing reason', r.billing_reason || '—'],
           ['Rate / KG', `₹${fmtDecimal(r.rate_per_kg, 2)}`], [r.billing_type === 'RECOVERY' ? 'Recovery amount' : 'Bill amount', `₹${fmtDecimal(r.bill_amount, 2)}`], ['Cost treatment', COST.find((x) => x[0] === r.cost_treatment)?.[1] ?? '—'],
           ['Internal cost', `₹${fmtDecimal(r.internal_cost, 2)}`], ['Billing status', <FpStatus key="b" value={r.billing_status} />], ['Contractor bill', r.bill_no || '—'], ['Reprocess DC', r.fpo_no || '—'], ['DC status', r.dc_status ? <FpStatus key="d" value={r.dc_status} /> : '—']].map(([k, v]) => (
-          <div key={String(k)}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+          <div key={String(k)}><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{k}</div><div className="font-semibold">{v}</div></div>))}
       </div>
-      {r.billing_remarks && <pre className="card mb-3 whitespace-pre-wrap p-3 text-caption text-slate-600">{r.billing_remarks}</pre>}
+      {r.billing_remarks && <pre className="card mb-3 whitespace-pre-wrap p-3 text-caption text-ink-secondary">{r.billing_remarks}</pre>}
       <div className="card mb-3 overflow-x-auto">
-        <table className="w-full text-xs"><thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Source roll', 'Colour', 'Qty KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-          <tbody>{r.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td></tr>)}</tbody></table>
+        <table className="w-full text-xs"><thead className="bg-surface-muted text-ink-secondary"><tr>{['Job', 'Source roll', 'Colour', 'Qty KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <tbody>{r.lines.map((l: any) => <tr key={l.id} className="border-t border-surface-divider"><td className="px-2 py-1 font-semibold">{l.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td></tr>)}</tbody></table>
       </div>
       <div className="flex flex-wrap justify-end gap-2">
         {r.status === 'DRAFT' && can('FABRIC_PROCESS.CONFIRM') && <Button loading={busy} onClick={() => act(() => http.post(`/fabric-process/reprocess/${id}/confirm`, {}))}><CheckCircle2 size={14} className="mr-1" /> Confirm Reprocess</Button>}

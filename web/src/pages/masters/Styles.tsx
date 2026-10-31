@@ -75,14 +75,14 @@ function ColorMultiSelect({
   return (
     <div className="relative sm:col-span-2" ref={ref}>
       <div className="flex items-center justify-between mb-1">
-        <label className="block text-small font-bold uppercase tracking-wider text-slate-700">
-          Colourways (Colors) <span className="text-slate-400 font-normal lowercase">(search &amp; multi-select)</span>
+        <label className="block text-small font-bold uppercase tracking-wider text-ink">
+          Colourways (Colors) <span className="text-ink-muted font-normal lowercase">(search &amp; multi-select)</span>
         </label>
         {selectedIds.length > 0 && !disabled && (
           <button
             type="button"
             onClick={clearAll}
-            className="text-caption font-medium text-slate-400 hover:text-red-600 transition-colors"
+            className="text-caption font-medium text-ink-muted hover:text-red-600 transition-colors"
           >
             Clear all ({selectedIds.length})
           </button>
@@ -93,11 +93,11 @@ function ColorMultiSelect({
       <div
         onClick={() => !disabled && setOpen(o => !o)}
         className={`min-h-[38px] w-full cursor-pointer rounded-lg border bg-white p-1.5 flex flex-wrap items-center gap-1.5 transition-all ${
-          open ? 'border-brand-500 ring-2 ring-brand-100' : 'border-surface-border hover:border-slate-300'
-        } ${disabled ? 'cursor-not-allowed bg-slate-50 opacity-60' : ''}`}
+          open ? 'border-brand-500 ring-2 ring-brand-100' : 'border-surface-border hover:border-surface-input'
+        } ${disabled ? 'cursor-not-allowed bg-surface-muted opacity-60' : ''}`}
       >
         {selectedColors.length === 0 ? (
-          <span className="text-xs text-slate-400 px-2 py-1">
+          <span className="text-xs text-ink-muted px-2 py-1">
             — Select colours for this style (click to search &amp; select) —
           </span>
         ) : (
@@ -127,13 +127,13 @@ function ColorMultiSelect({
           ))
         )}
 
-        <div className="ml-auto flex items-center gap-1 text-slate-400 pr-1.5">
+        <div className="ml-auto flex items-center gap-1 text-ink-muted pr-1.5">
           <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      <p className="mt-1 text-caption text-slate-400">
+      <p className="mt-1 text-caption text-ink-muted">
         SKUs are generated as colour × size combinations for all selected colours.
       </p>
 
@@ -142,19 +142,19 @@ function ColorMultiSelect({
         <div className="absolute left-0 right-0 z-50 mt-1 rounded-xl border border-surface-border bg-white shadow-popover animate-fade-in p-2">
           {/* Search Box */}
           <div className="relative mb-2">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
             <input
               type="text"
               autoFocus
               placeholder="Search colours by name or code…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-surface-border bg-slate-50/70 py-1.5 pl-8 pr-3 text-xs text-slate-800 focus:border-brand-500 focus:bg-white focus:outline-none"
+              className="w-full rounded-lg border border-surface-border bg-surface-muted/70 py-1.5 pl-8 pr-3 text-xs text-ink focus:border-brand-500 focus:bg-white focus:outline-none"
             />
           </div>
 
           {/* Quick Action Bar */}
-          <div className="flex items-center justify-between px-1.5 py-1 border-b border-surface-border text-caption text-slate-500 mb-1">
+          <div className="flex items-center justify-between px-1.5 py-1 border-b border-surface-border text-caption text-ink-secondary mb-1">
             <span>{filtered.length} colours found</span>
             <div className="flex gap-2">
               <button
@@ -168,7 +168,7 @@ function ColorMultiSelect({
               <button
                 type="button"
                 onClick={clearAll}
-                className="text-slate-500 hover:text-red-600"
+                className="text-ink-secondary hover:text-red-600"
               >
                 Clear all
               </button>
@@ -178,7 +178,7 @@ function ColorMultiSelect({
           {/* Color List */}
           <div className="max-h-56 overflow-y-auto divide-y divide-slate-50 pr-1">
             {filtered.length === 0 ? (
-              <p className="py-4 text-center text-xs text-slate-400">No colours match &quot;{search}&quot;</p>
+              <p className="py-4 text-center text-xs text-ink-muted">No colours match &quot;{search}&quot;</p>
             ) : (
               filtered.map(c => {
                 const selected = selectedIds.includes(c.id);
@@ -187,7 +187,7 @@ function ColorMultiSelect({
                     key={c.id}
                     onClick={() => toggle(c.id)}
                     className={`flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer text-xs transition-colors ${
-                      selected ? 'bg-brand-50/70 font-semibold text-brand-900' : 'hover:bg-slate-50 text-slate-700'
+                      selected ? 'bg-brand-50/70 font-semibold text-brand-900' : 'hover:bg-surface-muted text-ink'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
@@ -197,12 +197,12 @@ function ColorMultiSelect({
                       />
                       <span>{c.label}</span>
                       {c.code && (
-                        <span className="text-micro text-slate-400 tabular-nums">({c.code})</span>
+                        <span className="text-micro text-ink-muted tabular-nums">({c.code})</span>
                       )}
                     </div>
 
                     <div className={`h-4 w-4 rounded border flex items-center justify-center ${
-                      selected ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300'
+                      selected ? 'bg-brand-600 border-brand-600 text-white' : 'border-surface-input'
                     }`}>
                       {selected && <Check size={11} strokeWidth={3} />}
                     </div>
@@ -256,7 +256,7 @@ export function StylesPage() {
           { key: 'style_code', header: 'Style code', sortable: true,
             render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.style_code}</span> },
           { key: 'style_name', header: 'Name', sortable: true,
-            render: (r: any) => <span className="font-medium text-slate-800">{r.style_name}</span> },
+            render: (r: any) => <span className="font-medium text-ink">{r.style_name}</span> },
           { key: 'version_no', header: 'Version', width: '75px',
             render: (r: any) => <span className="tabular-nums text-caption font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">v{r.version_no || 1}</span> },
           { key: 'product_name', header: 'Product' },
@@ -421,7 +421,7 @@ export function StyleDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-4">
             {/* Left 2 Cols: Main Metadata Form */}
             <div className="card p-4 lg:col-span-2">
-              <h3 className="mb-3 text-body font-bold uppercase tracking-wider text-slate-700">Style Specifications</h3>
+              <h3 className="mb-3 text-body font-bold uppercase tracking-wider text-ink">Style Specifications</h3>
               <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
                 <Input label="Style code" required value={v.style_code ?? ''} disabled={!editable}
                   onChange={(e) => set('style_code', e.target.value)} error={errors.style_code} />
@@ -455,7 +455,7 @@ export function StyleDetailPage() {
 
             {/* Right 1 Col: Garment Photo & Sketch Upload */}
             <div className="card p-4">
-              <h3 className="mb-3 text-body font-bold uppercase tracking-wider text-slate-700">Garment Photo / Sketch</h3>
+              <h3 className="mb-3 text-body font-bold uppercase tracking-wider text-ink">Garment Photo / Sketch</h3>
               <ImageUpload
                 label=""
                 hint="PNG, JPG, WEBP or SVG up to 10MB"
@@ -472,8 +472,8 @@ export function StyleDetailPage() {
         <div className="card overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
             <div>
-              <h3 className="text-body-lg font-semibold text-slate-800">Style SKUs</h3>
-              <p className="text-small text-slate-500">{d?.skus?.length ?? 0} active SKUs · colour × size of the style's current colours and sizes
+              <h3 className="text-body-lg font-semibold text-ink">Style SKUs</h3>
+              <p className="text-small text-ink-secondary">{d?.skus?.length ?? 0} active SKUs · colour × size of the style's current colours and sizes
                 {(d?.retired_skus?.length ?? 0) > 0 && (
                   <button type="button" id="sku-show-retired" className="ml-2 text-brand-700 hover:underline" onClick={() => setShowRetired((x) => !x)}>
                     {showRetired ? 'hide' : 'show'} {d.retired_skus.length} retired
@@ -499,15 +499,15 @@ export function StyleDetailPage() {
                       <td className="td tabular-nums text-small text-brand-700">{s.sku_code}</td>
                       <td className="td">
                         <span className="inline-flex items-center gap-1.5">
-                          <span className="inline-block h-3.5 w-3.5 rounded border border-slate-200"
+                          <span className="inline-block h-3.5 w-3.5 rounded border border-surface-border"
                             style={{ background: s.hex_value || '#f1f5f9' }} />
                           {s.color_name}
                         </span>
                       </td>
                       <td className="td">{s.size_label}</td>
-                      <td className="td tabular-nums text-small text-slate-500">{s.barcode ?? '—'}</td>
+                      <td className="td tabular-nums text-small text-ink-secondary">{s.barcode ?? '—'}</td>
                       <td className="td">{Number(s.is_active) ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Retired</Badge>}
-                        {Number(s.order_uses) > 0 && <span className="ml-1 text-caption text-slate-500">on {s.order_uses} order line(s)</span>}</td>
+                        {Number(s.order_uses) > 0 && <span className="ml-1 text-caption text-ink-secondary">on {s.order_uses} order line(s)</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -515,7 +515,7 @@ export function StyleDetailPage() {
             </div>
           ) : (
             <div className="px-6 py-12 text-center">
-              <p className="text-body text-slate-500">
+              <p className="text-body text-ink-secondary">
                 No SKUs yet. Assign a size group and colourways, then generate.
               </p>
             </div>
@@ -543,7 +543,7 @@ export function StyleDetailPage() {
                           {b.so_no}
                         </span>
                       ) : (
-                        <span className="text-caption text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        <span className="text-caption text-ink-secondary bg-surface-header px-1.5 py-0.5 rounded">
                           Master (All Orders)
                         </span>
                       )}
@@ -554,7 +554,7 @@ export function StyleDetailPage() {
                 ))}
               </tbody>
             </table>
-          ) : <p className="p-8 text-center text-body text-slate-400">No BOM defined for this style yet.</p>}
+          ) : <p className="p-8 text-center text-body text-ink-muted">No BOM defined for this style yet.</p>}
         </div>
       )}
     </>

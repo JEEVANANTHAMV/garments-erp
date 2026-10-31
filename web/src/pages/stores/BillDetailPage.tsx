@@ -75,19 +75,19 @@ export default function BillDetailPage() {
       <div className="card mb-3 grid gap-3 p-4 lg:grid-cols-[1fr_auto]">
         <div className="flex flex-wrap items-center gap-2 text-body">
           <StageChip stage={b.stage} />
-          <span className="text-slate-500">Workflow</span><StatusBadge value={WORKFLOW_LABEL[wf] ?? wf} />
-          <span className="text-slate-500">Documents</span><Badge tone={b.completeness_status === 'COMPLETE' ? 'green' : 'amber'}>{b.completeness_status === 'COMPLETE' ? 'Complete' : `Missing: ${b.missing_labels.join(', ')}`}</Badge>
-          <span className="text-slate-500">Matching</span><MatchChip v={b.match_status} />
+          <span className="text-ink-secondary">Workflow</span><StatusBadge value={WORKFLOW_LABEL[wf] ?? wf} />
+          <span className="text-ink-secondary">Documents</span><Badge tone={b.completeness_status === 'COMPLETE' ? 'green' : 'amber'}>{b.completeness_status === 'COMPLETE' ? 'Complete' : `Missing: ${b.missing_labels.join(', ')}`}</Badge>
+          <span className="text-ink-secondary">Matching</span><MatchChip v={b.match_status} />
           {b.duplicate_status !== 'NONE' && <Badge tone={b.duplicate_status === 'SUSPECTED' ? 'red' : 'slate'}>Duplicate {b.duplicate_status.toLowerCase()}</Badge>}
-          <span className="text-slate-500">Accounts</span><StatusBadge value={b.posting_status} />
+          <span className="text-ink-secondary">Accounts</span><StatusBadge value={b.posting_status} />
           {b.external_voucher_no && <span>Voucher <b>{b.external_voucher_no}</b> · {fmtDate(b.external_voucher_date)}</span>}
-          <span className="w-full text-slate-600">Next: <b>{b.next_action}</b></span>
+          <span className="w-full text-ink-secondary">Next: <b>{b.next_action}</b></span>
         </div>
-        <div id="bt-holder" className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-body">
-          <div className="text-caption uppercase tracking-wider text-slate-400">Current holder</div>
+        <div id="bt-holder" className="rounded-lg border border-surface-border bg-surface-muted px-3 py-2 text-body">
+          <div className="text-caption uppercase tracking-wider text-ink-muted">Current holder</div>
           <div className="font-semibold">{b.holder_name ?? '—'}{b.holder_dept ? ` · ${b.holder_dept}` : ''}{b.holder_location ? ` · ${b.holder_location}` : ''}</div>
-          {last && <div className="text-slate-500">{last.movement_type.replace('_', ' ').toLowerCase()} {fmtDateTime(last.moved_at)}{last.purpose ? ` — ${last.purpose}` : ''}</div>}
-          {b.holder_expected_back && <div className={b.holder_expected_back < today() ? 'font-semibold text-red-600' : 'text-slate-500'}>Expected back {fmtDate(b.holder_expected_back)}</div>}
+          {last && <div className="text-ink-secondary">{last.movement_type.replace('_', ' ').toLowerCase()} {fmtDateTime(last.moved_at)}{last.purpose ? ` — ${last.purpose}` : ''}</div>}
+          {b.holder_expected_back && <div className={b.holder_expected_back < today() ? 'font-semibold text-red-600' : 'text-ink-secondary'}>Expected back {fmtDate(b.holder_expected_back)}</div>}
           {last?.ack_status === 'PENDING' && <div className="text-amber-700">Waiting for acknowledgement</div>}
         </div>
       </div>
@@ -150,18 +150,18 @@ function Docs({ b, onLink }: { b: any; onLink: () => void }) {
     .filter(([k]) => Number(cat[k])).map(([, l]) => l) : [];
   return (
     <div className="space-y-4">
-      <div className="text-body text-slate-600">{cat?.category_name}: needs {req.length ? <b>{req.join(', ')}</b> : <b>no supporting document</b>}.
+      <div className="text-body text-ink-secondary">{cat?.category_name}: needs {req.length ? <b>{req.join(', ')}</b> : <b>no supporting document</b>}.
         {b.missing_labels.length ? <span className="ml-1 text-amber-700">Missing: {b.missing_labels.join(', ')}</span> : <span className="ml-1 text-green-700">All present.</span>}</div>
       {b.suggestions?.length > 0 && <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-body text-blue-800">Bills Inward has {b.suggestions.map((s: any) => `${s.bill_no} (₹${fmtDecimal(s.total_amount, 2)})`).join(', ')} for this invoice no — link it.</div>}
       {b.duplicates?.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-800">Same supplier + invoice no: {b.duplicates.map((x: any) => x.entry_no).join(', ')}</div>}
       <div>
         <div className="mb-1 flex items-center justify-between"><div className="text-body font-semibold">Linked documents</div>{live && <Button size="sm" variant="secondary" onClick={onLink}><Plus size={12} className="mr-1 inline" />Link</Button>}</div>
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">Type</th><th className="px-2 py-1.5 text-left">No</th><th className="px-2 py-1.5 text-left">Date</th><th className="px-2 py-1.5 text-left">Party</th>
+          <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1.5 text-left">Type</th><th className="px-2 py-1.5 text-left">No</th><th className="px-2 py-1.5 text-left">Date</th><th className="px-2 py-1.5 text-left">Party</th>
             <th className="px-2 py-1.5 text-right">Doc qty</th><th className="px-2 py-1.5 text-right">Doc value</th><th className="px-2 py-1.5 text-right">Linked qty</th><th className="px-2 py-1.5 text-right">Linked value</th><th className="px-2 py-1.5 text-left">By</th><th /></tr></thead>
           <tbody>
             {b.links.map((l: any) => (
-              <tr key={l.id} data-link={l.link_type} className={`border-t border-slate-100 ${l.removed_at ? 'text-slate-400 line-through' : ''}`}>
+              <tr key={l.id} data-link={l.link_type} className={`border-t border-surface-divider ${l.removed_at ? 'text-ink-muted line-through' : ''}`}>
                 <td className="px-2 py-1.5">{l.type_label}{l.needs_override ? <span className="ml-1 text-red-600">(over-billed)</span> : null}</td><td className="px-2 py-1.5 tabular-nums">{l.target_no}</td>
                 <td className="px-2 py-1.5">{fmtDate(l.target_date)}</td><td className="px-2 py-1.5">{l.target_party ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{l.target_qty === null ? '—' : fmtDecimal(l.target_qty, 3)}</td><td className="px-2 py-1.5 text-right tabular-nums">{l.target_amount === null ? '—' : fmtDecimal(l.target_amount, 2)}</td>
@@ -169,9 +169,9 @@ function Docs({ b, onLink }: { b: any; onLink: () => void }) {
                 <td className="px-2 py-1.5">{l.created_by_name}{l.removed_at ? ` · removed: ${l.remove_reason}` : ''}</td>
                 <td className="px-2 py-1.5 text-right">{live && !l.removed_at && <button className="text-red-600 hover:underline" onClick={() => setRm({ url: `/stores/bill-tracker/${b.id}/links/${l.id}/remove`, title: `Unlink ${l.target_no}` })}>Unlink</button>}</td>
               </tr>))}
-            {!b.links.length && <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">Nothing linked yet</td></tr>}
+            {!b.links.length && <tr><td colSpan={10} className="px-3 py-6 text-center text-ink-muted">Nothing linked yet</td></tr>}
           </tbody>
-          {b.links.some((l: any) => !l.removed_at && l.linked_amount !== null) && <tfoot><tr className="border-t border-slate-200 font-semibold"><td colSpan={7} className="px-2 py-1.5 text-right">Total linked value</td>
+          {b.links.some((l: any) => !l.removed_at && l.linked_amount !== null) && <tfoot><tr className="border-t border-surface-border font-semibold"><td colSpan={7} className="px-2 py-1.5 text-right">Total linked value</td>
             <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(b.links.filter((l: any) => !l.removed_at && !['DOC_INWARD', 'GATE_INWARD'].includes(l.link_type)).reduce((s: number, l: any) => s + Number(l.linked_amount ?? 0), 0), 2)}</td><td colSpan={2} /></tr></tfoot>}
         </table>
       </div>
@@ -189,16 +189,16 @@ function Matching({ b }: { b: any }) {
   const act = useAction();
   const [ov, setOv] = useState<any | null>(null);
   const canOverride = b.rights.approve && !b.rights.own_entry && ['OPEN', 'PENDING_VERIFICATION', 'PENDING_APPROVAL'].includes(b.workflow_status);
-  if (!b.matching.length) return <div className="py-6 text-center text-body text-slate-500">Matching has not been run{b.match_status === 'NOT_RUN' ? ' since the last change' : ''}. Use <b>Run matching</b>.</div>;
+  if (!b.matching.length) return <div className="py-6 text-center text-body text-ink-secondary">Matching has not been run{b.match_status === 'NOT_RUN' ? ' since the last change' : ''}. Use <b>Run matching</b>.</div>;
   const tone = (s: string) => (s === 'BLOCKING' ? 'red' : s === 'WARNING' ? 'amber' : s === 'PASS' ? 'green' : 'slate');
   return (
     <>
-      <div className="mb-2 text-body text-slate-600">Run #{b.match_run} · {fmtDateTime(b.matched_at)} · result <MatchChip v={b.match_status} />{b.match_status === 'NOT_RUN' && ' (out of date — something changed since)'}</div>
+      <div className="mb-2 text-body text-ink-secondary">Run #{b.match_run} · {fmtDateTime(b.matched_at)} · result <MatchChip v={b.match_status} />{b.match_status === 'NOT_RUN' && ' (out of date — something changed since)'}</div>
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">Check</th><th className="px-2 py-1.5 text-left">Severity</th><th className="px-2 py-1.5 text-right">Expected</th>
+        <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1.5 text-left">Check</th><th className="px-2 py-1.5 text-left">Severity</th><th className="px-2 py-1.5 text-right">Expected</th>
           <th className="px-2 py-1.5 text-right">Actual</th><th className="px-2 py-1.5 text-right">Variance</th><th className="px-2 py-1.5 text-right">Tolerance</th><th className="px-2 py-1.5 text-left">Resolution</th></tr></thead>
         <tbody>{b.matching.map((m: any) => (
-          <tr key={m.id} data-rule={m.rule_code} className="border-t border-slate-100">
+          <tr key={m.id} data-rule={m.rule_code} className="border-t border-surface-divider">
             <td className="px-2 py-1.5">{m.label}</td><td className="px-2 py-1.5"><Badge tone={tone(m.severity) as any}>{m.severity}</Badge></td>
             <td className="px-2 py-1.5 text-right tabular-nums">{m.expected_value ?? ''}</td><td className="px-2 py-1.5 text-right tabular-nums">{m.actual_value ?? ''}</td>
             <td className="px-2 py-1.5 text-right tabular-nums">{m.variance_value ?? ''}</td><td className="px-2 py-1.5 text-right tabular-nums">{m.tolerance ?? ''}</td>
@@ -220,13 +220,13 @@ function Movements({ b }: { b: any }) {
   const [fix, setFix] = useState<any | null>(null);
   return (
     <>
-      <div className="mb-2 text-small text-slate-500">Movements are never edited — a wrong hand-off is reversed by a correction entry.</div>
+      <div className="mb-2 text-small text-ink-secondary">Movements are never edited — a wrong hand-off is reversed by a correction entry.</div>
       <ol className="space-y-2">{b.movements.map((m: any, i: number) => (
-        <li key={m.id} data-move={m.movement_type} className="rounded-lg border border-slate-200 px-3 py-2 text-body">
-          <div className="flex flex-wrap items-center gap-2"><span className="tabular-nums text-slate-400">#{m.seq}</span><Badge tone={m.movement_type === 'CORRECTION' ? 'red' : 'blue'}>{m.movement_type.replace('_', ' ')}</Badge>
+        <li key={m.id} data-move={m.movement_type} className="rounded-lg border border-surface-border px-3 py-2 text-body">
+          <div className="flex flex-wrap items-center gap-2"><span className="tabular-nums text-ink-muted">#{m.seq}</span><Badge tone={m.movement_type === 'CORRECTION' ? 'red' : 'blue'}>{m.movement_type.replace('_', ' ')}</Badge>
             <span>{m.from_holder ?? '—'}{m.from_dept ? ` (${m.from_dept})` : ''} → <b>{m.to_holder ?? '—'}</b>{m.to_dept ? ` (${m.to_dept})` : ''}{m.to_location ? ` · ${m.to_location}` : ''}</span>
-            <span className="text-slate-500">{fmtDate(m.business_date)} · recorded {fmtDateTime(m.moved_at)} by {m.recorded_by_name ?? '—'}</span></div>
-          <div className="text-slate-600">{m.purpose}{m.expected_return_date ? ` · expected back ${fmtDate(m.expected_return_date)}` : ''}{m.note ? ` · ${m.note}` : ''}</div>
+            <span className="text-ink-secondary">{fmtDate(m.business_date)} · recorded {fmtDateTime(m.moved_at)} by {m.recorded_by_name ?? '—'}</span></div>
+          <div className="text-ink-secondary">{m.purpose}{m.expected_return_date ? ` · expected back ${fmtDate(m.expected_return_date)}` : ''}{m.note ? ` · ${m.note}` : ''}</div>
           <div className="flex gap-3">
             {m.ack_status !== 'NOT_REQUIRED' && <span className={m.ack_status === 'PENDING' ? 'text-amber-700' : m.ack_status === 'DISPUTED' ? 'text-red-600' : 'text-green-700'}>
               {m.ack_status.toLowerCase()}{m.ack_by_name ? ` by ${m.ack_by_name} ${fmtDateTime(m.ack_at)}` : ''}{m.ack_note ? ` — ${m.ack_note}` : ''}</span>}
@@ -243,13 +243,13 @@ function Movements({ b }: { b: any }) {
 }
 
 function Approvals({ b }: { b: any }) {
-  if (!b.approvals.length) return <div className="py-6 text-center text-body text-slate-500">No decisions yet</div>;
+  if (!b.approvals.length) return <div className="py-6 text-center text-body text-ink-secondary">No decisions yet</div>;
   return (
     <table className="w-full text-xs">
-      <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">When</th><th className="px-2 py-1.5 text-left">Step</th><th className="px-2 py-1.5 text-left">Decision</th>
+      <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1.5 text-left">When</th><th className="px-2 py-1.5 text-left">Step</th><th className="px-2 py-1.5 text-left">Decision</th>
         <th className="px-2 py-1.5 text-left">From → to</th><th className="px-2 py-1.5 text-left">By</th><th className="px-2 py-1.5 text-right">Amount</th><th className="px-2 py-1.5 text-left">Comments</th></tr></thead>
       <tbody>{b.approvals.map((a: any) => (
-        <tr key={a.id} className="border-t border-slate-100"><td className="px-2 py-1.5">{fmtDateTime(a.decided_at)}</td><td className="px-2 py-1.5">{a.stage}</td><td className="px-2 py-1.5"><StatusBadge value={a.decision} /></td>
+        <tr key={a.id} className="border-t border-surface-divider"><td className="px-2 py-1.5">{fmtDateTime(a.decided_at)}</td><td className="px-2 py-1.5">{a.stage}</td><td className="px-2 py-1.5"><StatusBadge value={a.decision} /></td>
           <td className="px-2 py-1.5">{a.from_status ? `${WORKFLOW_LABEL[a.from_status] ?? a.from_status} → ${WORKFLOW_LABEL[a.to_status] ?? a.to_status}` : '—'}</td><td className="px-2 py-1.5">{a.actor_name}</td>
           <td className="px-2 py-1.5 text-right tabular-nums">{a.amount === null ? '' : fmtDecimal(a.amount, 2)}</td><td className="whitespace-normal px-2 py-1.5">{a.comments}</td></tr>))}</tbody>
     </table>
@@ -263,15 +263,15 @@ function Followups({ b, onNew }: { b: any; onNew: () => void }) {
     <>
       {b.rights.edit && <div className="mb-2"><Button size="sm" variant="secondary" id="bt-fu-new" onClick={onNew}><Plus size={12} className="mr-1 inline" />Follow-up</Button></div>}
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">Due</th><th className="px-2 py-1.5 text-left">Issue</th><th className="px-2 py-1.5 text-left">Priority</th><th className="px-2 py-1.5 text-left">Owner</th>
+        <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1.5 text-left">Due</th><th className="px-2 py-1.5 text-left">Issue</th><th className="px-2 py-1.5 text-left">Priority</th><th className="px-2 py-1.5 text-left">Owner</th>
           <th className="px-2 py-1.5 text-left">Reason</th><th className="px-2 py-1.5 text-left">Next follow-up</th><th className="px-2 py-1.5 text-left">Status / resolution</th><th /></tr></thead>
         <tbody>{b.followups.map((f: any) => (
-          <tr key={f.id} data-fu={f.issue_type} className="border-t border-slate-100"><td className={`px-2 py-1.5 ${f.status === 'OPEN' && f.due_date < today() ? 'font-semibold text-red-600' : ''}`}>{fmtDate(f.due_date)}</td>
+          <tr key={f.id} data-fu={f.issue_type} className="border-t border-surface-divider"><td className={`px-2 py-1.5 ${f.status === 'OPEN' && f.due_date < today() ? 'font-semibold text-red-600' : ''}`}>{fmtDate(f.due_date)}</td>
             <td className="px-2 py-1.5">{labelOf(ISSUE_OPTIONS, f.issue_type)}</td><td className="px-2 py-1.5">{f.priority}</td><td className="px-2 py-1.5">{f.owner_name}</td>
             <td className="whitespace-normal px-2 py-1.5">{f.reason}</td><td className="px-2 py-1.5">{fmtDate(f.next_followup_date)}</td>
             <td className="px-2 py-1.5"><StatusBadge value={f.status} /> {f.resolution_note}</td>
             <td className="px-2 py-1.5">{f.status === 'OPEN' && b.rights.edit && <button className="text-brand-700 hover:underline" onClick={() => setClose(f)}>Close</button>}</td></tr>))}
-          {!b.followups.length && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">No follow-ups</td></tr>}</tbody>
+          {!b.followups.length && <tr><td colSpan={8} className="px-3 py-6 text-center text-ink-muted">No follow-ups</td></tr>}</tbody>
       </table>
       {close && <TextModal title="Close follow-up" label="How was it resolved?" confirm="Close" busy={act.isPending} onClose={() => setClose(null)}
         onConfirm={(t) => act.mutate({ url: `/stores/bill-tracker/followups/${close.id}/close`, body: { resolution_note: t } }, { onSuccess: () => setClose(null) })} />}
@@ -280,17 +280,17 @@ function Followups({ b, onNew }: { b: any; onNew: () => void }) {
 }
 
 function Posting({ b }: { b: any }) {
-  if (!b.postings.length) return <div className="py-6 text-center text-body text-slate-500">Not sent to accounting. An approved bill is queued automatically; the accounts package is not connected yet (MANUAL adapter) — accounts enters the voucher no after posting.</div>;
+  if (!b.postings.length) return <div className="py-6 text-center text-body text-ink-secondary">Not sent to accounting. An approved bill is queued automatically; the accounts package is not connected yet (MANUAL adapter) — accounts enters the voucher no after posting.</div>;
   return (
     <div className="space-y-3">{b.postings.map((p: any) => (
-      <div key={p.id} className="rounded-lg border border-slate-200 p-3 text-body">
+      <div key={p.id} className="rounded-lg border border-surface-border p-3 text-body">
         <div className="flex flex-wrap items-center gap-3"><StatusBadge value={p.status} /><span className="tabular-nums text-small">{p.idempotency_key}</span><span>Adapter {p.adapter}</span>
           <span>₹{fmtDecimal(p.payload_amount, 2)}</span><span>Attempts {p.attempts}</span>
           {p.external_voucher_no && <span>Voucher <b>{p.external_voucher_no}</b> · {fmtDate(p.external_voucher_date)} · {p.posted_by_name}</span>}
           {p.reversal_voucher_no && <span className="text-red-600">Reversed by voucher {p.reversal_voucher_no}</span>}
           {p.last_error_summary && <span className="text-red-600">{p.last_error_summary}</span>}</div>
         <table className="mt-2 w-full text-xs"><tbody>{p.attempts.map((a: any) => (
-          <tr key={a.id} className="border-t border-slate-100"><td className="py-1">{fmtDateTime(a.at)}</td><td>{a.action}</td><td>{a.outcome}</td><td>{a.voucher_no ?? ''}</td><td>{a.error_summary ?? a.reason ?? ''}</td><td>{a.actor_name}</td></tr>))}</tbody></table>
+          <tr key={a.id} className="border-t border-surface-divider"><td className="py-1">{fmtDateTime(a.at)}</td><td>{a.action}</td><td>{a.outcome}</td><td>{a.voucher_no ?? ''}</td><td>{a.error_summary ?? a.reason ?? ''}</td><td>{a.actor_name}</td></tr>))}</tbody></table>
       </div>))}</div>
   );
 }
@@ -301,11 +301,11 @@ function Audit({ id }: { id: number }) {
   const show = (v: unknown) => { if (!v) return ''; try { const o = typeof v === 'string' ? JSON.parse(v) : v; return Object.entries(o).filter(([, x]) => x !== null && typeof x !== 'object').slice(0, 10).map(([k, x]) => `${k}: ${x}`).join(' · '); } catch { return String(v); } };
   return (
     <table className="w-full text-xs">
-      <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">When</th><th className="px-2 py-1.5 text-left">Who</th><th className="px-2 py-1.5 text-left">What</th><th className="px-2 py-1.5 text-left">Before</th><th className="px-2 py-1.5 text-left">After</th></tr></thead>
+      <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1.5 text-left">When</th><th className="px-2 py-1.5 text-left">Who</th><th className="px-2 py-1.5 text-left">What</th><th className="px-2 py-1.5 text-left">Before</th><th className="px-2 py-1.5 text-left">After</th></tr></thead>
       <tbody>{d.data.map((a) => (
-        <tr key={a.id} className="border-t border-slate-100 align-top"><td className="whitespace-nowrap px-2 py-1.5">{fmtDateTime(a.changed_at)}</td><td className="px-2 py-1.5">{a.changed_by_name}</td>
+        <tr key={a.id} className="border-t border-surface-divider align-top"><td className="whitespace-nowrap px-2 py-1.5">{fmtDateTime(a.changed_at)}</td><td className="px-2 py-1.5">{a.changed_by_name}</td>
           <td className="px-2 py-1.5">{a.table_name.replace(/^trx_bill_|^trx_/, '').replace(/_/g, ' ')} {a.action.toLowerCase()}</td>
-          <td className="max-w-[300px] whitespace-normal px-2 py-1.5 text-slate-500">{show(a.old_values)}</td><td className="max-w-[420px] whitespace-normal px-2 py-1.5">{show(a.new_values)}</td></tr>))}</tbody>
+          <td className="max-w-[300px] whitespace-normal px-2 py-1.5 text-ink-secondary">{show(a.old_values)}</td><td className="max-w-[420px] whitespace-normal px-2 py-1.5">{show(a.new_values)}</td></tr>))}</tbody>
     </table>
   );
 }
@@ -343,7 +343,7 @@ function StepModal({ step, doc, busy, onClose, onSave }: { step: 'handover' | 'r
           <Input label="Submitted on" type="date" required max={today()} value={v.submitted_to_accounts_on} onChange={(e) => setV({ ...v, submitted_to_accounts_on: e.target.value })} />
           <Select label="ERP user (optional)" value={v.to_user_id} placeholder="—" onChange={(e) => pickUser(e.target.value, 'accounts_recipient')} options={toOptions(users.data)} />
           <Input label="Accounts recipient" required id="step-recipient" value={v.accounts_recipient} onChange={(e) => setV({ ...v, accounts_recipient: e.target.value })} />
-          <div className="text-small text-slate-500">The bill then waits for accounts' verification.</div>
+          <div className="text-small text-ink-secondary">The bill then waits for accounts' verification.</div>
         </>}
         {step === 'move' && <>
           <Select label="To ERP user" value={v.to_user_id} placeholder="—" onChange={(e) => pickUser(e.target.value, 'to_holder')} options={toOptions(users.data)} />

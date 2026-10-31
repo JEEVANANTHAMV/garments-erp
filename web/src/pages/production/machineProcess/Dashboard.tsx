@@ -6,10 +6,10 @@ import { type Kind, BASE, money, qty, pctTxt, num, usePerm, useGet } from './sha
 /** Output, efficiency, downtime and cost KPIs (embroidery doc §30, printing doc §28). */
 function Tile({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <div className="text-caption font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-xl font-bold tabular-nums text-slate-900">{value}</div>
-      {sub && <div className="text-caption text-slate-500">{sub}</div>}
+    <div className="rounded-xl border border-surface-border bg-white p-3">
+      <div className="text-caption font-medium uppercase tracking-wide text-ink-secondary">{label}</div>
+      <div className="mt-1 text-xl font-bold tabular-nums text-ink">{value}</div>
+      {sub && <div className="text-caption text-ink-secondary">{sub}</div>}
     </div>
   );
 }
@@ -18,7 +18,7 @@ function Tile({ label, value, sub }: { label: string; value: ReactNode; sub?: Re
 function Bar({ value, max, title }: { value: number; max: number; title: string }) {
   const w = max > 0 ? Math.max((value / max) * 100, value > 0 ? 2 : 0) : 0;
   return (
-    <div className="h-3 w-full rounded bg-slate-100" title={title}>
+    <div className="h-3 w-full rounded bg-surface-header" title={title}>
       <div className="h-3 rounded-r bg-brand-500" style={{ width: `${w}%` }} />
     </div>
   );
@@ -39,7 +39,7 @@ export function DashboardTab({ kind }: { kind: Kind }) {
       <div className="flex flex-wrap items-end gap-3">
         <Input label="From" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
         <Input label="To" type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
-        <p className="pb-2 text-xs text-slate-500">Approved production · {k.pending_approval ?? 0} entries waiting approval · {k.pending_drafts ?? 0} drafts</p>
+        <p className="pb-2 text-xs text-ink-secondary">Approved production · {k.pending_approval ?? 0} entries waiting approval · {k.pending_drafts ?? 0} drafts</p>
       </div>
       {d.error && <p className="text-sm text-red-600">{d.error}</p>}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6" id="mp-dash-kpis">
@@ -68,22 +68,22 @@ export function DashboardTab({ kind }: { kind: Kind }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Good output by day">
           <div className="space-y-1 p-3">
-            {!daily.length ? <p className="text-xs text-slate-400">No approved production in the range</p> : daily.map((x) => (
+            {!daily.length ? <p className="text-xs text-ink-muted">No approved production in the range</p> : daily.map((x) => (
               <div key={x.prod_date} className="grid grid-cols-[90px_1fr_80px] items-center gap-2 text-xs">
-                <span className="text-slate-600">{fmtDate(x.prod_date)}</span>
+                <span className="text-ink-secondary">{fmtDate(x.prod_date)}</span>
                 <Bar value={num(x.good)} max={maxGood} title={`${fmtDate(x.prod_date)}: ${qty(x.good, 0)} good, ${qty(x.reject, 0)} reject, ${qty(x.run_hours, 1)} run h${x.total != null ? `, ${money(x.total)}` : ''}`} />
-                <span className="text-right tabular-nums text-slate-800">{qty(x.good, 0)}</span>
+                <span className="text-right tabular-nums text-ink">{qty(x.good, 0)}</span>
               </div>
             ))}
           </div>
         </Card>
         <Card title="Top downtime reasons">
           <div className="space-y-1 p-3">
-            {!top.length ? <p className="text-xs text-slate-400">No downtime recorded</p> : top.map((x) => (
+            {!top.length ? <p className="text-xs text-ink-muted">No downtime recorded</p> : top.map((x) => (
               <div key={x.reason_code} className="grid grid-cols-[160px_1fr_80px] items-center gap-2 text-xs">
-                <span className="truncate text-slate-600">{x.reason_code} · {x.reason_name}</span>
+                <span className="truncate text-ink-secondary">{x.reason_code} · {x.reason_name}</span>
                 <Bar value={num(x.minutes)} max={maxDt} title={`${x.reason_name}: ${x.minutes} min in ${x.occurrences} stops`} />
-                <span className="text-right tabular-nums text-slate-800">{qty(x.minutes, 0)} min</span>
+                <span className="text-right tabular-nums text-ink">{qty(x.minutes, 0)} min</span>
               </div>
             ))}
           </div>
@@ -91,12 +91,12 @@ export function DashboardTab({ kind }: { kind: Kind }) {
       </div>
       {p.costing && <Card title="High cost-variance jobs (≥ 5% from standard)">
         <div className="overflow-x-auto p-3">
-          {!(d.data?.high_variance_jobs ?? []).length ? <p className="text-xs text-slate-400">None</p> : (
-            <table className="w-full text-xs"><thead className="bg-slate-50 text-slate-500"><tr>
+          {!(d.data?.high_variance_jobs ?? []).length ? <p className="text-xs text-ink-muted">None</p> : (
+            <table className="w-full text-xs"><thead className="bg-surface-muted text-ink-secondary"><tr>
               <th className="px-2 py-1 text-left">Job</th><th className="px-2 py-1 text-left">Style</th><th className="px-2 py-1 text-right">Good</th>
               <th className="px-2 py-1 text-right">Standard</th><th className="px-2 py-1 text-right">Actual</th><th className="px-2 py-1 text-right">Variance</th><th className="px-2 py-1 text-right">₹ / pc</th>
             </tr></thead><tbody>{d.data.high_variance_jobs.map((r: any) => (
-              <tr key={r.job_id} className="border-t border-slate-100"><td className="px-2 py-1 tabular-nums">{r.job_no}</td><td className="px-2 py-1">{r.style_code ?? '—'}</td>
+              <tr key={r.job_id} className="border-t border-surface-divider"><td className="px-2 py-1 tabular-nums">{r.job_no}</td><td className="px-2 py-1">{r.style_code ?? '—'}</td>
                 <td className="px-2 py-1 text-right">{qty(r.good, 0)}</td><td className="px-2 py-1 text-right">{money(r.std_total)}</td><td className="px-2 py-1 text-right">{money(r.total)}</td>
                 <td className="px-2 py-1 text-right font-semibold">{pctTxt(r.variance_pct)}</td><td className="px-2 py-1 text-right">{money(r.cost_per_good)}</td></tr>
             ))}</tbody></table>

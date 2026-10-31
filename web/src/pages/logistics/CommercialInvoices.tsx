@@ -54,7 +54,7 @@ export function CommercialInvoicesPage() {
         columns={[
           { key: 'invoice_no', header: 'Invoice no', render: (r: any) => <span className="tabular-nums text-small font-semibold text-brand-700">{r.invoice_no}</span> },
           { key: 'invoice_date', header: 'Date', render: (r: any) => fmtDate(r.invoice_date) },
-          { key: 'buyer_name', header: 'Buyer / order', render: (r: any) => <div><p className="font-medium">{r.buyer_name}</p><p className="text-caption text-slate-500">{r.so_no}{r.io_no ? ` · ${r.io_no}` : ''}</p></div> },
+          { key: 'buyer_name', header: 'Buyer / order', render: (r: any) => <div><p className="font-medium">{r.buyer_name}</p><p className="text-caption text-ink-secondary">{r.so_no}{r.io_no ? ` · ${r.io_no}` : ''}</p></div> },
           { key: 'buyer_order_ref', header: 'Buyer PO', render: (r: any) => <span className="text-small">{String(r.buyer_order_ref ?? '').replace(/\n/g, ' / ') || '—'}</span> },
           { key: 'packing_lists', header: 'Packing lists', render: (r: any) => <span className="text-small">{r.packing_lists ?? '—'}</span> },
           { key: 'qty', header: 'Qty', align: 'right', render: (r: any) => fmtNumber(r.qty) },
@@ -304,9 +304,9 @@ export function CommercialInvoiceDetailPage() {
           {detail.data.checks.warnings.map((m: string) => <p key={m} className="text-amber-800">⚠ {m}</p>)}
         </div>
       )}
-      {!isNew && detail.data?.gst_endorsement && <p className="mb-3 text-small text-slate-600">GST endorsement printed: <b>{detail.data.gst_endorsement}</b></p>}
+      {!isNew && detail.data?.gst_endorsement && <p className="mb-3 text-small text-ink-secondary">GST endorsement printed: <b>{detail.data.gst_endorsement}</b></p>}
       {!isNew && (detail.data?.shipping_bill || detail.data?.eway_bill?.generated) && (
-        <p className="mb-3 flex flex-wrap gap-x-4 text-small text-slate-600" id="ci-links">
+        <p className="mb-3 flex flex-wrap gap-x-4 text-small text-ink-secondary" id="ci-links">
           {detail.data.shipping_bill && <span>Shipping bill <a className="tabular-nums text-brand-700 hover:underline" href={`/export/shipping-bills/${detail.data.shipping_bill.id}`}
             onClick={(e) => { e.preventDefault(); nav(`/export/shipping-bills/${detail.data.shipping_bill.id}`); }}>{detail.data.shipping_bill.sb_no}</a> · {fmtDate(detail.data.shipping_bill.sb_date)}
             {detail.data.shipping_bill.sb_pdf_url && <> · <a className="text-brand-700 hover:underline" id="ci-sb-pdf" href={detail.data.shipping_bill.sb_pdf_url} target="_blank" rel="noreferrer">customs PDF</a></>}</span>}
@@ -325,15 +325,15 @@ export function CommercialInvoiceDetailPage() {
             <Input label="Invoice no" value={v.invoice_no} placeholder="Auto when blank" id="ci-no" onChange={(e) => set('invoice_no', e.target.value)} hint="e.g. FK-087/26-27" />
             <Input label="Invoice date" type="date" required value={v.invoice_date} onChange={(e) => set('invoice_date', e.target.value)} />
             <div className="sm:col-span-4">
-              <p className="label">Packing lists on this invoice <span className="font-normal text-slate-400">(confirmed lists of the order; one invoice can carry several POs)</span></p>
+              <p className="label">Packing lists on this invoice <span className="font-normal text-ink-muted">(confirmed lists of the order; one invoice can carry several POs)</span></p>
               <div className="flex flex-wrap gap-2" id="ci-pls">
-                {!plOptions.length && <span className="text-small text-slate-400">{v.so_id ? 'No packing list for this order — the order quantities are used' : 'Pick the order'}</span>}
+                {!plOptions.length && <span className="text-small text-ink-muted">{v.so_id ? 'No packing list for this order — the order quantities are used' : 'Pick the order'}</span>}
                 {[...plOptions, ...extraPls.filter((x) => !plOptions.some((p) => Number(p.id) === Number(x.id)))].map((p) => {
                   const on = v.pl_ids.includes(Number(p.id));
                   const mine = !isNew && Number(p.invoice_id) === Number(id);
                   const ok = p.selectable || mine;
                   return (
-                    <label key={p.id} className={clsx('flex items-center gap-1.5 rounded border px-2 py-1 text-small', on ? 'border-brand-400 bg-brand-50' : 'border-slate-200', !ok && 'opacity-50')}
+                    <label key={p.id} className={clsx('flex items-center gap-1.5 rounded border px-2 py-1 text-small', on ? 'border-brand-400 bg-brand-50' : 'border-surface-border', !ok && 'opacity-50')}
                       title={!ok ? (p.linked_invoice_no ? `On invoice ${p.linked_invoice_no}` : `${String(p.status).toLowerCase()} — confirm it first`) : undefined}>
                       <input type="checkbox" data-pl={p.pl_no} disabled={!ok} checked={on} onChange={(e) => set('pl_ids', e.target.checked ? [...v.pl_ids, Number(p.id)] : v.pl_ids.filter((x: number) => x !== Number(p.id)))} />
                       <b>{p.pl_no}</b> {String(p.status).toLowerCase()} · {fmtNumber(p.total_cartons)} ctns · {fmtNumber(p.total_qty)} pcs{p.buyer_order_no ? ` · PO ${p.buyer_order_no}` : ''}
@@ -360,7 +360,7 @@ export function CommercialInvoiceDetailPage() {
                 <p className="label">Exporter's Ref. (IEC)</p>
                 {v.exporter_ref
                   ? <p className="text-body font-semibold">{v.exporter_ref} <button type="button" className="ml-1 text-caption font-normal text-brand-700 hover:underline" onClick={() => set('exporter_ref', '')}>use the company master</button></p>
-                  : autoIec ? <p className="text-body font-semibold">{autoIec} <span className="text-caption font-normal text-slate-500">from the company master</span></p>
+                  : autoIec ? <p className="text-body font-semibold">{autoIec} <span className="text-caption font-normal text-ink-secondary">from the company master</span></p>
                     : <p className="text-small text-red-600">No IEC on the company master — set it once under Admin → Companies</p>}
               </div>
               <Input label="Other Reference(s)" value={v.other_references} onChange={(e) => set('other_references', e.target.value)} />
@@ -427,7 +427,7 @@ export function CommercialInvoiceDetailPage() {
                 <th className="th">Description of Goods</th><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Quantity</th><th className="th">UQC</th>
                 <th className="th text-right">Rate</th><th className="th text-right">Value</th>{igstOn && <th className="th text-right">IGST %</th>}<th className="th" /></tr></thead>
               <tbody>
-                {!v.lines.length && <tr><td colSpan={13} className="td py-6 text-center text-slate-400">No lines — fill from the order or add a line</td></tr>}
+                {!v.lines.length && <tr><td colSpan={13} className="td py-6 text-center text-ink-muted">No lines — fill from the order or add a line</td></tr>}
                 {v.lines.map((l: any, i: number) => {
                   const PH: Record<string, string> = { size_text: 'S-XL', colour: 'colour', style_ref: 'style / ref', order_no: 'buyer PO', composition: 'composition e.g. 95% COTTON 5% ELASTANE', garment: 'garment e.g. PYJAMA SETS', pack_info: 'pack e.g. HANGER PACK', hsn_code: '8-digit HSN', description: 'description of goods' };
                   const inp = (k: string, w = 'w-28', type = 'text') => <input className={clsx('input h-8 py-0 text-small', w, type === 'number' && 'text-right')} type={type} step="any" placeholder={PH[k]} value={l[k] ?? ''} data-line={`${i}-${k}`} onChange={(e) => setLine(i, k, e.target.value)} />;
@@ -450,7 +450,7 @@ export function CommercialInvoiceDetailPage() {
                           <input className="input h-8 w-full py-0 text-small font-medium" placeholder={PH.description} value={l.description ?? ''} data-line={`${i}-description`}
                             onChange={(e) => setV((o: any) => ({ ...o, lines: o.lines.map((y: any, j: number) => (j === i ? { ...y, description: e.target.value, desc_auto: 0 } : y)) }))} />
                           {l.line_kind !== 'CHARGE' && (
-                            <details className="text-caption text-slate-500" data-line={`${i}-parts`}>
+                            <details className="text-caption text-ink-secondary" data-line={`${i}-parts`}>
                               <summary className="cursor-pointer select-none">{Number(l.desc_auto) ? 'built from the composition' : 'typed'} · build from composition</summary>
                               <div className="mt-1 space-y-1">
                                 <div className="grid grid-cols-[1fr_92px_86px] gap-1">
@@ -473,7 +473,7 @@ export function CommercialInvoiceDetailPage() {
                       <td className="td">{l.line_kind === 'CHARGE' ? null : <>
                         {inp('size_text', 'w-24')}
                         {Array.isArray(l.size_qty) && l.size_qty.length > 0 && (
-                          <div className="mt-0.5 w-24 text-caption leading-tight text-slate-500" data-line={`${i}-sizes`}>
+                          <div className="mt-0.5 w-24 text-caption leading-tight text-ink-secondary" data-line={`${i}-sizes`}>
                             {l.size_qty.map((x: any) => `${x.size}:${x.qty}`).join(' ')}
                             {l.size_qty.length > 1 && editable && <button type="button" className="block text-brand-700 hover:underline" data-line={`${i}-split`}
                               onClick={() => setV((o: any) => ({ ...o, lines: o.lines.flatMap((y: any, j: number) => (j === i ? splitBySize(y) : [y])) }))}>split by size</button>}
@@ -489,7 +489,7 @@ export function CommercialInvoiceDetailPage() {
                   );
                 })}
               </tbody>
-              <tfoot><tr className="bg-slate-50 font-semibold"><td className="td" colSpan={7}>Total {cur?.code ?? ''}</td><td className="td text-right tabular-nums" id="ci-total-qty">{fmtNumber(totals.qty)}</td><td className="td" /><td className="td" />
+              <tfoot><tr className="bg-surface-muted font-semibold"><td className="td" colSpan={7}>Total {cur?.code ?? ''}</td><td className="td text-right tabular-nums" id="ci-total-qty">{fmtNumber(totals.qty)}</td><td className="td" /><td className="td" />
                 <td className="td text-right tabular-nums" id="ci-total-amount">{fmtDecimal(totals.total, 2)}</td>{igstOn && <td className="td" />}<td className="td" /></tr></tfoot>
             </table>
           </div>
@@ -523,7 +523,7 @@ export function CommercialInvoiceDetailPage() {
                   <p className="label flex items-center gap-2">{lbl}
                     {editable && <button type="button" className="text-caption font-normal text-brand-700 hover:underline" onClick={() => { setTypeOwn((o) => ({ ...o, [t]: !o[t] })); if (!typeOwn[t]) set(k, v[k] || auto); }}>
                       {typeOwn[t] ? 'use the automatic words' : 'type instead'}</button>}</p>
-                  {typeOwn[t] ? <Input value={v[k]} onChange={(e) => set(k, e.target.value)} /> : <p className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-body font-semibold" data-auto={k}>{auto}</p>}
+                  {typeOwn[t] ? <Input value={v[k]} onChange={(e) => set(k, e.target.value)} /> : <p className="rounded border border-surface-border bg-surface-muted px-2.5 py-1.5 text-body font-semibold" data-auto={k}>{auto}</p>}
                 </div>
               ))}
             </div>
@@ -537,7 +537,7 @@ export function CommercialInvoiceDetailPage() {
                 <div className="sm:col-span-2" id="ci-igst-summary">
                   <table className="w-full text-small"><thead><tr><th className="th">IGST %</th><th className="th text-right">Taxable value ₹ (@ {fmtDecimal(totals.xr, 4)})</th><th className="th text-right">IGST ₹</th></tr></thead>
                     <tbody>{totals.byRate.map(([rate, x]) => <tr key={rate}><td className="td">{rate}%</td><td className="td text-right tabular-nums">{fmtDecimal(x.taxable, 2)}</td><td className="td text-right tabular-nums font-semibold" data-igst-rate={rate}>{fmtDecimal(x.igst, 2)}</td></tr>)}</tbody>
-                    <tfoot><tr className="bg-slate-50 font-semibold"><td className="td">Total</td><td className="td text-right tabular-nums">{fmtDecimal(totals.taxable, 2)}</td><td className="td text-right tabular-nums" id="ci-igst-total">{fmtDecimal(totals.igstTotal, 2)}</td></tr></tfoot></table>
+                    <tfoot><tr className="bg-surface-muted font-semibold"><td className="td">Total</td><td className="td text-right tabular-nums">{fmtDecimal(totals.taxable, 2)}</td><td className="td text-right tabular-nums" id="ci-igst-total">{fmtDecimal(totals.igstTotal, 2)}</td></tr></tfoot></table>
                   {!(totals.xr > 0) && <p className="mt-1 text-small text-red-600">Enter the exchange rate to work out the IGST</p>}
                 </div>)}
               {igst && <Textarea className="sm:col-span-2" rows={2} label="Note (import bond …)" value={v.footer_note} onChange={(e) => set('footer_note', e.target.value)} />}
@@ -549,14 +549,14 @@ export function CommercialInvoiceDetailPage() {
                 <Select label="Our bank account" id="ci-bank-account" value={v.bank_account_id || (bankRow?.id ?? '')} placeholder="— Bank account —" onChange={(e) => set('bank_account_id', e.target.value)}
                   options={(banks.data ?? []).map((b) => ({ value: b.id, label: String(b.label) }))} hint={(banks.data ?? []).length ? undefined : 'Add our bank account under Masters → Our Bank Accounts'} />
                 {typeOwn.bank ? <Textarea rows={6} value={v.bank_details} onChange={(e) => set('bank_details', e.target.value)} />
-                  : <pre className="whitespace-pre-wrap rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 font-sans text-small" data-auto="bank">{autoBank || '—'}</pre>}
+                  : <pre className="whitespace-pre-wrap rounded border border-surface-border bg-surface-muted px-2.5 py-1.5 font-sans text-small" data-auto="bank">{autoBank || '—'}</pre>}
                 {editable && <button type="button" className="text-caption text-brand-700 hover:underline" onClick={() => { setTypeOwn((o) => ({ ...o, bank: !o.bank })); if (!typeOwn.bank) set('bank_details', v.bank_details || autoBank); }}>
                   {typeOwn.bank ? 'use the bank master' : 'type instead'}</button>}
               </div>
               <div className="space-y-1.5" id="ci-rex">
                 <p className="label">REX declaration</p>
                 {typeOwn.rex ? <Textarea rows={7} value={v.rex_declaration} onChange={(e) => set('rex_declaration', e.target.value)} />
-                  : <p className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-small" data-auto="rex">{autoRex || <span className="text-red-600">No REX no on the company master — set it once under Admin → Companies</span>}</p>}
+                  : <p className="rounded border border-surface-border bg-surface-muted px-2.5 py-1.5 text-small" data-auto="rex">{autoRex || <span className="text-red-600">No REX no on the company master — set it once under Admin → Companies</span>}</p>}
                 {editable && <button type="button" className="text-caption text-brand-700 hover:underline" onClick={() => { setTypeOwn((o) => ({ ...o, rex: !o.rex })); if (!typeOwn.rex) set('rex_declaration', v.rex_declaration || autoRex); }}>
                   {typeOwn.rex ? 'use the standard REX wording' : 'type instead'}</button>}
               </div>
@@ -592,21 +592,21 @@ function PreviewModal({ id, format, onFormat, onClose, onPrint, onExcel }: { id:
   const q = useQuery({ queryKey: ['commercial-invoice-layout', id, format, copy], queryFn: async () => (await http.get<{ data: any }>(`/commercial-invoices/${id}`, { format, copy })).data });
   // the printed document; "Excel sheet" shows the FK-087 cell grid the Excel download carries
   const [sheet, setSheet] = useState(false);
-  const tab = (on: boolean) => clsx('rounded px-2.5 py-1 text-small', on ? 'bg-brand-600 text-white' : 'bg-slate-100');
+  const tab = (on: boolean) => clsx('rounded px-2.5 py-1 text-small', on ? 'bg-brand-600 text-white' : 'bg-surface-header');
   return (
     <Modal open onClose={onClose} title="Invoice preview" subtitle={sheet ? 'Excel sheet — FK-087 layout' : 'As printed (A4)'} size="full"
       footerStart={<div className="flex flex-wrap gap-1">{(['BUYER', 'IGST'] as const).map((f) => <button key={f} className={tab(f === format)} onClick={() => onFormat(f)}>{f === 'BUYER' ? 'Buyer invoice' : 'IGST invoice'}</button>)}
-        <span className="mx-1 border-l border-slate-200" />
+        <span className="mx-1 border-l border-surface-border" />
         {format === 'BUYER' && <>
           <button className={tab(copy === 'BUYER')} id="ci-copy-buyer" onClick={() => setCopy('BUYER')}>Buyer copy</button>
           <button className={tab(copy === 'CUSTOMS')} id="ci-copy-customs" onClick={() => setCopy('CUSTOMS')}>Customs copy</button>
-          <span className="mx-1 border-l border-slate-200" />
+          <span className="mx-1 border-l border-surface-border" />
         </>}
         <button className={tab(!sheet)} id="ci-preview-print-view" onClick={() => setSheet(false)}>Print view</button>
         <button className={tab(sheet)} id="ci-preview-sheet-view" onClick={() => setSheet(true)}>Excel sheet</button></div>}
       footer={<><Button variant="secondary" onClick={() => onExcel(format, copy)}><Download size={14} />Excel</Button><Button id="ci-preview-print" onClick={() => onPrint(format, copy)}><Printer size={14} />Print</Button></>}>
       {q.isLoading ? <LoadingBlock rows={10} /> : q.data && (
-        <div className="mx-auto max-w-[900px] bg-white p-4 shadow-sm ring-1 ring-slate-200" id="ci-preview-doc">
+        <div className="mx-auto max-w-[900px] bg-white p-4 shadow-sm ring-1 ring-surface-border" id="ci-preview-doc">
           {sheet ? <PackingListLayout layout={q.data.layout} /> : <InvoiceDocument d={q.data} format={format} copy={copy} />}
         </div>
       )}
@@ -686,13 +686,13 @@ function AddFromOrder({ buyerId, currentSo, invoiceId, takenPls, onClose, onAdd 
         {pre.error && <p className="text-small text-red-600">{errMsg(pre.error)}</p>}
         {pre.data && <>
           <div className="flex flex-wrap gap-2 text-small">
-            <span className="text-slate-500">Packing lists:</span>
-            {!(pre.data.packing_lists ?? []).length && <span className="text-slate-400">none — order quantities</span>}
+            <span className="text-ink-secondary">Packing lists:</span>
+            {!(pre.data.packing_lists ?? []).length && <span className="text-ink-muted">none — order quantities</span>}
             {(pre.data.packing_lists ?? []).map((p: any) => {
               const mine = invoiceId != null && Number(p.invoice_id) === invoiceId;
               const ok = p.selectable || mine;
               const on = (plIds ?? pre.data.pl_ids).includes(Number(p.id));
-              return <label key={p.id} className={clsx('flex items-center gap-1 rounded border px-2 py-0.5', on ? 'border-brand-400 bg-brand-50' : 'border-slate-200', !ok && 'opacity-50')}>
+              return <label key={p.id} className={clsx('flex items-center gap-1 rounded border px-2 py-0.5', on ? 'border-brand-400 bg-brand-50' : 'border-surface-border', !ok && 'opacity-50')}>
                 <input type="checkbox" disabled={!ok} checked={on} onChange={(e) => { const cur = plIds ?? pre.data.pl_ids; setPlIds(e.target.checked ? [...cur, Number(p.id)] : cur.filter((x: number) => x !== Number(p.id))); }} />
                 {p.pl_no} · {fmtNumber(p.total_qty)} pcs{p.linked_invoice_no && !mine ? ` · on ${p.linked_invoice_no}` : ''}</label>;
             })}
@@ -705,7 +705,7 @@ function AddFromOrder({ buyerId, currentSo, invoiceId, takenPls, onClose, onAdd 
                 <td className="td">{l.order_no || <span className="text-amber-700">no buyer PO</span>}</td><td className="td">{l.style_ref}</td><td className="td">{l.colour}</td>
                 <td className="td">{(l.size_qty ?? []).map((x: any) => `${x.size}:${x.qty}`).join('  ') || l.size_text}</td>
                 <td className="td text-right tabular-nums">{fmtNumber(l.qty)}</td><td className="td text-right tabular-nums">{fmtDecimal(l.unit_price, 2)}</td></tr>))}
-              {!lines.length && <tr><td className="td py-4 text-center text-slate-400" colSpan={7}>Nothing to invoice on this order</td></tr>}</tbody>
+              {!lines.length && <tr><td className="td py-4 text-center text-ink-muted" colSpan={7}>Nothing to invoice on this order</td></tr>}</tbody>
           </table>
         </>}
       </div>

@@ -62,16 +62,16 @@ export function CartonVerifyPage() {
             <div className="flex justify-end"><Button variant="secondary" loading={busy === 'scan'} onClick={() => load(code)}>Show carton</Button></div>
             {err && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-body text-red-700" id="verify-error">{err}</div>}
             {c && editable && can('PACKING.UPDATE') && <>
-              <div className="border-t border-slate-100 pt-3 text-small font-semibold uppercase tracking-wider text-slate-500">Verify</div>
+              <div className="border-t border-surface-divider pt-3 text-small font-semibold uppercase tracking-wider text-ink-secondary">Verify</div>
               <div className="grid grid-cols-2 gap-3">
                 <Input id="verify-net" label="Net kg" inputMode="decimal" value={w.net} onChange={(e) => setW({ ...w, net: e.target.value })} />
                 <Input id="verify-gross" label="Gross kg" inputMode="decimal" value={w.gross} onChange={(e) => setW({ ...w, gross: e.target.value })} />
               </div>
-              <label className="flex items-center gap-2 text-body text-slate-600"><input type="checkbox" checked={w.labels} onChange={(e) => setW({ ...w, labels: e.target.checked })} />Buyer labels / shipping marks checked</label>
+              <label className="flex items-center gap-2 text-body text-ink-secondary"><input type="checkbox" checked={w.labels} onChange={(e) => setW({ ...w, labels: e.target.checked })} />Buyer labels / shipping marks checked</label>
               <div className="flex justify-end"><Button id="verify-carton" loading={busy === 'verify'} onClick={() => act('verify', () => http.post(`/packing/cartons/${c.id}/verify`, { net_weight_kg: num(w.net), gross_weight_kg: num(w.gross), labels_ok: w.labels }), `Carton ${c.carton_no} verified`)}><CheckCircle2 size={15} />Verify</Button></div>
             </>}
             {c?.carton_status === 'VERIFIED' && can('PACKING.UPDATE') && <>
-              <div className="border-t border-slate-100 pt-3 text-small font-semibold uppercase tracking-wider text-slate-500">Seal</div>
+              <div className="border-t border-surface-divider pt-3 text-small font-semibold uppercase tracking-wider text-ink-secondary">Seal</div>
               <Input id="seal-no" label="Seal no" value={w.seal} onChange={(e) => setW({ ...w, seal: e.target.value })} />
               <div className="flex justify-end"><Button id="seal-carton" loading={busy === 'seal'} onClick={() => act('seal', () => http.post(`/packing/cartons/${c.id}/seal`, { seal_no: w.seal || null }), `Carton ${c.carton_no} sealed`)}><Lock size={15} />Seal</Button></div>
             </>}
@@ -98,7 +98,7 @@ export function CartonVerifyPage() {
                 <TableHead title="Bundles (posted)" />
                 <div className="flex flex-wrap gap-1.5">{c.bundles.map((b: any) => <Badge key={b.bundle_id} tone="blue">{b.bundle_no} · {b.color_name}/{b.size_code} · {b.qty}</Badge>)}</div>
               </div>}
-              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+              <div className="flex flex-wrap justify-end gap-2 border-t border-surface-divider pt-3">
                 {['VERIFIED', 'SEALED'].includes(c.carton_status) && n(c.is_posted) === 0 && c.carton_status !== 'VOID' && can('PACKING.APPROVE') && <Button variant="secondary" onClick={() => setReason('reopen')}><RotateCcw size={15} />Reopen</Button>}
                 {n(c.is_posted) === 1 && can('PACKING.APPROVE') && c.carton_status !== 'DISPATCHED' && <Button variant="secondary" onClick={() => setReason('reverse')}><Undo2 size={15} />Reverse post</Button>}
                 {c.carton_status !== 'VOID' && c.carton_status !== 'DISPATCHED' && (can('PACKING.APPROVE') || (editable && can('PACKING.UPDATE'))) && <Button variant="secondary" onClick={() => setReason('void')}><Ban size={15} />Void</Button>}
@@ -107,8 +107,8 @@ export function CartonVerifyPage() {
               </div>
               <div>
                 <TableHead title="History" />
-                <ul className="space-y-1 text-small text-slate-600" id="carton-history">{c.events.map((e: any) => (
-                  <li key={e.id}><span className="text-slate-400">{fmtDateTime(e.created_at)}</span> · <b>{e.event_type}</b>{e.from_status && e.to_status && e.from_status !== e.to_status ? ` ${e.from_status} → ${e.to_status}` : ''}{e.reason ? ` — ${e.reason}` : ''}</li>
+                <ul className="space-y-1 text-small text-ink-secondary" id="carton-history">{c.events.map((e: any) => (
+                  <li key={e.id}><span className="text-ink-muted">{fmtDateTime(e.created_at)}</span> · <b>{e.event_type}</b>{e.from_status && e.to_status && e.from_status !== e.to_status ? ` ${e.from_status} → ${e.to_status}` : ''}{e.reason ? ` — ${e.reason}` : ''}</li>
                 ))}</ul>
               </div>
             </div>

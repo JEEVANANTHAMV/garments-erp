@@ -28,10 +28,10 @@ function ReturnList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Return no', 'Date', 'Original GRN', 'DC', 'Supplier / Vendor', 'Jobs', 'Type', 'Reason', 'Qty KG', 'Reprocessed KG', 'Store', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Return no', 'Date', 'Original GRN', 'DC', 'Supplier / Vendor', 'Jobs', 'Type', 'Reason', 'Qty KG', 'Reprocessed KG', 'Store', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {(list.data ?? []).map((r) => (
-                <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
+                <tr key={r.id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => onOpen(r.id)}>
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.return_no}</td><td className="px-3 py-2">{fmtDate(r.return_date)}</td>
                   <td className="px-3 py-2 tabular-nums">{r.inward_no || '—'}</td><td className="px-3 py-2 tabular-nums">{r.fpo_no || '—'}</td><td className="px-3 py-2">{r.vendor_name || '—'}</td>
                   <td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2">{String(r.return_type).replace('_', ' ').toLowerCase()}</td><td className="px-3 py-2">{r.reason}</td>
@@ -39,7 +39,7 @@ function ReturnList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
                   <td className="px-3 py-2"><FpStatus value={r.status} /></td>
                 </tr>
               ))}
-              {!(list.data ?? []).length && <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-400">No returns yet</td></tr>}
+              {!(list.data ?? []).length && <tr><td colSpan={12} className="px-3 py-10 text-center text-ink-muted">No returns yet</td></tr>}
             </tbody>
           </table>
         )}
@@ -94,13 +94,13 @@ function ReturnEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: num
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['', 'Job', 'Output roll', 'Colour', 'In store KG', 'Return KG', 'Defect reason'].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['', 'Job', 'Output roll', 'Colour', 'In store KG', 'Return KG', 'Defect reason'].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>
-            {!head.inward_id && <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">Choose the original GRN</td></tr>}
+            {!head.inward_id && <tr><td colSpan={7} className="px-3 py-8 text-center text-ink-muted">Choose the original GRN</td></tr>}
             {rolls.map((l: any) => {
               const s = sel[l.fabric_roll_id];
               return (
-                <tr key={l.id} className={`border-t border-slate-100 ${s ? 'bg-red-50/60' : ''}`}>
+                <tr key={l.id} className={`border-t border-surface-divider ${s ? 'bg-red-50/60' : ''}`}>
                   <td className="px-2 py-1"><input type="checkbox" checked={!!s} onChange={() => setSel((x) => { const c = { ...x }; if (s) delete c[l.fabric_roll_id]; else c[l.fabric_roll_id] = { qty: n(l.stock_balance_kg), reason: '' }; return c; })} /></td>
                   <td className="px-2 py-1 font-semibold">{l.io_no}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
                   <td className="px-2 py-1 text-right">{kg(l.stock_balance_kg)}</td>
@@ -109,9 +109,9 @@ function ReturnEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: num
                 </tr>
               );
             })}
-            {head.inward_id && !grn.isLoading && !rolls.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">No processed rolls of this GRN left in the store</td></tr>}
+            {head.inward_id && !grn.isLoading && !rolls.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-ink-muted">No processed rolls of this GRN left in the store</td></tr>}
           </tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={5} className="px-2 py-2 text-right">Total return</td><td className="px-2 py-2 text-right">{kg(total)}</td><td /></tr></tfoot>
+          <tfoot className="bg-surface-header font-bold"><tr><td colSpan={5} className="px-2 py-2 text-right">Total return</td><td className="px-2 py-2 text-right">{kg(total)}</td><td /></tr></tfoot>
         </table>
       </div>
       <div className="mt-3 flex justify-end gap-2"><Button variant="secondary" onClick={onBack}>Cancel</Button><Button loading={busy} onClick={save}><CheckCircle2 size={14} className="mr-1" /> Confirm Return</Button></div>
@@ -134,15 +134,15 @@ function ReturnView({ id, onBack }: { id: number; onBack: () => void }) {
           <Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Roll', 'Colour', 'Return KG', 'Reprocessed KG', 'Open KG', 'Defect reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['Job', 'Roll', 'Colour', 'Return KG', 'Reprocessed KG', 'Open KG', 'Defect reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{r.lines.map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
+            <tr key={l.id} className="border-t border-surface-divider"><td className="px-2 py-1 font-semibold">{l.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
               <td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{kg(l.reprocessed_kg)}</td><td className="px-2 py-1 text-right">{kg(n(l.qty_kg) - n(l.reprocessed_kg))}</td><td className="px-2 py-1">{l.defect_reason || '—'}</td></tr>
           ))}</tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={3} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(r.total_kg)}</td><td className="px-2 py-2 text-right">{kg(r.reprocessed_kg)}</td><td className="px-2 py-2 text-right">{kg(open)}</td><td /></tr></tfoot>
+          <tfoot className="bg-surface-header font-bold"><tr><td colSpan={3} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(r.total_kg)}</td><td className="px-2 py-2 text-right">{kg(r.reprocessed_kg)}</td><td className="px-2 py-2 text-right">{kg(open)}</td><td /></tr></tfoot>
         </table>
       </div>
-      <p className="mt-2 text-xs text-slate-500"><Trash2 size={11} className="inline" /> Posted returns cannot be deleted — returned KG sits in {r.warehouse_name} until it is reprocessed.</p>
+      <p className="mt-2 text-xs text-ink-secondary"><Trash2 size={11} className="inline" /> Posted returns cannot be deleted — returned KG sits in {r.warehouse_name} until it is reprocessed.</p>
     </div>
   );
 }

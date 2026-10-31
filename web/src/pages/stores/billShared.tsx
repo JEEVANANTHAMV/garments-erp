@@ -77,18 +77,18 @@ export function FilePick({ id, onPick, busy, label = 'Attach file' }: { id?: str
 }
 export function AttachmentList({ rows, onRemove }: { rows: any[]; onRemove?: (a: any) => void }) {
   const toast = useToast();
-  if (!rows.length) return <div className="py-3 text-small text-slate-400">No files attached</div>;
+  if (!rows.length) return <div className="py-3 text-small text-ink-muted">No files attached</div>;
   return (
     <table className="w-full text-xs">
-      <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">File</th><th className="px-2 py-1.5 text-left">From</th><th className="px-2 py-1.5 text-right">Size</th>
+      <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1.5 text-left">File</th><th className="px-2 py-1.5 text-left">From</th><th className="px-2 py-1.5 text-right">Size</th>
         <th className="px-2 py-1.5 text-left">Uploaded</th><th className="px-2 py-1.5 text-left">SHA-256</th><th /></tr></thead>
       <tbody>{rows.map((a) => (
-        <tr key={a.id} className={`border-t border-slate-100 ${a.is_removed ? 'text-slate-400 line-through' : ''}`}>
+        <tr key={a.id} className={`border-t border-surface-divider ${a.is_removed ? 'text-ink-muted line-through' : ''}`}>
           <td className="px-2 py-1.5">{a.original_name}{a.duplicate_of_id ? <span className="ml-1 text-amber-600" title="The same file was uploaded before"><AlertTriangle size={12} className="inline" /> duplicate file</span> : null}</td>
           <td className="px-2 py-1.5">{a.inward_no ?? (a.bill_id ? 'Bill' : '—')}</td>
           <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(Number(a.byte_size) / 1024, 0)} KB</td>
           <td className="px-2 py-1.5">{fmtDate(a.uploaded_at)} · {a.uploaded_by_name ?? ''}</td>
-          <td className="px-2 py-1.5 tabular-nums text-caption text-slate-500">{String(a.sha256).slice(0, 12)}…</td>
+          <td className="px-2 py-1.5 tabular-nums text-caption text-ink-secondary">{String(a.sha256).slice(0, 12)}…</td>
           <td className="whitespace-nowrap px-2 py-1.5 text-right">
             {!a.is_removed && <button className="mr-2 text-brand-700 hover:underline" onClick={() => downloadAttachment(a.id, a.original_name).catch((e) => toast(errMsg(e), 'error'))}><Download size={12} className="inline" /> Download</button>}
             {!a.is_removed && onRemove && <button className="text-red-600 hover:underline" onClick={() => onRemove(a)}>Remove</button>}
@@ -217,16 +217,16 @@ export function LinkDialog({ bill, onClose }: { bill: any; onClose: () => void }
         <Input label="Search no" className="w-56" value={q} onChange={(e) => setQ(e.target.value)} />
         <Checkbox label="Other parties too" checked={anyParty} onChange={setAnyParty} />
       </div>
-      <div className="max-h-[45vh] overflow-auto rounded-lg border border-slate-200">
+      <div className="max-h-[45vh] overflow-auto rounded-lg border border-surface-border">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-slate-50 text-slate-500"><tr>
+          <thead className="sticky top-0 bg-surface-muted text-ink-secondary"><tr>
             <th className="px-2 py-1.5" /><th className="px-2 py-1.5 text-left">No</th><th className="px-2 py-1.5 text-left">Ref</th><th className="px-2 py-1.5 text-left">Date</th>
             <th className="px-2 py-1.5 text-right">Qty</th><th className="px-2 py-1.5 text-right">Value</th><th className="px-2 py-1.5 text-right">Already billed</th>
             <th className="px-2 py-1.5 text-right">Remaining</th><th className="px-2 py-1.5 text-left">On bills</th></tr></thead>
           <tbody>
             {(list.data ?? []).map((r) => (
               <tr key={r.id} data-cand={r.id} onClick={() => { setSel(r); setAmt(r.remaining_amount ?? ''); setQty(r.remaining_qty ?? ''); }}
-                className={`cursor-pointer border-t border-slate-100 ${sel?.id === r.id ? 'bg-brand-50' : 'hover:bg-slate-50'}`}>
+                className={`cursor-pointer border-t border-surface-divider ${sel?.id === r.id ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}>
                 <td className="px-2 py-1.5"><input type="radio" readOnly checked={sel?.id === r.id} /></td>
                 <td className="px-2 py-1.5 tabular-nums">{r.no}</td><td className="px-2 py-1.5">{r.ref ?? '—'}{r.doc_type ? ` · ${labelOf(DOC_TYPE_OPTIONS, r.doc_type)}` : ''}</td>
                 <td className="px-2 py-1.5">{fmtDate(r.dt)}</td>
@@ -236,7 +236,7 @@ export function LinkDialog({ bill, onClose }: { bill: any; onClose: () => void }
                 <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{r.remaining_amount === null ? '—' : fmtDecimal(r.remaining_amount, 2)}</td>
                 <td className="px-2 py-1.5">{r.billed_by ?? ''}</td>
               </tr>))}
-            {!list.isLoading && !(list.data ?? []).length && <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Nothing found{!anyParty ? ' for this supplier' : ''}</td></tr>}
+            {!list.isLoading && !(list.data ?? []).length && <tr><td colSpan={9} className="px-3 py-8 text-center text-ink-muted">Nothing found{!anyParty ? ' for this supplier' : ''}</td></tr>}
           </tbody>
         </table>
       </div>

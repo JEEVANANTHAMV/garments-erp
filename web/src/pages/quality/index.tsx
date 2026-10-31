@@ -23,7 +23,7 @@ export function QcInspectionsPage() {
         <span className="tabular-nums text-small">
           <span className="text-red-600">{r.critical_defects}</span>/
           <span className="text-amber-600">{r.major_defects}</span>/
-          <span className="text-slate-500">{r.minor_defects}</span>
+          <span className="text-ink-secondary">{r.minor_defects}</span>
         </span>) },
       { key: 'inspector_name', header: 'Inspector' },
       { key: 'buyer_qc', header: 'Buyer QC',

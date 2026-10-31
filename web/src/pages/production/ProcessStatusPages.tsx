@@ -61,8 +61,8 @@ export function OperationStatusPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Operation status</h1>
-          <p className="text-sm text-slate-500">Each process operation on its own — PCS sent on DCs, back good, rejected / short and still pending</p>
+          <h1 className="text-2xl font-bold text-ink">Operation status</h1>
+          <p className="text-sm text-ink-secondary">Each process operation on its own — PCS sent on DCs, back good, rejected / short and still pending</p>
         </div>
         <div className="flex gap-2">
           <Link to="/production/jobwork-challans" className="btn-secondary">Process Outward (DC)</Link>
@@ -79,25 +79,25 @@ export function OperationStatusPage() {
         </div>
         <div className="grid grid-cols-2 gap-3 px-3 pb-3 md:grid-cols-4 xl:grid-cols-6" id="os-cards">
           {byOp.map((o) => (
-            <div key={`${o.stage}|${o.op}`} className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-caption font-semibold uppercase tracking-wide text-slate-500">{o.op}</div>
-              <div className="mt-1 text-lg font-bold tabular-nums text-slate-900">{fmtNumber(o.pending)} <span className="text-xs font-medium text-slate-500">pending</span></div>
-              <div className="text-caption text-slate-500">sent {fmtNumber(o.sent)} · good {fmtNumber(o.good)}{o.lost ? ` · lost ${fmtNumber(o.lost)}` : ''}</div>
+            <div key={`${o.stage}|${o.op}`} className="rounded-xl border border-surface-border bg-white p-3">
+              <div className="text-caption font-semibold uppercase tracking-wide text-ink-secondary">{o.op}</div>
+              <div className="mt-1 text-lg font-bold tabular-nums text-ink">{fmtNumber(o.pending)} <span className="text-xs font-medium text-ink-secondary">pending</span></div>
+              <div className="text-caption text-ink-secondary">sent {fmtNumber(o.sent)} · good {fmtNumber(o.good)}{o.lost ? ` · lost ${fmtNumber(o.lost)}` : ''}</div>
             </div>
           ))}
-          {!byOp.length && !loading && <p className="col-span-full py-4 text-center text-sm text-slate-400">No DCs for the filters</p>}
+          {!byOp.length && !loading && <p className="col-span-full py-4 text-center text-sm text-ink-muted">No DCs for the filters</p>}
         </div>
         <div className="overflow-x-auto px-3 pb-3">
           <table className="w-full text-xs" id="os-table">
-            <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((c) => <th key={c.k} className={`px-2 py-1.5 font-semibold ${['dcs', 'bundles', 'sent', 'good', 'lost', 'pending'].includes(c.k) ? 'text-right' : 'text-left'}`}>{c.h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{cols.map((c) => <th key={c.k} className={`px-2 py-1.5 font-semibold ${['dcs', 'bundles', 'sent', 'good', 'lost', 'pending'].includes(c.k) ? 'text-right' : 'text-left'}`}>{c.h}</th>)}</tr></thead>
             <tbody>{rows.map((r, i) => (
-              <tr key={i} className="border-t border-slate-100">
+              <tr key={i} className="border-t border-surface-divider">
                 <td className="px-2 py-1">{r.stage_name}</td><td className="px-2 py-1 font-semibold">{r.operation}</td><td className="px-2 py-1 tabular-nums">{r.io_no ?? '—'}</td>
-                <td className="px-2 py-1">{r.style_code ?? '—'}</td><td className="px-2 py-1">{r.color_name ?? '—'}</td><td className="px-2 py-1 text-slate-500">{r.sent_to ?? '—'}</td>
+                <td className="px-2 py-1">{r.style_code ?? '—'}</td><td className="px-2 py-1">{r.color_name ?? '—'}</td><td className="px-2 py-1 text-ink-secondary">{r.sent_to ?? '—'}</td>
                 <td className="px-2 py-1 text-right">{r.dcs}</td><td className="px-2 py-1 text-right">{r.bundles}</td>
                 <td className="px-2 py-1 text-right">{fmtNumber(r.sent)}</td><td className="px-2 py-1 text-right text-emerald-700">{fmtNumber(r.good)}</td>
                 <td className="px-2 py-1 text-right text-red-600">{r.lost ? fmtNumber(r.lost) : '—'}</td>
-                <td className={`px-2 py-1 text-right font-semibold ${r.pending ? 'text-amber-700' : 'text-slate-400'}`}>{fmtNumber(r.pending)}</td>
+                <td className={`px-2 py-1 text-right font-semibold ${r.pending ? 'text-amber-700' : 'text-ink-muted'}`}>{fmtNumber(r.pending)}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -133,8 +133,8 @@ export function WipStockValuePage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">WIP stock value</h1>
-          <p className="text-sm text-slate-500">PCS of open jobs by store / process and their value — fabric cost + cutting rate + rates of the processes already done</p>
+          <h1 className="text-2xl font-bold text-ink">WIP stock value</h1>
+          <p className="text-sm text-ink-secondary">PCS of open jobs by store / process and their value — fabric cost + cutting rate + rates of the processes already done</p>
         </div>
         <Button variant="secondary" disabled={!rows.length} onClick={() => csv(`wip-stock-value-${g}.csv`, cols, rows)}><Download size={13} className="mr-1 inline" />CSV</Button>
       </div>
@@ -145,22 +145,22 @@ export function WipStockValuePage() {
           <div><span className="label">Job (IO no)</span><SearchInput value={f.io_no} onChange={(v) => setF({ ...f, io_no: v })} placeholder="All open jobs" className="w-48" /></div>
           <div className="ml-auto grid grid-cols-2 gap-3 md:grid-cols-4" id="sv-totals">
             {[['PCS', fmtNumber(tot.pcs)], ['Fabric', money(tot.fab)], ['Cutting + process', money(tot.pro)], ['Total', money(tot.all)]].map(([k, v]) => (
-              <div key={k} className="rounded-xl border border-slate-200 bg-white px-3 py-2"><div className="text-caption uppercase text-slate-500">{k}</div><div className="text-base font-bold tabular-nums text-slate-900">{v}</div></div>
+              <div key={k} className="rounded-xl border border-surface-border bg-white px-3 py-2"><div className="text-caption uppercase text-ink-secondary">{k}</div><div className="text-base font-bold tabular-nums text-ink">{v}</div></div>
             ))}
           </div>
         </div>
-        {res?.meta && <p className="px-3 pb-2 text-caption text-slate-500">{res.meta.note}. Cutting rate {res.meta.cutting_rate_per_pc ? `₹${res.meta.cutting_rate_per_pc}/PC` : 'not set (Admin › Settings › COSTING_CUTTING_RATE_PER_PC)'}. In-house DCs count their internal rate; contractor DCs their rate.</p>}
+        {res?.meta && <p className="px-3 pb-2 text-caption text-ink-secondary">{res.meta.note}. Cutting rate {res.meta.cutting_rate_per_pc ? `₹${res.meta.cutting_rate_per_pc}/PC` : 'not set (Admin › Settings › COSTING_CUTTING_RATE_PER_PC)'}. In-house DCs count their internal rate; contractor DCs their rate.</p>}
         <div className="overflow-x-auto px-3 pb-3">
-          {loading ? <p className="py-6 text-center text-sm text-slate-400">Loading…</p> : (
+          {loading ? <p className="py-6 text-center text-sm text-ink-muted">Loading…</p> : (
             <table className="w-full text-xs" id="sv-table">
-              <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((c) => <th key={c.k} className={`px-2 py-1.5 font-semibold ${right.has(c.k) ? 'text-right' : 'text-left'}`}>{c.h}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{cols.map((c) => <th key={c.k} className={`px-2 py-1.5 font-semibold ${right.has(c.k) ? 'text-right' : 'text-left'}`}>{c.h}</th>)}</tr></thead>
               <tbody>{rows.map((r, i) => (
-                <tr key={i} className="border-t border-slate-100">{cols.map((c) => (
+                <tr key={i} className="border-t border-surface-divider">{cols.map((c) => (
                   <td key={c.k} className={`px-2 py-1 ${right.has(c.k) ? 'text-right tabular-nums' : ''}`}>
                     {['fabric_value', 'process_value', 'total_value', 'value_per_pc'].includes(c.k) ? money(r[c.k]) : c.k === 'pcs' ? fmtNumber(r.pcs) : (r[c.k] ?? '—')}
                   </td>))}
                 </tr>
-              ))}{!rows.length && <tr><td colSpan={cols.length} className="py-6 text-center text-slate-400">No open WIP</td></tr>}</tbody>
+              ))}{!rows.length && <tr><td colSpan={cols.length} className="py-6 text-center text-ink-muted">No open WIP</td></tr>}</tbody>
             </table>
           )}
         </div>

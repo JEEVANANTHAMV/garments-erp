@@ -20,8 +20,8 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : (e as any)?
 type Node = { key: string; label: string; sub?: string; link?: string; roll_id?: number; kind: string; children?: Node[] };
 const TONE: Record<string, string> = {
   JOB: 'bg-brand-600 text-white', BOM: 'bg-amber-100 text-amber-900', REQ: 'bg-amber-50 text-amber-800', SNAPSHOT: 'bg-amber-50 text-amber-800', GRN: 'bg-sky-100 text-sky-900',
-  PROGRAM: 'bg-indigo-100 text-indigo-900', DC: 'bg-slate-100 text-slate-700', PRODUCTION: 'bg-emerald-100 text-emerald-900', ROLL: 'bg-white border border-slate-300 text-slate-800',
-  PROCESS: 'bg-purple-100 text-purple-900', GROUP: 'bg-slate-50 text-slate-600',
+  PROGRAM: 'bg-indigo-100 text-indigo-900', DC: 'bg-surface-header text-ink', PRODUCTION: 'bg-emerald-100 text-emerald-900', ROLL: 'bg-white border border-surface-input text-ink',
+  PROCESS: 'bg-purple-100 text-purple-900', GROUP: 'bg-surface-muted text-ink-secondary',
 };
 
 /** §27 — every node opens the transaction behind it (rolls open their reverse trace). */
@@ -34,7 +34,7 @@ export function JobGenealogyTree({ soId, onRoll }: { soId: string; onRoll: (roll
   return (
     <div className="card mb-3 p-4 text-xs" id="genealogy-tree">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-body font-semibold text-slate-800">Job genealogy — click a node to open it</h3>
+        <h3 className="text-body font-semibold text-ink">Job genealogy — click a node to open it</h3>
         <div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => set(true)} id="tree-expand">Expand all</Button><Button size="sm" variant="secondary" onClick={() => set(false)}>Collapse</Button></div>
       </div>
       <TreeNode key={gen} node={q.data} depth={0} onRoll={onRoll} all={all} />
@@ -47,12 +47,12 @@ function TreeNode({ node, depth, onRoll, all }: { node: Node; depth: number; onR
   const kids = node.children ?? [];
   const click = () => { if (node.roll_id) onRoll(node.label); else if (node.link) nav(node.link); else if (kids.length) setOpen(!open); };
   return (
-    <div style={{ marginLeft: depth ? 16 : 0 }} className="border-l border-slate-200 pl-2">
+    <div style={{ marginLeft: depth ? 16 : 0 }} className="border-l border-surface-border pl-2">
       <div className="flex items-center gap-1 py-0.5">
-        {kids.length ? <button type="button" className="text-slate-400" onClick={() => setOpen(!open)} aria-label="toggle">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button> : <span className="w-[13px]" />}
+        {kids.length ? <button type="button" className="text-ink-muted" onClick={() => setOpen(!open)} aria-label="toggle">{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button> : <span className="w-[13px]" />}
         <button type="button" onClick={click} data-node={node.kind} data-label={node.label}
-          className={`rounded px-1.5 py-0.5 text-left font-semibold ${TONE[node.kind] ?? 'bg-slate-100'} ${node.link || node.roll_id ? 'hover:underline' : ''}`}>{node.label}</button>
-        {node.sub && <span className="text-slate-500">{node.sub}</span>}
+          className={`rounded px-1.5 py-0.5 text-left font-semibold ${TONE[node.kind] ?? 'bg-surface-header'} ${node.link || node.roll_id ? 'hover:underline' : ''}`}>{node.label}</button>
+        {node.sub && <span className="text-ink-secondary">{node.sub}</span>}
       </div>
       {open && kids.map((c) => <TreeNode key={c.key} node={c} depth={depth + 1} onRoll={onRoll} all={all} />)}
     </div>
@@ -74,15 +74,15 @@ export function RequirementSnapshot({ soId }: { soId: string }) {
   return (
     <div className="card mb-3 p-4 text-xs" id="requirement-snapshot">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-body font-semibold text-slate-800">Job material requirement {a.length ? `— revision ${a[0].revision_no}` : ''}</h3>
+        <h3 className="text-body font-semibold text-ink">Job material requirement {a.length ? `— revision ${a[0].revision_no}` : ''}</h3>
         <Button size="sm" variant="secondary" loading={busy} onClick={take} id="btn-take-snapshot">{a.length ? 'Take a new revision' : 'Take snapshot from BOM'}</Button>
       </div>
       {a.length ? (
-        <table className="w-full"><thead className="bg-slate-50 text-slate-500"><tr>{['Material', 'Type', 'BOM', 'Planned', 'UOM', 'Taken by', 'On'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
-          <tbody>{a.map((r: any) => <tr key={r.id} className="border-t border-slate-100"><td className="px-2 py-1">{r.material_name}</td><td className="px-2 py-1">{r.material_type}</td><td className="px-2 py-1">{r.bom_no}</td>
+        <table className="w-full"><thead className="bg-surface-muted text-ink-secondary"><tr>{['Material', 'Type', 'BOM', 'Planned', 'UOM', 'Taken by', 'On'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
+          <tbody>{a.map((r: any) => <tr key={r.id} className="border-t border-surface-divider"><td className="px-2 py-1">{r.material_name}</td><td className="px-2 py-1">{r.material_type}</td><td className="px-2 py-1">{r.bom_no}</td>
             <td className="px-2 py-1 tabular-nums font-semibold">{kg(r.required_qty)}</td><td className="px-2 py-1">{r.uom_code ?? '—'}</td><td className="px-2 py-1">{r.created_by_name ?? '—'}</td><td className="px-2 py-1">{String(r.created_at).slice(0, 10)}</td></tr>)}</tbody></table>
-      ) : <p className="text-slate-500">No snapshot yet — it is taken with the job's first knitting program, or take it now. Planned figures then stay fixed even if the BOM changes.</p>}
-      {(q.data?.revisions?.length ?? 0) > 1 && <p className="mt-1 text-slate-500">Older revisions kept: {q.data.revisions.slice(1).join(', ')}</p>}
+      ) : <p className="text-ink-secondary">No snapshot yet — it is taken with the job's first knitting program, or take it now. Planned figures then stay fixed even if the BOM changes.</p>}
+      {(q.data?.revisions?.length ?? 0) > 1 && <p className="mt-1 text-ink-secondary">Older revisions kept: {q.data.revisions.slice(1).join(', ')}</p>}
     </div>
   );
 }
@@ -93,11 +93,11 @@ export function JobCostPanel({ soId }: { soId: string }) {
   const d = q.data; if (!d) return null;
   return (
     <div className="card mb-3 grid gap-4 p-4 text-xs md:grid-cols-2" id="job-cost">
-      <div><h3 className="mb-1 text-body font-semibold text-slate-800">Standard cost (BOM)</h3>
-        {d.standard.length ? d.standard.map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}</span><span className="tabular-nums">{money(x.amount)}</span></div>) : <p className="text-slate-400">No BOM</p>}
+      <div><h3 className="mb-1 text-body font-semibold text-ink">Standard cost (BOM)</h3>
+        {d.standard.length ? d.standard.map((x: any) => <div key={x.head} className="flex justify-between border-b border-surface-divider py-0.5"><span>{x.head}</span><span className="tabular-nums">{money(x.amount)}</span></div>) : <p className="text-ink-muted">No BOM</p>}
         <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="tabular-nums">{money(d.standard_total)}</span></div></div>
-      <div><h3 className="mb-1 text-body font-semibold text-slate-800">Actual cost</h3>
-        {d.actual.filter((x: any) => x.amount).map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}{x.kg ? ` (${kg(x.kg)} KG)` : ''}</span><span className="tabular-nums">{money(x.amount)}</span></div>)}
+      <div><h3 className="mb-1 text-body font-semibold text-ink">Actual cost</h3>
+        {d.actual.filter((x: any) => x.amount).map((x: any) => <div key={x.head} className="flex justify-between border-b border-surface-divider py-0.5"><span>{x.head}{x.kg ? ` (${kg(x.kg)} KG)` : ''}</span><span className="tabular-nums">{money(x.amount)}</span></div>)}
         <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="tabular-nums" id="job-cost-actual">{money(d.actual_total)}</span></div></div>
     </div>
   );
@@ -109,8 +109,8 @@ export function RollCostPanel({ rollId }: { rollId: number }) {
   const d = q.data; if (!d) return null;
   return (
     <div className="card p-4 text-xs" id="roll-cost">
-      <h3 className="mb-1 text-body font-semibold text-slate-800">Cost carried by {d.roll_no}: <span id="roll-cost-kg">{money(d.cost_per_kg)}</span> / KG · value of the KG left {money(d.value)}</h3>
-      <table className="w-full max-w-2xl"><tbody>{d.steps.map((s: any, i: number) => <tr key={i} className="border-t border-slate-100"><td className="px-2 py-0.5 font-semibold">{s.stage}</td><td className="px-2 py-0.5">{s.ref}</td><td className="px-2 py-0.5 text-slate-500">{s.note}</td><td className="px-2 py-0.5 text-right tabular-nums">{money(s.rate)}</td></tr>)}</tbody></table>
+      <h3 className="mb-1 text-body font-semibold text-ink">Cost carried by {d.roll_no}: <span id="roll-cost-kg">{money(d.cost_per_kg)}</span> / KG · value of the KG left {money(d.value)}</h3>
+      <table className="w-full max-w-2xl"><tbody>{d.steps.map((s: any, i: number) => <tr key={i} className="border-t border-surface-divider"><td className="px-2 py-0.5 font-semibold">{s.stage}</td><td className="px-2 py-0.5">{s.ref}</td><td className="px-2 py-0.5 text-ink-secondary">{s.note}</td><td className="px-2 py-0.5 text-right tabular-nums">{money(s.rate)}</td></tr>)}</tbody></table>
     </div>
   );
 }
@@ -130,7 +130,7 @@ export function SplitRollPanel({ roll, onDone }: { roll: { id: number; roll_no: 
   };
   return (
     <div className="card p-4 text-xs" id="split-roll">
-      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-slate-800"><Scissors size={14} /> Split {roll.roll_no} ({kg(left)} KG left)</h3>
+      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-ink"><Scissors size={14} /> Split {roll.roll_no} ({kg(left)} KG left)</h3>
       <div className="flex flex-wrap items-end gap-2">
         {parts.map((p, i) => <Input key={i} label={`Roll ${i + 1} KG`} type="number" className="w-24" value={p} id={`split-part-${i}`} onChange={(e) => setParts(parts.map((x, k) => (k === i ? e.target.value : x)))} />)}
         <Button size="sm" variant="secondary" onClick={() => setParts([...parts, '0'])}>+ part</Button>
@@ -138,7 +138,7 @@ export function SplitRollPanel({ roll, onDone }: { roll: { id: number; roll_no: 
         <Input label="Reason *" className="w-64" value={reason} id="split-reason" onChange={(e) => setReason(e.target.value)} placeholder="e.g. two cut orders" />
         <Button size="sm" loading={busy} onClick={go} disabled={Math.abs(sum - left) > 0.001 || reason.trim().length < 3} id="btn-split">Split</Button>
       </div>
-      <p className={`mt-1 ${Math.abs(sum - left) > 0.001 ? 'text-amber-700' : 'text-slate-500'}`}>Parts total {kg(sum)} KG — must equal {kg(left)} KG. The roll is closed and each part becomes a child roll of the same job, fabric and lot.</p>
+      <p className={`mt-1 ${Math.abs(sum - left) > 0.001 ? 'text-amber-700' : 'text-ink-secondary'}`}>Parts total {kg(sum)} KG — must equal {kg(left)} KG. The roll is closed and each part becomes a child roll of the same job, fabric and lot.</p>
     </div>
   );
 }
@@ -159,21 +159,21 @@ export function MergeRollsPanel({ onDone }: { onDone: (msg: string) => void }) {
   };
   return (
     <div className="card p-4 text-xs" id="merge-rolls">
-      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-slate-800"><Combine size={14} /> Merge rolls</h3>
+      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-ink"><Combine size={14} /> Merge rolls</h3>
       <div className="mb-2 flex flex-wrap items-end gap-2">
         <JobSelect label="Job" className="w-72" value={job?.job_no ?? ''} id="merge-job" onPick={(j) => { setJob(j ? { id: j.id, job_no: j.job_no } : null); setSel([]); }} />
         <Input label="Reason *" className="w-64" value={reason} id="merge-reason" onChange={(e) => setReason(e.target.value)} placeholder="e.g. small ends of one lot" />
         <Button size="sm" loading={busy} onClick={go} disabled={sel.length < 2 || reason.trim().length < 3} id="btn-merge">Merge {sel.length || ''} rolls</Button>
       </div>
       {job && (
-        <table className="w-full" id="merge-table"><thead className="bg-slate-50 text-slate-500"><tr>{['', 'Roll', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Store', 'KG left'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
-          <tbody>{open.map((r) => <tr key={r.id} className="border-t border-slate-100" data-roll={r.roll_no}>
+        <table className="w-full" id="merge-table"><thead className="bg-surface-muted text-ink-secondary"><tr>{['', 'Roll', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Store', 'KG left'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
+          <tbody>{open.map((r) => <tr key={r.id} className="border-t border-surface-divider" data-roll={r.roll_no}>
             <td className="px-2 py-1"><input type="checkbox" checked={sel.includes(Number(r.id))} onChange={(e) => setSel(e.target.checked ? [...sel, Number(r.id)] : sel.filter((x) => x !== Number(r.id)))} /></td>
             <td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name ?? '—'}</td>
             <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1">{r.warehouse_name}</td><td className="px-2 py-1 tabular-nums">{kg(Number(r.weight_kg) - Number(r.issued_kg))}</td></tr>)}
-            {!open.length && <tr><td colSpan={9} className="px-2 py-3 text-center text-slate-400">No open rolls</td></tr>}</tbody></table>
+            {!open.length && <tr><td colSpan={9} className="px-2 py-3 text-center text-ink-muted">No open rolls</td></tr>}</tbody></table>
       )}
-      <p className="mt-1 text-slate-500">Only rolls of the same job, fabric, process state, colour, GSM, Dia and store, not on a draft DC or a live quotation. The KG left on each goes into one new roll; the source rolls are closed and stay in the genealogy.</p>
+      <p className="mt-1 text-ink-secondary">Only rolls of the same job, fabric, process state, colour, GSM, Dia and store, not on a draft DC or a live quotation. The KG left on each goes into one new roll; the source rolls are closed and stay in the genealogy.</p>
     </div>
   );
 }

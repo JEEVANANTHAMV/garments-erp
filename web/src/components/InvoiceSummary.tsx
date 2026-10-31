@@ -27,11 +27,11 @@ interface InvoiceSummaryProps {
 }
 
 const numCls =
-  'w-24 text-caption text-right tabular-nums border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
+  'w-24 text-caption text-right tabular-nums border border-surface-input rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-surface-muted';
 const pctCls =
-  'w-14 text-caption text-right border border-slate-300 rounded px-1 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
+  'w-14 text-caption text-right border border-surface-input rounded px-1 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-surface-muted';
 const selCls =
-  'text-caption border border-slate-300 rounded px-1 py-0.5 bg-white max-w-[9.5rem] focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
+  'text-caption border border-surface-input rounded px-1 py-0.5 bg-white max-w-[9.5rem] focus:border-brand-500 focus:outline-none disabled:bg-surface-muted';
 
 const GST_MODE_LABEL: Record<GstMode, string> = {
   INTRA_STATE: 'CGST + SGST',
@@ -53,7 +53,7 @@ export function InvoiceSummary({
   const fx = Number(exchangeRate) || 1;
 
   const amountRow = (label: string, key: keyof InvoiceCharges) => (
-    <div className="flex items-center justify-between py-0.5 text-slate-700">
+    <div className="flex items-center justify-between py-0.5 text-ink">
       <span>{label}</span>
       <input
         type="number" min="0" step="0.01" disabled={readOnly}
@@ -72,24 +72,24 @@ export function InvoiceSummary({
       </div>
 
       <div className="flex items-center justify-between py-0.5">
-        <span className="text-slate-600">Taxable Subtotal</span>
-        <span className="font-bold text-slate-900 text-sm tabular-nums">{money(t.taxable)}</span>
+        <span className="text-ink-secondary">Taxable Subtotal</span>
+        <span className="font-bold text-ink text-sm tabular-nums">{money(t.taxable)}</span>
       </div>
 
       {gstMode === 'INTRA_STATE' ? (
         <>
-          <div className="flex items-center justify-between py-0.5 text-slate-700">
-            <span className="pl-2 text-slate-500">CGST{singleRate !== null ? ` @ ${singleRate / 2}%` : ''}</span>
+          <div className="flex items-center justify-between py-0.5 text-ink">
+            <span className="pl-2 text-ink-secondary">CGST{singleRate !== null ? ` @ ${singleRate / 2}%` : ''}</span>
             <span className="font-medium tabular-nums">{money(t.cgst)}</span>
           </div>
-          <div className="flex items-center justify-between py-0.5 text-slate-700">
-            <span className="pl-2 text-slate-500">SGST{singleRate !== null ? ` @ ${singleRate / 2}%` : ''}</span>
+          <div className="flex items-center justify-between py-0.5 text-ink">
+            <span className="pl-2 text-ink-secondary">SGST{singleRate !== null ? ` @ ${singleRate / 2}%` : ''}</span>
             <span className="font-medium tabular-nums">{money(t.sgst)}</span>
           </div>
         </>
       ) : (
-        <div className="flex items-center justify-between py-0.5 text-slate-700">
-          <span className="pl-2 text-slate-500">IGST{singleRate !== null ? ` @ ${singleRate}%` : ''}</span>
+        <div className="flex items-center justify-between py-0.5 text-ink">
+          <span className="pl-2 text-ink-secondary">IGST{singleRate !== null ? ` @ ${singleRate}%` : ''}</span>
           <span className="font-medium tabular-nums">{money(t.igst)}</span>
         </div>
       )}
@@ -104,20 +104,20 @@ export function InvoiceSummary({
       )}
 
       {/* Other charges: labelled, added or deducted */}
-      <div className="flex items-center justify-between gap-2 py-0.5 text-slate-700">
+      <div className="flex items-center justify-between gap-2 py-0.5 text-ink">
         <input
           type="text" maxLength={80} disabled={readOnly}
           value={v.other_charges_label ?? ''}
           placeholder="Other charges"
           onChange={(e) => onChange({ other_charges_label: e.target.value })}
-          className="flex-1 min-w-0 text-caption border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50"
+          className="flex-1 min-w-0 text-caption border border-surface-input rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-surface-muted"
         />
-        <div className="flex rounded border border-slate-300 overflow-hidden text-caption font-bold">
+        <div className="flex rounded border border-surface-input overflow-hidden text-caption font-bold">
           {([1, -1] as const).map((sg) => (
             <button
               key={sg} type="button" disabled={readOnly}
               onClick={() => onChange({ other_charges_sign: sg })}
-              className={`px-1.5 py-0.5 ${sign === sg ? (sg > 0 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white') : 'bg-white text-slate-500'}`}
+              className={`px-1.5 py-0.5 ${sign === sg ? (sg > 0 ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white') : 'bg-white text-ink-secondary'}`}
               title={sg > 0 ? 'Add to invoice' : 'Deduct from invoice'}
             >
               {sg > 0 ? '+' : '−'}
@@ -133,7 +133,7 @@ export function InvoiceSummary({
       </div>
 
       {/* TCS — collected by the seller, added */}
-      <div className="flex items-center justify-between gap-2 py-0.5 text-slate-700">
+      <div className="flex items-center justify-between gap-2 py-0.5 text-ink">
         <div className="flex items-center gap-1.5">
           <span>TCS</span>
           <select
@@ -152,13 +152,13 @@ export function InvoiceSummary({
             onChange={(e) => onChange({ tcs_pct: num(e.target.value) })}
             className={pctCls}
           />
-          <span className="text-micro text-slate-400">%</span>
+          <span className="text-micro text-ink-muted">%</span>
         </div>
         <span className="font-bold text-emerald-700 tabular-nums">+ {money(t.tcs)}</span>
       </div>
 
       {/* TDS — deducted by us, on taxable value */}
-      <div className="flex items-center justify-between gap-2 py-0.5 text-slate-700">
+      <div className="flex items-center justify-between gap-2 py-0.5 text-ink">
         <div className="flex items-center gap-1.5">
           <span>TDS</span>
           <select
@@ -177,12 +177,12 @@ export function InvoiceSummary({
             onChange={(e) => onChange({ tds_pct: num(e.target.value) })}
             className={pctCls}
           />
-          <span className="text-micro text-slate-400">%</span>
+          <span className="text-micro text-ink-muted">%</span>
         </div>
         <span className="font-bold text-red-600 tabular-nums">− {money(t.tds)}</span>
       </div>
 
-      <div className="flex items-center justify-between py-0.5 text-slate-700">
+      <div className="flex items-center justify-between py-0.5 text-ink">
         <span>Round Off</span>
         <div className="flex items-center gap-1.5">
           {!readOnly && (

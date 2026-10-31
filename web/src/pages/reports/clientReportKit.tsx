@@ -209,8 +209,8 @@ export function ClientReport({ def }: { def: ReportDef }) {
     <div data-report={def.key}>
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-title-lg font-semibold text-slate-900">{def.title}</h2>
-          {def.subtitle && <p className="text-body text-slate-500">{def.subtitle}</p>}
+          <h2 className="text-title-lg font-semibold text-ink">{def.title}</h2>
+          {def.subtitle && <p className="text-body text-ink-secondary">{def.subtitle}</p>}
         </div>
         <div className="flex items-center gap-2">
           <button className="btn-secondary inline-flex items-center gap-1.5" onClick={() => void q.refetch()} title="Refresh">
@@ -244,13 +244,13 @@ export function ClientReport({ def }: { def: ReportDef }) {
       {q.isLoading ? <LoadingBlock /> : q.error ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : (
         <div className="card overflow-auto" style={{ maxHeight: '68vh' }}>
           <table className="min-w-full text-body" data-report-table={def.key}>
-            <thead className="sticky top-0 z-10 bg-slate-50">
+            <thead className="sticky top-0 z-10 bg-surface-muted">
               <tr>
                 {def.columns.map((c) => {
                   const ni = notedCols.indexOf(c);
                   return (
                     <th key={c.key} onClick={() => toggleSort(c.key)} data-col={c.key}
-                      className={clsx('cursor-pointer select-none whitespace-nowrap border-b border-surface-border px-2.5 py-2 font-semibold text-slate-600',
+                      className={clsx('cursor-pointer select-none whitespace-nowrap border-b border-surface-border px-2.5 py-2 font-semibold text-ink-secondary',
                         isNumType(c.type) ? 'text-right' : 'text-left')}>
                       <span className="inline-flex items-center gap-1">
                         {c.header}{ni >= 0 && <sup className="text-amber-600">{SUP[ni] ?? '*'}</sup>}
@@ -263,10 +263,10 @@ export function ClientReport({ def }: { def: ReportDef }) {
             </thead>
             <tbody>
               {!rows.length && (
-                <tr><td colSpan={def.columns.length} className="px-3 py-10 text-center text-slate-400">No records for these filters</td></tr>
+                <tr><td colSpan={def.columns.length} className="px-3 py-10 text-center text-ink-muted">No records for these filters</td></tr>
               )}
               {rows.map((r, i) => (
-                <tr key={def.rowKey ? def.rowKey(r, i) : i} className="border-b border-slate-100 hover:bg-brand-50/40">
+                <tr key={def.rowKey ? def.rowKey(r, i) : i} className="border-b border-surface-divider hover:bg-brand-50/40">
                   {def.columns.map((c) => {
                     const href = c.link?.(r);
                     const body = c.render ? c.render(r)
@@ -283,7 +283,7 @@ export function ClientReport({ def }: { def: ReportDef }) {
               ))}
             </tbody>
             {hasTotals && rows.length > 0 && (
-              <tfoot className="sticky bottom-0 bg-slate-100 font-semibold">
+              <tfoot className="sticky bottom-0 bg-surface-header font-semibold">
                 <tr>
                   {def.columns.map((c, i) => (
                     <td key={c.key} data-total={c.total ? c.key : undefined}
@@ -299,7 +299,7 @@ export function ClientReport({ def }: { def: ReportDef }) {
       )}
 
       {(notedCols.length > 0 || notes.length > 0) && (
-        <div className="mt-2 space-y-0.5 text-small text-slate-500">
+        <div className="mt-2 space-y-0.5 text-small text-ink-secondary">
           {notedCols.map((c, i) => <p key={c.key}><span className="text-amber-600">{SUP[i] ?? '*'}</span> {c.header}: {c.footnote}</p>)}
           {notes.map((n, i) => <p key={`n${i}`}>• {n}</p>)}
         </div>
@@ -319,15 +319,15 @@ export function ReportSection({ title, subtitle, defs, initialKey }: {
   return (
     <>
       <div className="mb-4">
-        <h1 className="text-page font-semibold tracking-tight text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-body text-slate-500">{subtitle}</p>}
+        <h1 className="text-page font-semibold tracking-tight text-ink">{title}</h1>
+        {subtitle && <p className="mt-0.5 text-body text-ink-secondary">{subtitle}</p>}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[230px_1fr]">
         <nav className="card h-fit p-1.5" data-report-list>
           {defs.map((d) => (
             <button key={d.key} data-report-key={d.key} onClick={() => pick(d.key)}
               className={clsx('block w-full rounded-md px-3 py-2 text-left text-body',
-                d.key === def?.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
+                d.key === def?.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-ink-secondary hover:bg-surface-muted')}>
               {d.title}
             </button>
           ))}

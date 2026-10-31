@@ -37,7 +37,7 @@ export function ProductionTab({ kind, onOpen }: { kind: Kind; onOpen: (o: { id?:
           { key: 'production_no', header: 'Entry', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.production_no}</span> },
           { key: 'prod_date', header: 'Date / shift', render: (r: any) => `${fmtDate(r.prod_date)} ${r.shift_code ?? ''}` },
           { key: 'machine_code', header: 'Machine', render: (r: any) => `${r.machine_code}${kind === 'EMBROIDERY' ? ` · ${r.heads_used}h` : ''}` },
-          { key: 'job_no', header: 'Job', render: (r: any) => <span>{r.job_no}<span className="text-slate-400"> · {r.io_no ?? ''} {r.style_code ?? ''}</span></span> },
+          { key: 'job_no', header: 'Job', render: (r: any) => <span>{r.job_no}<span className="text-ink-muted"> · {r.io_no ?? ''} {r.style_code ?? ''}</span></span> },
           { key: 'time', header: 'Time', render: (r: any) => `${String(r.start_at).slice(11)}–${String(r.end_at).slice(11)}` },
           { key: 'out', header: 'Input / good / rej / rwk', align: 'right' as const, render: (r: any) => `${qty(r.input_qty)} / ${qty(r.good_qty)} / ${qty(r.reject_qty)} / ${qty(r.rework_qty)}` },
           { key: 'net_run_hours', header: 'Run h', align: 'right' as const, render: (r: any) => qty(r.net_run_hours) },
@@ -207,7 +207,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
       </>}>
       <div className="space-y-4">
         {entry?.status === 'REJECTED' && <p className="rounded-lg bg-red-50 p-2 text-xs text-red-700">Rejected by {entry.rejected_by_name}: {entry.reject_remarks} — correct and save; it goes back to draft.</p>}
-        {entry?.status === 'CANCELLED' && <p className="rounded-lg bg-slate-100 p-2 text-xs text-slate-700">Cancelled by {entry.cancelled_by_name}: {entry.cancel_reason}</p>}
+        {entry?.status === 'CANCELLED' && <p className="rounded-lg bg-surface-header p-2 text-xs text-ink">Cancelled by {entry.cancelled_by_name}: {entry.cancel_reason}</p>}
         {/* Header + job context box */}
         <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-3">
         <FormSection title="Entry" cols={4} className="xl:col-span-2">
@@ -217,7 +217,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
           <Select label="Job" required id="mp-prod-job" className="sm:col-span-2" disabled={ro || !!entry} value={f.job_id} placeholder="— planned / running job —" onChange={(e) => set({ job_id: e.target.value })}
             options={jobOpts.map((j: any) => ({ value: j.id, label: `${j.job_no} · ${j.io_no ?? ''} ${j.style_code ?? ''} · ${qty(j.planned_qty)} ${j.uom ?? ''}` }))} />
         </FormSection>
-          <div className="rounded-lg bg-slate-50 p-2 text-caption text-slate-600">
+          <div className="rounded-lg bg-surface-muted p-2 text-caption text-ink-secondary">
             {job ? <>
               {[job.buyer_name, job.io_no, job.style_code, job.color_name].some(Boolean) && <div><b>{[job.buyer_name, job.io_no, job.style_code, job.color_name].filter(Boolean).join(' · ')}</b></div>}
               <div>{kind === 'EMBROIDERY' ? 'Design' : 'Artwork'} {job.design_code ? `${job.design_code} v${job.design_version}` : '—'}{job.placement ? ` · ${job.placement}` : ''}{job.stitches_per_pc ? ` · ${qty(job.stitches_per_pc, 0)} st/pc` : ''}</div>
@@ -242,7 +242,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
               <Input label={kind === 'EMBROIDERY' ? 'Setup / hooping (min)' : 'Setup (min)'} type="number" id="mp-prod-setup" disabled={ro} value={f.setup_minutes} onChange={(e) => set({ setup_minutes: e.target.value })} />
             </div>
             <div className="mt-3">
-              <div className="mb-1 flex items-center justify-between"><span className="text-xs font-semibold text-slate-600">Downtime {shown?.downtime_minutes ? `· ${shown.downtime_minutes} min` : ''}</span>
+              <div className="mb-1 flex items-center justify-between"><span className="text-xs font-semibold text-ink-secondary">Downtime {shown?.downtime_minutes ? `· ${shown.downtime_minutes} min` : ''}</span>
                 {!ro && <Button size="sm" variant="secondary" id="mp-prod-add-dt" onClick={() => set({ downtime: [...f.downtime, { reason_id: '', start_at: '', end_at: '', minutes: '', remarks: '' }] })}><Plus size={12} className="mr-1 inline" />Downtime</Button>}</div>
               {f.downtime.map((d: Row, i: number) => {
                 const upd = (x: any) => set({ downtime: f.downtime.map((y: Row, j: number) => (j === i ? { ...y, ...x } : y)) });
@@ -276,7 +276,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
                 options={reworkSources.map((x: any) => ({ value: x.id, label: `${x.production_no} · rework ${qty(x.rework_qty)}` }))} />}
             </div>
             <div className="mt-3">
-              <div className="mb-1 flex items-center justify-between"><span className="text-xs font-semibold text-slate-600">Reject / rework by reason</span>
+              <div className="mb-1 flex items-center justify-between"><span className="text-xs font-semibold text-ink-secondary">Reject / rework by reason</span>
                 {!ro && <Button size="sm" variant="secondary" id="mp-prod-add-rej" onClick={() => set({ outputs: [...f.outputs, { output_type: num(f.reject_qty) > 0 ? 'REJECT' : 'REWORK', reason_id: '', qty: '', remarks: '' }] })}><Plus size={12} className="mr-1 inline" />Reason</Button>}</div>
               {f.outputs.map((o: Row, i: number) => {
                 const upd = (x: any) => set({ outputs: f.outputs.map((y: Row, j: number) => (j === i ? { ...y, ...x } : y)) });
@@ -298,7 +298,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
         <Section title="Material — standard vs actual">
           {shown?.consumption?.length ? (
             <div className="overflow-x-auto"><table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>
                 <th className="px-2 py-1 text-left">Material</th><th className="px-2 py-1 text-left">Role</th><th className="px-2 py-1 text-right">Standard</th>
                 <th className="px-2 py-1 text-right">Issued (entry)</th><th className="px-2 py-1 text-right">Returned</th><th className="px-2 py-1 text-right">Actual</th>
                 <th className="px-2 py-1 text-right">Wastage</th><th className="px-2 py-1 text-right">Variance</th><th className="px-2 py-1 text-right">Var %</th>
@@ -307,8 +307,8 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
               <tbody>{shown.consumption.map((cn: any) => {
                 const o = over[cn.trim_id];
                 return (
-                  <tr key={cn.trim_id} className="border-t border-slate-100">
-                    <td className="px-2 py-1">{cn.trim_code ?? `#${cn.trim_id}`}{cn.trim_name ? ` · ${cn.trim_name}` : ''}{cn.lot_nos ? <span className="text-slate-400"> · lot {cn.lot_nos}</span> : null}</td>
+                  <tr key={cn.trim_id} className="border-t border-surface-divider">
+                    <td className="px-2 py-1">{cn.trim_code ?? `#${cn.trim_id}`}{cn.trim_name ? ` · ${cn.trim_name}` : ''}{cn.lot_nos ? <span className="text-ink-muted"> · lot {cn.lot_nos}</span> : null}</td>
                     <td className="px-2 py-1">{human(cn.material_role)}</td>
                     <td className="px-2 py-1 text-right">{qty(cn.standard_qty, 3)} {cn.uom_code ?? ''}</td>
                     <td className="px-2 py-1 text-right">{qty(cn.issued_qty, 3)}</td><td className="px-2 py-1 text-right">{qty(cn.returned_qty, 3)}</td>
@@ -323,8 +323,8 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
                 );
               })}</tbody>
             </table>
-            <p className="mt-1 text-caption text-slate-500">Actual defaults to what the store issued against this entry (issued − returned), else the standard. Type the actual when it differs; wastage is part of actual.</p></div>
-          ) : <p className="text-xs text-slate-400">Fill the job, machine, shift, timings and input qty — the standard consumption and cost are calculated by the server.</p>}
+            <p className="mt-1 text-caption text-ink-secondary">Actual defaults to what the store issued against this entry (issued − returned), else the standard. Type the actual when it differs; wastage is part of actual.</p></div>
+          ) : <p className="text-xs text-ink-muted">Fill the job, machine, shift, timings and input qty — the standard consumption and cost are calculated by the server.</p>}
         </Section>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -338,7 +338,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
               <Kv label="Utilization" value={pctTxt(c.utilization_pct)} />
               <Kv label="Reject % / rework %" value={`${pctTxt(c.reject_pct)} / ${pctTxt(c.rework_pct)}`} />
               {kind === 'EMBROIDERY' && <Kv label="Stitches" value={`${qty(shown?.total_stitches, 0)}${shown?.stitches_source ? ` (${human(shown.stitches_source)})` : ''}`} />}
-            </> : <p className="text-xs text-slate-400">—</p>}
+            </> : <p className="text-xs text-ink-muted">—</p>}
           </Section>
           {p.costing ? <Section title="Cost">
             {c && c.total_cost !== undefined ? <>
@@ -348,21 +348,21 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
               <Kv label="Labour" value={money(c.labour_cost)} />
               <Kv label="Overhead" value={money(c.overhead_cost)} />
               <Kv label="Other (approved)" value={money(c.other_cost)} />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-surface-divider" />
               <Kv label="Total" value={money(c.total_cost)} strong />
               <Kv label="Cost / good pc" value={money(c.cost_per_unit)} strong />
               {kind === 'EMBROIDERY' ? <Kv label="Cost / 1,000 stitches" value={money(c.cost_per_1000_stitches)} /> : <Kv label="Cost / KG" value={money(c.cost_per_kg)} />}
               <Kv label="Standard cost / variance" value={`${money(c.std_total_cost)} · ${num(c.std_total_cost) > 0 ? pctTxt(((num(c.total_cost) - num(c.std_total_cost)) / num(c.std_total_cost)) * 100) : '—'}`} />
               {entry?.costing?.is_final ? <p className="mt-1 text-caption text-emerald-700">Frozen at approval — later rate / recipe changes do not alter it.</p> : null}
-            </> : <p className="text-xs text-slate-400">—</p>}
+            </> : <p className="text-xs text-ink-muted">—</p>}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Input label="Other cost ₹" type="number" disabled={ro} value={f.other_cost} onChange={(e) => set({ other_cost: e.target.value })} />
               {num(f.other_cost) > 0 && <Input label="Other cost reason" required disabled={ro} value={f.other_cost_reason} onChange={(e) => set({ other_cost_reason: e.target.value })} />}
             </div>
-          </Section> : <Section title="Cost"><p className="text-xs text-slate-400">Costing is shown to supervisors and accounts.</p></Section>}
+          </Section> : <Section title="Cost"><p className="text-xs text-ink-muted">Costing is shown to supervisors and accounts.</p></Section>}
           <Section title="Remarks & history">
             <Textarea label="Remarks" disabled={ro} value={f.remarks} onChange={(e) => set({ remarks: e.target.value })} />
-            {entry && <div className="mt-2 space-y-0.5 text-caption text-slate-600">
+            {entry && <div className="mt-2 space-y-0.5 text-caption text-ink-secondary">
               <div>Created by {entry.created_by_name} · {fmtDateTime(entry.created_at)}</div>
               {(entry.approvals ?? []).map((a: any) => <div key={a.id}><b>{human(a.action)}</b> {a.acted_by_name} · {fmtDateTime(a.acted_at)}{a.remarks ? ` — ${a.remarks}` : ''}</div>)}
               {entry.rework_of_no && <div>Rework run of {entry.rework_of_no}</div>}
@@ -371,7 +371,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
         </div>
         {entry?.audit?.length > 0 && <Section title="Audit trail">
           <MiniTable rows={entry.audit.slice(0, 20)} cols={[{ h: 'When', r: (a) => fmtDateTime(a.changed_at) }, { h: 'Who', r: (a) => a.changed_by_name ?? '—' }, { h: 'Action', r: (a) => a.action },
-            { h: 'Change', r: (a) => <span className="line-clamp-2 max-w-xl break-all tabular-nums text-micro text-slate-500">{typeof a.new_values === 'string' ? a.new_values.slice(0, 220) : JSON.stringify(a.new_values ?? '').slice(0, 220)}</span> }]} />
+            { h: 'Change', r: (a) => <span className="line-clamp-2 max-w-xl break-all tabular-nums text-micro text-ink-secondary">{typeof a.new_values === 'string' ? a.new_values.slice(0, 220) : JSON.stringify(a.new_values ?? '').slice(0, 220)}</span> }]} />
         </Section>}
       </div>
       {mat && entry && <MaterialDialog kind={kind} type="ISSUE" jobId={entry.job_id} productionId={entry.id} onClose={() => setMat(false)} onDone={() => { setMat(false); void load(entry.id); }} />}

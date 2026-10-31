@@ -31,7 +31,7 @@ export function PartiesPage() {
       {[{ key: '', label: 'All' }, ...PARTY_ROLES].map((r) => (
         <button key={r.key || 'all'} type="button" data-role-tab={r.key || 'all'}
           onClick={() => setSp(r.key ? { role: r.key } : {})}
-          className={`rounded-full border px-3 py-1 text-body font-medium ${role === r.key ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-slate-600 hover:bg-slate-50'}`}>
+          className={`rounded-full border px-3 py-1 text-body font-medium ${role === r.key ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border bg-white text-ink-secondary hover:bg-surface-muted'}`}>
           {r.label}
         </button>
       ))}
@@ -43,7 +43,7 @@ export function PartiesPage() {
       { key: 'party_code', header: 'Code', sortable: true,
         render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.party_code}</span> },
       { key: 'party_name', header: 'Name', sortable: true,
-        render: (r: any) => <span className="font-medium text-slate-800">{r.party_name}</span> },
+        render: (r: any) => <span className="font-medium text-ink">{r.party_name}</span> },
       { key: 'roles', header: 'Roles', render: (r: any) => (
         <div className="flex flex-wrap gap-1">
           {r.is_buyer ? <Badge tone="blue">Buyer</Badge> : null}
@@ -59,16 +59,16 @@ export function PartiesPage() {
       { key: 'payment_terms', header: 'Payment terms', render: (r: any) => {
         const isMerchandiserOnly = r.is_merchandiser && !r.is_buyer && !r.is_supplier && !r.is_vendor && !r.is_agent;
         if (isMerchandiserOnly || !r.payment_terms) {
-          return <span className="text-slate-400 text-xs">—</span>;
+          return <span className="text-ink-muted text-xs">—</span>;
         }
-        return <span className="text-slate-700 font-medium">{r.payment_terms}</span>;
+        return <span className="text-ink font-medium">{r.payment_terms}</span>;
       }},
       { key: 'credit_days', header: 'Credit days', align: 'right', render: (r: any) => {
         const isMerchandiserOnly = r.is_merchandiser && !r.is_buyer && !r.is_supplier && !r.is_vendor && !r.is_agent;
         if (isMerchandiserOnly || !r.credit_days) {
-          return <span className="text-slate-400 text-xs">—</span>;
+          return <span className="text-ink-muted text-xs">—</span>;
         }
-        return <span className="text-slate-700">{r.credit_days} d</span>;
+        return <span className="text-ink">{r.credit_days} d</span>;
       }},
       { key: 'status', header: 'Status', render: (r: any) => (
         r.is_draft ? <Badge tone="amber">Draft</Badge> :
@@ -195,7 +195,7 @@ export function GsmPage() {
       { key: 'gsm_value', header: 'GSM Value', sortable: true,
         render: (r: any) => <span className="tabular-nums text-body font-bold text-brand-700">{r.gsm_value} GSM</span> },
       { key: 'tolerance', header: 'Tolerance (± GSM)', align: 'center',
-        render: (r: any) => <span className="tabular-nums text-slate-600">± {r.tolerance || 5}</span> },
+        render: (r: any) => <span className="tabular-nums text-ink-secondary">± {r.tolerance || 5}</span> },
       { key: 'is_active', header: 'Status', render: (r: any) => (
         r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>
       )},
@@ -282,7 +282,7 @@ export function ColorsPage() {
     defaultSort={{ key: 'color_name', dir: 'asc' }}
     columns={[
       { key: 'swatch', header: '', width: 'w-12', render: (r: any) => (
-        <span className="inline-block h-6 w-6 rounded-md border border-slate-200"
+        <span className="inline-block h-6 w-6 rounded-md border border-surface-border"
           style={{ background: r.hex_value || '#f1f5f9' }} title={r.hex_value ?? ''} />) },
       { key: 'color_code', header: 'Code', sortable: true,
         render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.color_code}</span> },
@@ -328,7 +328,7 @@ export function PortsPage() {
     defaultSort={{ key: 'port_name', dir: 'asc' }}
     columns={[
       { key: 'port_name', header: 'Port', sortable: true, render: (r: any) => <span className="font-medium">{r.port_name}</span> },
-      { key: 'mode', header: 'Mode', sortable: true, render: (r: any) => r.mode ? <Badge tone={r.mode === 'AIR' ? 'violet' : r.mode === 'ROAD' ? 'amber' : 'blue'}>{r.mode}</Badge> : <span className="text-slate-400">any</span> },
+      { key: 'mode', header: 'Mode', sortable: true, render: (r: any) => r.mode ? <Badge tone={r.mode === 'AIR' ? 'violet' : r.mode === 'ROAD' ? 'amber' : 'blue'}>{r.mode}</Badge> : <span className="text-ink-muted">any</span> },
       { key: 'port_code', header: 'Port code', sortable: true, render: (r: any) => <span className="tabular-nums text-small text-brand-700">{r.port_code ?? '—'}</span> },
       { key: 'country_name', header: 'Country', render: (r: any) => r.country_name ?? 'India' },
       { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
@@ -353,7 +353,7 @@ export function CompanyBankAccountsPage() {
     defaultSort={{ key: 'account_label', dir: 'asc' }}
     columns={[
       { key: 'account_label', header: 'Account', sortable: true, render: (r: any) => <span className="font-medium">{r.account_label}{r.is_default ? <Badge tone="green" className="ml-1.5">default</Badge> : null}</span> },
-      { key: 'bank_name', header: 'Bank / branch', sortable: true, render: (r: any) => <div><p>{r.bank_name}</p><p className="text-caption text-slate-500">{r.branch_name}</p></div> },
+      { key: 'bank_name', header: 'Bank / branch', sortable: true, render: (r: any) => <div><p>{r.bank_name}</p><p className="text-caption text-ink-secondary">{r.branch_name}</p></div> },
       { key: 'account_no', header: 'A/c no', render: (r: any) => <span className="tabular-nums text-small">{r.account_type} {r.account_no}</span> },
       { key: 'ifsc_code', header: 'IFSC / SWIFT', render: (r: any) => <span className="tabular-nums text-small">{[r.ifsc_code, r.swift_code].filter(Boolean).join(' · ') || '—'}</span> },
       { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
@@ -411,7 +411,7 @@ export function WarehouseBinsPage() {
     columns={[
       { key: 'warehouse_name', header: 'Warehouse', sortable: true },
       { key: 'rack', header: 'Rack / Zone', sortable: true,
-        render: (r: any) => <span className="font-semibold text-slate-800">{r.rack ? `Rack ${r.rack}` : '—'}</span> },
+        render: (r: any) => <span className="font-semibold text-ink">{r.rack ? `Rack ${r.rack}` : '—'}</span> },
       { key: 'bin_code', header: 'Bin Code', sortable: true,
         render: (r: any) => <span className="tabular-nums text-small font-semibold text-brand-700">{r.bin_code}</span> },
       { key: 'is_active', header: 'Status',

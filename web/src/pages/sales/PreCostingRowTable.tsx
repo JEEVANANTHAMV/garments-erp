@@ -35,7 +35,7 @@ interface Props {
   emptyText?: string;
 }
 
-const cellCls = 'rounded border border-slate-200 px-1.5 py-0.5 text-xs disabled:bg-slate-100 disabled:text-slate-400';
+const cellCls = 'rounded border border-surface-border px-1.5 py-0.5 text-xs disabled:bg-surface-header disabled:text-ink-muted';
 
 export function PreCostingRowTable({
   gridId, rows, onChange, columns, newRow, amount, amountLabel = 'Cost / Pc (₹)',
@@ -59,9 +59,9 @@ export function PreCostingRowTable({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <div className="overflow-x-auto rounded-lg border border-surface-border">
         <table className="w-full text-left text-xs tabular-nums">
-          <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
+          <thead className="bg-surface-muted text-ink font-sans font-bold border-b border-surface-border">
             <tr>
               <th className="py-2.5 px-3 w-8">#</th>
               {columns.map((c) => (
@@ -71,15 +71,15 @@ export function PreCostingRowTable({
               <th className="py-2.5 px-2 w-10" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-surface-divider">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length + 3} className="py-4 px-3 text-center font-sans text-slate-400">{emptyText}</td>
+                <td colSpan={columns.length + 3} className="py-4 px-3 text-center font-sans text-ink-muted">{emptyText}</td>
               </tr>
             )}
             {rows.map((row, i) => (
               <tr key={row._key || i}>
-                <td className="py-2 px-3 text-slate-400">{i + 1}</td>
+                <td className="py-2 px-3 text-ink-muted">{i + 1}</td>
                 {columns.map((c, j) => {
                   const disabled = c.disabled?.(row) ?? false;
                   const common = {
@@ -114,7 +114,7 @@ export function PreCostingRowTable({
                             }}
                             className={`${cellCls} text-right tabular-nums font-bold text-brand-700 ${c.width ?? 'w-24'}`}
                           />
-                          {c.suffix && <span className="ml-1 font-sans text-caption text-slate-500">{c.suffix(row)}</span>}
+                          {c.suffix && <span className="ml-1 font-sans text-caption text-ink-secondary">{c.suffix(row)}</span>}
                         </>
                       ) : (
                         <input
@@ -123,7 +123,7 @@ export function PreCostingRowTable({
                           value={row[c.key] ?? ''}
                           placeholder={c.placeholder}
                           onChange={(e) => setCell(i, c.key, e.target.value)}
-                          className={`${cellCls} font-semibold text-slate-900 ${c.width ?? 'w-full'}`}
+                          className={`${cellCls} font-semibold text-ink ${c.width ?? 'w-full'}`}
                         />
                       )}
                     </td>
@@ -134,7 +134,7 @@ export function PreCostingRowTable({
                   <button
                     type="button"
                     title="Delete row"
-                    className="text-slate-400 hover:text-rose-600"
+                    className="text-ink-muted hover:text-rose-600"
                     onClick={() => onChange(rows.filter((_, idx) => idx !== i))}
                   >
                     <Trash2 size={13} />
@@ -143,7 +143,7 @@ export function PreCostingRowTable({
               </tr>
             ))}
           </tbody>
-          <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+          <tfoot className="bg-surface-muted font-bold border-t border-surface-border">
             <tr>
               <td colSpan={columns.length + 1} className="py-2.5 px-3 text-right font-sans">{totalLabel}</td>
               <td className="py-2.5 px-3 text-right text-brand-900 font-bold">₹{total.toFixed(2)}</td>
@@ -152,7 +152,7 @@ export function PreCostingRowTable({
           </tfoot>
         </table>
       </div>
-      <div className="flex items-center justify-between text-caption text-slate-500">
+      <div className="flex items-center justify-between text-caption text-ink-secondary">
         <span>Press Enter in the last numeric cell to go to the next row (adds a row on the last one).</span>
         <button type="button" className="btn-secondary btn-xs flex items-center gap-1" onClick={addRow}>
           <Plus size={13} /> {addLabel}

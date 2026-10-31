@@ -46,13 +46,13 @@ export function PackingOrdersPage() {
                   <tr key={o.id} className="row-hover cursor-pointer" onClick={() => nav(`/logistics/packing/orders/${o.id}`)}>
                     <td className="td tabular-nums font-medium text-brand-700"><Link to={`/logistics/packing/orders/${o.id}`}>{o.pack_no}</Link></td>
                     <td className="td">{fmtDate(o.pack_date)}</td>
-                    <td className="td">{o.job_no}{o.buyer_po_no ? <div className="text-caption text-slate-400">PO {o.buyer_po_no}</div> : null}</td>
+                    <td className="td">{o.job_no}{o.buyer_po_no ? <div className="text-caption text-ink-muted">PO {o.buyer_po_no}</div> : null}</td>
                     <td className="td">{o.buyer_name}</td>
                     <td className="td">{o.style_code}</td>
-                    <td className="td">{UNIT_LABEL[o.packing_unit ?? 'SINGLE']}{o.part_name ? ` · ${o.part_name}` : ''}<div className="text-caption text-slate-500">{o.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'by quantity'}</div></td>
+                    <td className="td">{UNIT_LABEL[o.packing_unit ?? 'SINGLE']}{o.part_name ? ` · ${o.part_name}` : ''}<div className="text-caption text-ink-secondary">{o.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'by quantity'}</div></td>
                     <td className="td text-right tabular-nums">{fmtNumber(o.planned_qty)}</td>
                     <td className="td text-right tabular-nums">{fmtNumber(o.pieces_posted)}{n(o.pieces_unposted) ? <div className="text-caption text-amber-700">+{fmtNumber(o.pieces_unposted)} unposted</div> : null}</td>
-                    <td className="td text-right tabular-nums">{n(o.cartons_posted)} / {n(o.cartons_total)} <span className="text-slate-400">(plan {o.planned_cartons})</span></td>
+                    <td className="td text-right tabular-nums">{n(o.cartons_posted)} / {n(o.cartons_total)} <span className="text-ink-muted">(plan {o.planned_cartons})</span></td>
                     <td className="td"><PkStatus value={o.order_status} /></td>
                   </tr>
                 ))}
@@ -156,7 +156,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       </FormSection>
       {fromOrder && (
         <section className="mb-3" id="set-from-order">
-          <div className="mb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Sets as entered on the sales order (same size)</div>
+          <div className="mb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Sets as entered on the sales order (same size)</div>
           <table className="w-full max-w-2xl text-body">
             <thead><tr><th className="th">Set colour</th><th className="th">One set =</th></tr></thead>
             <tbody>{orderSets.map((cs) => (
@@ -168,7 +168,7 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
       )}
       {effUnit === 'SET' && !fromOrder && preview?.part_colors && (
         <section className="mb-3" id="set-pairs">
-          <div className="mb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Sets — pair each TOP colour with its BOTTOM colour (same size)</div>
+          <div className="mb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Sets — pair each TOP colour with its BOTTOM colour (same size)</div>
           {!preview.part_colors.TOP?.length || !preview.part_colors.BOTTOM?.length
             ? <p className="text-body text-amber-700">This job / style needs both TOP and BOTTOM parts for set packing.</p>
             : (
@@ -220,12 +220,12 @@ function NewOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated:
           onClose={() => setRuleFor(false)} onSaved={() => { setRuleFor(false); setReload((x) => x + 1); }} />
       )}
       {preview && rule && (
-        <div className="mb-3 text-small text-slate-600">Rule <b>{rule.rule_code}</b> ({rule.scope}, rev {rule.revision}): {rule.standard_pieces_per_carton} pcs / carton, {rule.pieces_per_polybag} pc / polybag,
+        <div className="mb-3 text-small text-ink-secondary">Rule <b>{rule.rule_code}</b> ({rule.scope}, rev {rule.revision}): {rule.standard_pieces_per_carton} pcs / carton, {rule.pieces_per_polybag} pc / polybag,
           {n(rule.allow_mixed_sizes) ? ' mixed sizes' : ' solid size'}, {n(rule.allow_mixed_colours) ? 'mixed colours' : 'solid colour'}, partial {n(rule.allow_partial_carton) ? 'allowed' : 'not allowed'}.</div>
       )}
       {preview && (
         <section>
-          <div className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Colour × size plan{preview.strict_qc ? ' · Final QC passed pieces only' : ''}</div>
+          <div className="mb-2 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Colour × size plan{preview.strict_qc ? ' · Final QC passed pieces only' : ''}</div>
           {!preview.rows.length ? <EmptyState title="Nothing finished yet" message="No bundles of this job / style have finished pieces." /> : (
             <table className="w-full text-body" id="order-plan-table">
               <thead><tr><th className="th">Colour</th><th className="th">Size</th><th className="th text-right">Order qty</th><th className="th text-right" title="PCS in the FG store (received on FG receipts, not yet packed)">Ready to pack (FG store)</th>

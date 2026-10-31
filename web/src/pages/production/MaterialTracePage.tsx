@@ -39,23 +39,23 @@ export default function MaterialTracePage() {
                 <div key={i} className="card p-4 text-xs" style={{ marginLeft: Math.min(c.depth, 6) * 18 }}>
                   <div className="flex flex-wrap items-center gap-2 text-body">
                     <span className="tabular-nums font-bold text-brand-700">{c.roll.roll_no}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-caption font-bold ${c.roll.process_state === 'GREY' ? 'bg-slate-100 text-slate-700' : 'bg-purple-100 text-purple-800'}`}>{c.roll.process_state}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-caption font-bold ${c.roll.process_state === 'GREY' ? 'bg-surface-header text-ink' : 'bg-purple-100 text-purple-800'}`}>{c.roll.process_state}</span>
                     <span>{c.roll.fabric_name}</span>{c.roll.color_name && <span>· {c.roll.color_name}</span>}<span>· {kg(c.roll.weight_kg)} KG</span>{c.roll.io_no && <span>· job {c.roll.io_no}</span>}
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 md:grid-cols-4">
-                    <div><span className="text-slate-500">GRN:</span> <b>{c.roll.grn_no}</b> {fmtDate(c.roll.grn_date)}</div>
-                    {c.roll.supplier && <div><span className="text-slate-500">Supplier:</span> <b>{c.roll.supplier}</b></div>}
-                    {c.roll.po_no && <div><span className="text-slate-500">PO:</span> <b>{c.roll.po_no}</b></div>}
-                    {c.roll.supplier_inv_no && <div><span className="text-slate-500">Supplier invoice:</span> <b>{c.roll.supplier_inv_no}</b></div>}
-                    {c.roll.supplier_dc_no && <div><span className="text-slate-500">Supplier DC:</span> {c.roll.supplier_dc_no}</div>}
-                    {c.process && <div className="col-span-2"><span className="text-slate-500">Processed on:</span> <b>{c.process.fpo_no}</b> ({c.process.sub_process}) at {c.process.vendor}{c.process_bill ? ` · billed on ${c.process_bill.bill_no}` : ''}</div>}
-                    {c.knitting && <div className="col-span-2"><span className="text-slate-500">Knitted on program:</span> <b>{c.knitting.program_no}</b> by {c.knitting.knitter}</div>}
-                    {c.bills?.length > 0 && <div className="col-span-2"><span className="text-slate-500">Supplier bill:</span> {c.bills.map((b: any) => `${b.bill_no} (${fmtDate(b.bill_date)})`).join(', ')}</div>}
+                    <div><span className="text-ink-secondary">GRN:</span> <b>{c.roll.grn_no}</b> {fmtDate(c.roll.grn_date)}</div>
+                    {c.roll.supplier && <div><span className="text-ink-secondary">Supplier:</span> <b>{c.roll.supplier}</b></div>}
+                    {c.roll.po_no && <div><span className="text-ink-secondary">PO:</span> <b>{c.roll.po_no}</b></div>}
+                    {c.roll.supplier_inv_no && <div><span className="text-ink-secondary">Supplier invoice:</span> <b>{c.roll.supplier_inv_no}</b></div>}
+                    {c.roll.supplier_dc_no && <div><span className="text-ink-secondary">Supplier DC:</span> {c.roll.supplier_dc_no}</div>}
+                    {c.process && <div className="col-span-2"><span className="text-ink-secondary">Processed on:</span> <b>{c.process.fpo_no}</b> ({c.process.sub_process}) at {c.process.vendor}{c.process_bill ? ` · billed on ${c.process_bill.bill_no}` : ''}</div>}
+                    {c.knitting && <div className="col-span-2"><span className="text-ink-secondary">Knitted on program:</span> <b>{c.knitting.program_no}</b> by {c.knitting.knitter}</div>}
+                    {c.bills?.length > 0 && <div className="col-span-2"><span className="text-ink-secondary">Supplier bill:</span> {c.bills.map((b: any) => `${b.bill_no} (${fmtDate(b.bill_date)})`).join(', ')}</div>}
                   </div>
                   {c.yarn?.length > 0 && (
                     <table className="mt-2 w-full">
-                      <thead className="bg-slate-50 text-slate-500"><tr>{['Yarn', 'Lot', 'DC', 'KG', 'GRN', 'PO', 'Supplier', 'Invoice', 'Link', 'Lot origin'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
-                      <tbody>{c.yarn.map((y: any, k: number) => <tr key={k} className="border-t border-slate-100"><td className="px-2 py-1">{y.yarn_name}</td><td className="px-2 py-1">{y.lot_no}</td><td className="px-2 py-1 tabular-nums">{y.dc_no}</td><td className="px-2 py-1">{kg(y.issued_qty_kg)}</td>
+                      <thead className="bg-surface-muted text-ink-secondary"><tr>{['Yarn', 'Lot', 'DC', 'KG', 'GRN', 'PO', 'Supplier', 'Invoice', 'Link', 'Lot origin'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
+                      <tbody>{c.yarn.map((y: any, k: number) => <tr key={k} className="border-t border-surface-divider"><td className="px-2 py-1">{y.yarn_name}</td><td className="px-2 py-1">{y.lot_no}</td><td className="px-2 py-1 tabular-nums">{y.dc_no}</td><td className="px-2 py-1">{kg(y.issued_qty_kg)}</td>
                         <td className="px-2 py-1 tabular-nums">{y.grn_no || '—'}</td><td className="px-2 py-1">{y.po_no || '—'}</td><td className="px-2 py-1">{y.supplier || '—'}</td><td className="px-2 py-1">{y.supplier_inv_no || '—'}</td>
                         <td className="px-2 py-1">{y.link === 'exact' ? 'exact lot' : <span className="text-amber-700">lot no match</span>}</td><td className="px-2 py-1"><Origin o={y.origin} /></td></tr>)}</tbody>
                     </table>
@@ -67,7 +67,7 @@ export default function MaterialTracePage() {
                 <SplitRollPanel roll={rt.data.chain[0].roll} onDone={() => void rt.refetch()} />)}
               <div className="card p-4 text-xs">
                 <h3 className="mb-1 font-semibold">Forward — used in cutting</h3>
-                {rt.data.cutting.length ? rt.data.cutting.map((x: any, i: number) => <div key={i}>{x.roll_no}: {kg(x.issue_kg)} KG on {x.issue_no} ({fmtDate(x.issue_date)}) for cut order {x.plan_no ?? '—'}</div>) : <span className="text-slate-400">Not issued to cutting yet</span>}
+                {rt.data.cutting.length ? rt.data.cutting.map((x: any, i: number) => <div key={i}>{x.roll_no}: {kg(x.issue_kg)} KG on {x.issue_no} ({fmtDate(x.issue_date)}) for cut order {x.plan_no ?? '—'}</div>) : <span className="text-ink-muted">Not issued to cutting yet</span>}
               </div>
             </div>
           )}
@@ -76,7 +76,7 @@ export default function MaterialTracePage() {
       {tab === 'tools' && (
         <div className="space-y-3">
           <MergeRollsPanel onDone={() => {}} />
-          <div className="card p-4 text-xs text-slate-600">To split a roll, trace it on <b>By fabric roll</b> — the split box is under its trace. Split / merge history is in Genealogy Reports.</div>
+          <div className="card p-4 text-xs text-ink-secondary">To split a roll, trace it on <b>By fabric roll</b> — the split box is under its trace. Split / merge history is in Genealogy Reports.</div>
         </div>
       )}
       {tab === 'job' && (
@@ -111,14 +111,14 @@ export default function MaterialTracePage() {
  */
 function Genealogy({ g }: { g: any }) {
   const r = g.reconciliation;
-  const box = (label: string, v: number, sub?: string, tone = 'text-slate-800') => (
-    <div className="rounded-lg border border-slate-200 px-3 py-2"><div className="text-caption uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`text-sm font-semibold tabular-nums ${tone}`}>{kg(v)} KG</div>{sub && <div className="text-caption text-slate-500">{sub}</div>}</div>
+  const box = (label: string, v: number, sub?: string, tone = 'text-ink') => (
+    <div className="rounded-lg border border-surface-border px-3 py-2"><div className="text-caption uppercase tracking-wide text-ink-secondary">{label}</div>
+      <div className={`text-sm font-semibold tabular-nums ${tone}`}>{kg(v)} KG</div>{sub && <div className="text-caption text-ink-secondary">{sub}</div>}</div>
   );
   const pct = (a: number, b: number) => (b > 0 ? `${fmtDecimal((a / b) * 100, 1)}%` : '');
   return (
     <div className="card mb-3 p-4 text-xs" id="job-genealogy">
-      <h3 className="mb-2 text-body font-semibold text-slate-800">Plan vs actual — {g.job?.job_no}{g.bom?.bom_no ? ` · BOM ${g.bom.bom_no}` : ' · no BOM'}{g.plan_source ? ` · planned from ${g.plan_source}` : ''}</h3>
+      <h3 className="mb-2 text-body font-semibold text-ink">Plan vs actual — {g.job?.job_no}{g.bom?.bom_no ? ` · BOM ${g.bom.bom_no}` : ' · no BOM'}{g.plan_source ? ` · planned from ${g.plan_source}` : ''}</h3>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5" id="gen-recon">
         {box('Planned yarn (BOM)', r.planned_yarn_kg)}
         {box('Yarn purchased', r.yarn_purchased_kg, pct(r.yarn_purchased_kg, r.planned_yarn_kg) && `${pct(r.yarn_purchased_kg, r.planned_yarn_kg)} of plan`)}
@@ -132,23 +132,23 @@ function Genealogy({ g }: { g: any }) {
         {box('Grey available', r.grey_available_kg, 'for dyeing')}
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <div><div className="mb-1 font-semibold text-slate-700">Knitting</div>
-          {g.programs.length ? g.programs.map((p: any) => <div key={p.id}>{p.program_no} · {p.fabric_type ?? '—'}{p.fabric_colour ? ` · Kora / Raw for ${p.fabric_colour}` : ''} · {kg(p.required_qty_kg)} KG · {p.status}</div>) : <div className="text-slate-400">No knitting programs</div>}
-          {g.knitting_dcs.length > 0 && <div className="mt-1 text-slate-600">DCs: {g.knitting_dcs.map((d: any) => `${d.dc_no} (${kg(d.kg)} KG)`).join(', ')}</div>}
-          {g.knitting_receipts.length > 0 && <div className="text-slate-600">Receipts: {g.knitting_receipts.join(', ')}</div>}
+        <div><div className="mb-1 font-semibold text-ink">Knitting</div>
+          {g.programs.length ? g.programs.map((p: any) => <div key={p.id}>{p.program_no} · {p.fabric_type ?? '—'}{p.fabric_colour ? ` · Kora / Raw for ${p.fabric_colour}` : ''} · {kg(p.required_qty_kg)} KG · {p.status}</div>) : <div className="text-ink-muted">No knitting programs</div>}
+          {g.knitting_dcs.length > 0 && <div className="mt-1 text-ink-secondary">DCs: {g.knitting_dcs.map((d: any) => `${d.dc_no} (${kg(d.kg)} KG)`).join(', ')}</div>}
+          {g.knitting_receipts.length > 0 && <div className="text-ink-secondary">Receipts: {g.knitting_receipts.join(', ')}</div>}
         </div>
-        <div><div className="mb-1 font-semibold text-slate-700">Fabric processes</div>
-          <table className="w-full" id="gen-processes"><thead className="text-slate-500"><tr>{['Order', 'Process', 'Vendor', 'Input', 'Good', 'Reject', 'Loss', 'Status'].map((h) => <th key={h} className="px-1 text-left">{h}</th>)}</tr></thead>
-            <tbody>{g.processes.map((p: any) => <tr key={p.id} className="border-t border-slate-100"><td className="px-1">{p.fpo_no}</td><td className="px-1">{p.sub_process}</td><td className="px-1">{p.vendor}</td>
+        <div><div className="mb-1 font-semibold text-ink">Fabric processes</div>
+          <table className="w-full" id="gen-processes"><thead className="text-ink-secondary"><tr>{['Order', 'Process', 'Vendor', 'Input', 'Good', 'Reject', 'Loss', 'Status'].map((h) => <th key={h} className="px-1 text-left">{h}</th>)}</tr></thead>
+            <tbody>{g.processes.map((p: any) => <tr key={p.id} className="border-t border-surface-divider"><td className="px-1">{p.fpo_no}</td><td className="px-1">{p.sub_process}</td><td className="px-1">{p.vendor}</td>
               <td className="px-1 tabular-nums">{kg(p.input_kg)}</td><td className="px-1 tabular-nums">{kg(p.good_kg)}</td><td className="px-1 tabular-nums">{kg(p.reject_kg)}</td><td className="px-1 tabular-nums">{kg(p.loss_kg)}</td><td className="px-1">{p.status}</td></tr>)}
-              {!g.processes.length && <tr><td colSpan={8} className="px-1 py-2 text-slate-400">None yet</td></tr>}</tbody></table>
+              {!g.processes.length && <tr><td colSpan={8} className="px-1 py-2 text-ink-muted">None yet</td></tr>}</tbody></table>
         </div>
       </div>
-      <div className="mt-3"><div className="mb-1 font-semibold text-slate-700">Fabric the job holds (by fabric · state · colour · GSM · Dia)</div>
-        <table className="w-full" id="gen-fabric-groups"><thead className="bg-slate-50 text-slate-500"><tr>{['Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Rolls', 'Available KG', 'Programs'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
-          <tbody>{g.fabric_groups.map((f: any, i: number) => <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{f.fabric_name}</td><td className="px-2 py-1">{f.process_state}</td><td className="px-2 py-1">{f.colour ?? "—"}</td>
+      <div className="mt-3"><div className="mb-1 font-semibold text-ink">Fabric the job holds (by fabric · state · colour · GSM · Dia)</div>
+        <table className="w-full" id="gen-fabric-groups"><thead className="bg-surface-muted text-ink-secondary"><tr>{['Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Rolls', 'Available KG', 'Programs'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
+          <tbody>{g.fabric_groups.map((f: any, i: number) => <tr key={i} className="border-t border-surface-divider"><td className="px-2 py-1">{f.fabric_name}</td><td className="px-2 py-1">{f.process_state}</td><td className="px-2 py-1">{f.colour ?? "—"}</td>
             <td className="px-2 py-1">{f.gsm ?? '—'}</td><td className="px-2 py-1">{f.dia ?? '—'}</td><td className="px-2 py-1">{f.rolls}</td><td className="px-2 py-1 tabular-nums font-semibold">{kg(f.available_kg)}</td><td className="px-2 py-1">{f.programs || '—'}</td></tr>)}
-            {!g.fabric_groups.length && <tr><td colSpan={8} className="px-2 py-2 text-slate-400">No fabric available</td></tr>}</tbody></table>
+            {!g.fabric_groups.length && <tr><td colSpan={8} className="px-2 py-2 text-ink-muted">No fabric available</td></tr>}</tbody></table>
       </div>
     </div>
   );
@@ -156,12 +156,12 @@ function Genealogy({ g }: { g: any }) {
 
 /** Where a yarn lot came from: purchased (PO / GRN / supplier) or made by yarn dyeing / winding / twisting from earlier lots. */
 function Origin({ o }: { o: any }) {
-  if (!o) return <span className="text-slate-400">—</span>;
+  if (!o) return <span className="text-ink-muted">—</span>;
   if (o.kind !== 'PROCESSED') return <span>Purchased · {o.po_no ? `PO ${o.po_no} · ` : ''}GRN {o.grn_no}{o.supplier ? ` · ${o.supplier}` : ''}</span>;
   return (
     <span>
       <span className="rounded bg-purple-100 px-1 text-caption font-bold text-purple-800">{o.process.process_type}</span> by {o.process.vendor || '—'} on {o.process.process_no} (receipt {o.process.receipt_no}{o.process.ref_dc_no ? `, DC ${o.process.ref_dc_no}` : ''})
-      {(o.from ?? []).map((f: any, i: number) => <span key={i} className="block pl-3 text-slate-600">← lot {f.lot_no} · {kg(f.issued_qty_kg)} KG on {f.dc_no}: <Origin o={f.origin} /></span>)}
+      {(o.from ?? []).map((f: any, i: number) => <span key={i} className="block pl-3 text-ink-secondary">← lot {f.lot_no} · {kg(f.issued_qty_kg)} KG on {f.dc_no}: <Origin o={f.origin} /></span>)}
     </span>
   );
 }
@@ -169,11 +169,11 @@ function Origin({ o }: { o: any }) {
 function Section({ title, cols, rows }: { title: string; cols: string[]; rows: unknown[][] }) {
   return (
     <div className="card overflow-x-auto">
-      <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">{title}</h3>
+      <h3 className="px-4 pt-3 text-body font-semibold text-ink">{title}</h3>
       <table className="mt-2 w-full">
-        <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((c) => <th key={c} className="px-2 py-1.5 text-left">{c}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-slate-100">{r.map((c, k) => <td key={k} className="px-2 py-1">{c !== null && typeof c === 'object' ? (c as ReactNode) : String(c ?? '—') || '—'}</td>)}</tr>)}
-          {!rows.length && <tr><td colSpan={cols.length} className="px-3 py-4 text-center text-slate-400">None</td></tr>}</tbody>
+        <thead className="bg-surface-muted text-ink-secondary"><tr>{cols.map((c) => <th key={c} className="px-2 py-1.5 text-left">{c}</th>)}</tr></thead>
+        <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-surface-divider">{r.map((c, k) => <td key={k} className="px-2 py-1">{c !== null && typeof c === 'object' ? (c as ReactNode) : String(c ?? '—') || '—'}</td>)}</tr>)}
+          {!rows.length && <tr><td colSpan={cols.length} className="px-3 py-4 text-center text-ink-muted">None</td></tr>}</tbody>
       </table>
     </div>
   );

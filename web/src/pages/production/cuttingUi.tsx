@@ -21,7 +21,7 @@ export const errMsg = (e: any, fallback = 'Request failed') =>
 
 /* ------------------------------------------------------------ status chip */
 const CHIP: Record<string, string> = {
-  DRAFT: 'bg-slate-100 text-slate-700 ring-slate-200',
+  DRAFT: 'bg-surface-header text-ink ring-surface-border',
   APPROVED: 'bg-sky-100 text-sky-800 ring-sky-200',
   RELEASED: 'bg-indigo-100 text-indigo-800 ring-indigo-200',
   IN_PROGRESS: 'bg-amber-100 text-amber-800 ring-amber-200',
@@ -32,20 +32,20 @@ const CHIP: Record<string, string> = {
   VARIANCE_PENDING: 'bg-rose-100 text-rose-800 ring-rose-200',
   VARIANCE: 'bg-rose-100 text-rose-800 ring-rose-200',
   REOPENED: 'bg-violet-100 text-violet-800 ring-violet-200',
-  PLANNED: 'bg-slate-100 text-slate-700 ring-slate-200',
+  PLANNED: 'bg-surface-header text-ink ring-surface-border',
   SPREAD: 'bg-sky-100 text-sky-800 ring-sky-200',
   CUT: 'bg-amber-100 text-amber-800 ring-amber-200',
   OPEN: 'bg-sky-100 text-sky-800 ring-sky-200',
   PARTIALLY_USED: 'bg-amber-100 text-amber-800 ring-amber-200',
   ISSUED: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
-  GENERATED: 'bg-slate-100 text-slate-700 ring-slate-200',
+  GENERATED: 'bg-surface-header text-ink ring-surface-border',
   REVERSED: 'bg-red-100 text-red-700 ring-red-200',
   ROLL_RESERVED: 'bg-sky-100 text-sky-800 ring-sky-200',
   PLAN_APPROVED: 'bg-indigo-100 text-indigo-800 ring-indigo-200',
   RECEIVED: 'bg-teal-100 text-teal-800 ring-teal-200',
   SPREADING: 'bg-amber-100 text-amber-800 ring-amber-200',
   READY_FOR_CUTTING: 'bg-orange-100 text-orange-800 ring-orange-200',
-  IMPORTED: 'bg-slate-100 text-slate-700 ring-slate-200',
+  IMPORTED: 'bg-surface-header text-ink ring-surface-border',
   REVIEW: 'bg-violet-100 text-violet-800 ring-violet-200',
   REJECTED: 'bg-red-100 text-red-700 ring-red-200',
   OBSOLETE: 'bg-zinc-200 text-zinc-700 ring-zinc-300',
@@ -55,10 +55,10 @@ const LABEL: Record<string, string> = { IN_PROGRESS: 'In Cutting', VARIANCE_PEND
 
 export function StatusChip({ status }: { status?: string | null }) {
   const s = String(status ?? '').toUpperCase();
-  if (!s) return <span className="text-slate-400">—</span>;
+  if (!s) return <span className="text-ink-muted">—</span>;
   return (
     <span className={clsx('inline-flex items-center rounded-full px-2 py-0.5 text-caption font-semibold ring-1 ring-inset',
-      CHIP[s] ?? 'bg-slate-100 text-slate-700 ring-slate-200')}>
+      CHIP[s] ?? 'bg-surface-header text-ink ring-surface-border')}>
       {LABEL[s] ?? s.replace(/_/g, ' ')}
     </span>
   );
@@ -68,7 +68,7 @@ export function StatusChip({ status }: { status?: string | null }) {
 export function Qty({ v, uom, dp = 0, className }: { v: unknown; uom: string; dp?: number; className?: string }) {
   return (
     <span className={clsx('whitespace-nowrap tabular-nums', className)}>
-      {fmtNumber(v, dp)} <span className="text-micro font-medium text-slate-400">{uom}</span>
+      {fmtNumber(v, dp)} <span className="text-micro font-medium text-ink-muted">{uom}</span>
     </span>
   );
 }
@@ -80,13 +80,13 @@ export function UomInput({ label, uom, value, onChange, step = 'any', min, disab
 }) {
   return (
     <div className={className}>
-      {label && <label className="label">{label} <span className="text-slate-400">({uom})</span></label>}
+      {label && <label className="label">{label} <span className="text-ink-muted">({uom})</span></label>}
       <div className="relative">
         <input type="number" className="input pr-12 text-right tabular-nums" value={value ?? ''} step={step} min={min}
           disabled={disabled} onChange={(e) => onChange(e.target.value)} />
-        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-caption font-semibold text-slate-400">{uom}</span>
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-caption font-semibold text-ink-muted">{uom}</span>
       </div>
-      {hint && <p className="mt-1 text-caption text-slate-400">{hint}</p>}
+      {hint && <p className="mt-1 text-caption text-ink-muted">{hint}</p>}
     </div>
   );
 }
@@ -117,31 +117,31 @@ export function SearchSelect({ label, value, options, onChange, placeholder = 'S
       <button type="button" disabled={disabled}
         className={clsx('input flex items-center justify-between text-left', disabled && 'opacity-60')}
         onClick={() => setOpen((o) => !o)}>
-        <span className={clsx('truncate', !selected && 'text-slate-400')}>{selected?.label ?? placeholder}</span>
+        <span className={clsx('truncate', !selected && 'text-ink-muted')}>{selected?.label ?? placeholder}</span>
         <span className="flex items-center gap-1">
           {selected && !disabled && (
-            <X size={14} className="text-slate-400 hover:text-slate-600"
+            <X size={14} className="text-ink-muted hover:text-ink-secondary"
               onClick={(e) => { e.stopPropagation(); onChange(''); }} />
           )}
-          <ChevronDown size={14} className="text-slate-400" />
+          <ChevronDown size={14} className="text-ink-muted" />
         </span>
       </button>
       {open && (
-        <div className="absolute z-40 mt-1 w-full min-w-[260px] rounded-lg border border-slate-200 bg-white shadow-lg">
+        <div className="absolute z-40 mt-1 w-full min-w-[260px] rounded-lg border border-surface-border bg-white shadow-lg">
           <input autoFocus className="input rounded-b-none border-0 border-b" placeholder="Type to search…"
             value={q} onChange={(e) => setQ(e.target.value)} />
           <div className="max-h-64 overflow-y-auto py-1">
-            {filtered.length === 0 && <p className="px-3 py-2 text-xs text-slate-400">No matches</p>}
+            {filtered.length === 0 && <p className="px-3 py-2 text-xs text-ink-muted">No matches</p>}
             {filtered.map((o) => (
               <button key={o.value} type="button" disabled={o.disabled}
-                className={clsx('flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-body hover:bg-slate-50',
+                className={clsx('flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-body hover:bg-surface-muted',
                   String(o.value) === String(value ?? '') && 'bg-brand-50', o.disabled && 'cursor-not-allowed opacity-50')}
                 onClick={() => { onChange(String(o.value)); setOpen(false); setQ(''); }}>
                 <span className="min-w-0">
                   <span className="block truncate">{o.label}</span>
-                  {o.sub && <span className="block truncate text-caption text-slate-400">{o.sub}</span>}
+                  {o.sub && <span className="block truncate text-caption text-ink-muted">{o.sub}</span>}
                 </span>
-                {o.right && <span className="shrink-0 text-caption font-semibold text-slate-600">{o.right}</span>}
+                {o.right && <span className="shrink-0 text-caption font-semibold text-ink-secondary">{o.right}</span>}
               </button>
             ))}
           </div>
@@ -161,7 +161,7 @@ export function ScanInput({ onScan, placeholder = 'Scan barcode / type code and 
     <div className={className}>
       {label && <label className="label">{label}</label>}
       <div className="relative">
-        <ScanLine size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <ScanLine size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
         <input className="input pl-9 tabular-nums" value={v} placeholder={placeholder}
           onChange={(e) => setV(e.target.value)}
           onKeyDown={(e) => {
@@ -185,16 +185,16 @@ export function MetricTile({ label, value, uom, tone = 'slate', sub }: {
   label: string; value: ReactNode; uom?: string; tone?: 'slate' | 'emerald' | 'amber' | 'red' | 'indigo'; sub?: ReactNode;
 }) {
   const t = {
-    slate: 'border-slate-200 bg-white', emerald: 'border-emerald-200 bg-emerald-50', amber: 'border-amber-200 bg-amber-50',
+    slate: 'border-surface-border bg-white', emerald: 'border-emerald-200 bg-emerald-50', amber: 'border-amber-200 bg-amber-50',
     red: 'border-red-200 bg-red-50', indigo: 'border-indigo-200 bg-indigo-50',
   }[tone];
   return (
     <div className={clsx('rounded-lg border px-3 py-2', t)}>
-      <p className="text-caption font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">
-        {value} {uom && <span className="text-xs font-semibold text-slate-400">{uom}</span>}
+      <p className="text-caption font-medium uppercase tracking-wide text-ink-secondary">{label}</p>
+      <p className="mt-0.5 text-lg font-bold tabular-nums text-ink">
+        {value} {uom && <span className="text-xs font-semibold text-ink-muted">{uom}</span>}
       </p>
-      {sub && <p className="text-caption text-slate-500">{sub}</p>}
+      {sub && <p className="text-caption text-ink-secondary">{sub}</p>}
     </div>
   );
 }

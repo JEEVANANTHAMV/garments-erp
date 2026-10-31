@@ -66,7 +66,7 @@ const STOCK_STATUSES: { value: string; label: string }[] = [
 ];
 
 const selectCls =
-  'text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500';
+  'text-xs rounded-lg border border-surface-input py-1.5 px-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500';
 
 const num = (v: unknown) => Number(v) || 0;
 const uom = (r: YarnStockRow) => r.uom_code || 'KG';
@@ -223,14 +223,14 @@ export default function YarnStockPage() {
   return (
     <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div className="flex items-center gap-2">
           <span className="p-2 rounded-lg bg-violet-100 text-violet-700">
             <GitBranch size={20} />
           </span>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Yarn Stock List</h1>
-            <p className="text-xs text-slate-500">
+            <h1 className="text-xl font-bold text-ink tracking-tight">Yarn Stock List</h1>
+            <p className="text-xs text-ink-secondary">
               Lot-wise yarn stock — which Internal Order / Style it was bought for, where it sits, and what is left
             </p>
           </div>
@@ -240,21 +240,21 @@ export default function YarnStockPage() {
           <button
             onClick={exportExcel}
             disabled={!batches.length}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition disabled:opacity-50"
           >
             <Download size={14} className="text-violet-600" />
             <span>Export Excel</span>
           </button>
           <button
             onClick={() => nav('/procurement/yarn/orders')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <GitBranch size={14} className="text-violet-600" />
             <span>Yarn Orders</span>
           </button>
           <button
             onClick={() => nav('/procurement/yarn/grn')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <PackageCheck size={14} className="text-violet-600" />
             <span>Yarn GRNs</span>
@@ -271,54 +271,54 @@ export default function YarnStockPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Yarn Lots Listed</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.lots)}</div>
-          <div className="text-caption text-slate-400 mt-0.5">GRN lot lines {hasFilters ? '(filtered)' : ''}</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Yarn Lots Listed</div>
+          <div className="text-2xl font-bold text-ink mt-1">{fmtNumber(kpis.lots)}</div>
+          <div className="text-caption text-ink-muted mt-0.5">GRN lot lines {hasFilters ? '(filtered)' : ''}</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Available to Issue</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Available to Issue</div>
           <div className="text-2xl font-bold text-violet-600 mt-1">
             {fmtDecimal(kpis.availableKg)} <span className="text-sm font-semibold">{totalUom ?? 'KG'}</span>
           </div>
-          <div className="text-caption text-slate-400 mt-0.5">Balance of available + partly issued lots</div>
+          <div className="text-caption text-ink-muted mt-0.5">Balance of available + partly issued lots</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Lots by Stock Status</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Lots by Stock Status</div>
           <div className="flex flex-wrap gap-1.5 mt-2">
             {STOCK_STATUSES.filter((s) => kpis.byStatus[s.value]).map((s) => (
               <button key={s.value} onClick={() => setStatusFilter(statusFilter === s.value ? '' : s.value)}
-                className={`text-caption px-2 py-0.5 rounded-full border ${statusFilter === s.value ? 'bg-violet-600 text-white border-violet-600' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}>
+                className={`text-caption px-2 py-0.5 rounded-full border ${statusFilter === s.value ? 'bg-violet-600 text-white border-violet-600' : 'bg-surface-muted border-surface-border text-ink hover:bg-surface-header'}`}>
                 {s.label}: <strong>{kpis.byStatus[s.value]}</strong>
               </button>
             ))}
-            {!kpis.lots && <span className="text-caption text-slate-400">—</span>}
+            {!kpis.lots && <span className="text-caption text-ink-muted">—</span>}
           </div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Accepted / Issued</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Accepted / Issued</div>
           <div className="text-lg font-bold text-emerald-600 mt-1">
-            {fmtDecimal(totals.accepted)} <span className="text-xs text-slate-400">/ {fmtDecimal(totals.issued)} {totalUom ?? ''}</span>
+            {fmtDecimal(totals.accepted)} <span className="text-xs text-ink-muted">/ {fmtDecimal(totals.issued)} {totalUom ?? ''}</span>
           </div>
-          <div className="text-caption text-slate-400 mt-0.5">Issued includes purchase returns</div>
+          <div className="text-caption text-ink-muted mt-0.5">Issued includes purchase returns</div>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+      <div className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between bg-white p-3 rounded-xl border border-surface-border/80 shadow-sm">
         <div className="relative w-full lg:w-80">
-          <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-2.5 text-ink-muted" />
           <input
             type="text"
             placeholder="Search yarn, lot, shade, GRN, PO, IO No, style, supplier, bin..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-surface-input focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full lg:w-auto flex-wrap">
-          <Filter size={15} className="text-slate-400" />
+          <Filter size={15} className="text-ink-muted" />
           <select value={ioFilter} onChange={(e) => setIoFilter(e.target.value)} className={selectCls} title="Internal Order No">
             <option value="">All IO No</option>
             {facets.io_nos.map((io) => <option key={io} value={io}>{io}</option>)}
@@ -342,13 +342,13 @@ export default function YarnStockPage() {
             <option value="PENDING">Pending</option>
           </select>
           {hasFilters && (
-            <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 px-2 py-1">
+            <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-ink-secondary hover:text-ink px-2 py-1">
               <X size={13} /> Clear
             </button>
           )}
           <button
             onClick={() => refetch()}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600 transition"
+            className="p-1.5 rounded-lg border border-surface-input hover:bg-surface-muted text-ink-secondary transition"
             title="Refresh list"
           >
             <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
@@ -357,11 +357,11 @@ export default function YarnStockPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
+              <tr className="bg-surface-muted/80 text-ink-secondary font-semibold border-b border-surface-border">
                 <th className="py-3 px-4">Yarn Item</th>
                 <th className="py-3 px-3">Lot No / Shade</th>
                 <th className="py-3 px-3">Count / Type</th>
@@ -379,51 +379,51 @@ export default function YarnStockPage() {
                 <th className="py-3 px-4 text-center">Bin</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {isLoading ? (
                 <tr>
-                  <td colSpan={15} className="py-10 text-center text-slate-400">Loading yarn stock...</td>
+                  <td colSpan={15} className="py-10 text-center text-ink-muted">Loading yarn stock...</td>
                 </tr>
               ) : errorMessage ? (
                 <tr>
                   <td colSpan={15} className="py-12 text-center">
                     <AlertCircle size={32} className="mx-auto text-red-400 mb-2" />
-                    <p className="text-sm font-medium text-slate-700">Unable to load yarn stock</p>
+                    <p className="text-sm font-medium text-ink">Unable to load yarn stock</p>
                     <p className="text-xs text-red-600 mt-1">{errorMessage}</p>
-                    <button onClick={() => refetch()} className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50">Try again</button>
+                    <button onClick={() => refetch()} className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-surface-input hover:bg-surface-muted">Try again</button>
                   </td>
                 </tr>
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-slate-400">
-                    <Boxes size={36} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-sm font-medium text-slate-600">No yarn lots found</p>
-                    <p className="text-xs text-slate-400 mt-1">
+                  <td colSpan={15} className="py-12 text-center text-ink-muted">
+                    <Boxes size={36} className="mx-auto text-ink-disabled mb-2" />
+                    <p className="text-sm font-medium text-ink-secondary">No yarn lots found</p>
+                    <p className="text-xs text-ink-muted mt-1">
                       {hasFilters ? 'No lot matches these filters.' : 'Yarn stock is created when Yarn GRNs are inwarded.'}
                     </p>
                     {hasFilters && (
-                      <button onClick={clearFilters} className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700">Clear filters</button>
+                      <button onClick={clearFilters} className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-surface-input hover:bg-surface-muted text-ink">Clear filters</button>
                     )}
                   </td>
                 </tr>
               ) : (
                 batches.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50/70 transition">
+                  <tr key={b.id} className="hover:bg-surface-muted/70 transition">
                     <td className="py-3 px-4">
                       <div className="font-semibold text-violet-800">{b.yarn_name || 'Yarn Item'}</div>
-                      <div className="text-micro text-slate-400 tabular-nums">{b.yarn_code || ''}</div>
+                      <div className="text-micro text-ink-muted tabular-nums">{b.yarn_code || ''}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <div className="tabular-nums font-bold text-slate-800 text-caption">{b.lot_no || '—'}</div>
+                      <div className="tabular-nums font-bold text-ink text-caption">{b.lot_no || '—'}</div>
                       {(b.shade || b.color_name) && (
-                        <div className="text-micro text-slate-500 mt-0.5">
+                        <div className="text-micro text-ink-secondary mt-0.5">
                           {[b.shade, b.color_name].filter(Boolean).join(' · ')}
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-caption text-slate-600">
+                    <td className="py-3 px-3 text-caption text-ink-secondary">
                       <div className="font-medium">{b.count_str || '—'}</div>
-                      <div className="text-micro text-slate-400">{b.yarn_type || b.grn_yarn_type || ''}</div>
+                      <div className="text-micro text-ink-muted">{b.yarn_type || b.grn_yarn_type || ''}</div>
                     </td>
                     <td className="py-3 px-3 text-caption">
                       {b.internal_ir_no ? (
@@ -431,27 +431,27 @@ export default function YarnStockPage() {
                           {b.internal_ir_no}
                         </button>
                       ) : (
-                        <span className="text-slate-300">No IO</span>
+                        <span className="text-ink-disabled">No IO</span>
                       )}
                       {b.style_code && (
-                        <div className="text-micro text-slate-500 mt-0.5" title={b.style_name ?? ''}>{b.style_code}</div>
+                        <div className="text-micro text-ink-secondary mt-0.5" title={b.style_name ?? ''}>{b.style_code}</div>
                       )}
-                      {b.so_no && <div className="text-micro text-slate-400">{b.so_no}</div>}
+                      {b.so_no && <div className="text-micro text-ink-muted">{b.so_no}</div>}
                     </td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap">{fmtDecimal(b.received_qty, 3)} <span className="text-micro text-slate-400">{uom(b)}</span></td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap text-emerald-700">{fmtDecimal(b.accepted_qty, 3)} <span className="text-micro text-slate-400">{uom(b)}</span></td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap text-red-600">{num(b.rejected_qty) ? <>{fmtDecimal(b.rejected_qty, 3)} <span className="text-micro text-slate-400">{uom(b)}</span></> : '—'}</td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap text-slate-600" title={num(b.returned_qty) ? `Includes ${fmtDecimal(b.returned_qty, 3)} returned to supplier` : undefined}>
-                      {num(b.issued_qty) + num(b.returned_qty) ? <>{fmtDecimal(num(b.issued_qty) + num(b.returned_qty), 3)} <span className="text-micro text-slate-400">{uom(b)}</span></> : '—'}
+                    <td className="py-3 px-3 text-right whitespace-nowrap">{fmtDecimal(b.received_qty, 3)} <span className="text-micro text-ink-muted">{uom(b)}</span></td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap text-emerald-700">{fmtDecimal(b.accepted_qty, 3)} <span className="text-micro text-ink-muted">{uom(b)}</span></td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap text-red-600">{num(b.rejected_qty) ? <>{fmtDecimal(b.rejected_qty, 3)} <span className="text-micro text-ink-muted">{uom(b)}</span></> : '—'}</td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap text-ink-secondary" title={num(b.returned_qty) ? `Includes ${fmtDecimal(b.returned_qty, 3)} returned to supplier` : undefined}>
+                      {num(b.issued_qty) + num(b.returned_qty) ? <>{fmtDecimal(num(b.issued_qty) + num(b.returned_qty), 3)} <span className="text-micro text-ink-muted">{uom(b)}</span></> : '—'}
                     </td>
-                    <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-violet-700">{fmtDecimal(b.balance_qty, 3)} <span className="text-micro font-normal text-slate-400">{uom(b)}</span></td>
+                    <td className="py-3 px-3 text-right whitespace-nowrap font-bold text-violet-700">{fmtDecimal(b.balance_qty, 3)} <span className="text-micro font-normal text-ink-muted">{uom(b)}</span></td>
                     <td className="py-3 px-3 text-right whitespace-nowrap text-indigo-700">
                       {b.weight_kg != null ? `${fmtDecimal(b.weight_kg, 3)} KG` : '—'}
-                      {b.packs ? <div className="text-micro text-slate-400">{b.packs} bags</div> : null}
+                      {b.packs ? <div className="text-micro text-ink-muted">{b.packs} bags</div> : null}
                     </td>
                     <td className="py-3 px-3">
-                      <div className="text-slate-800 font-medium">{b.warehouse_name || '—'}</div>
-                      <span className={`tabular-nums text-micro px-1 py-0.5 rounded ${b.location_bin ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
+                      <div className="text-ink font-medium">{b.warehouse_name || '—'}</div>
+                      <span className={`tabular-nums text-micro px-1 py-0.5 rounded ${b.location_bin ? 'bg-surface-header text-ink-secondary' : 'bg-amber-50 text-amber-700'}`}>
                         Bin: {b.location_bin || 'Unassigned'}
                       </span>
                     </td>
@@ -459,15 +459,15 @@ export default function YarnStockPage() {
                       <button onClick={() => nav(`/procurement/yarn/grn/${b.grn_id}`)} className="text-violet-700 hover:underline font-medium">
                         {b.grn_no}
                       </button>
-                      <div className="text-slate-400 text-micro">{fmtDate(b.grn_date)}{b.po_no ? ` · ${b.po_no}` : ''}</div>
-                      {b.supplier_name && <div className="text-slate-500 text-micro truncate max-w-[160px]">{b.supplier_name}</div>}
+                      <div className="text-ink-muted text-micro">{fmtDate(b.grn_date)}{b.po_no ? ` · ${b.po_no}` : ''}</div>
+                      {b.supplier_name && <div className="text-ink-secondary text-micro truncate max-w-[160px]">{b.supplier_name}</div>}
                     </td>
                     <td className="py-3 px-3 text-center">{getQcBadge(b.qc_status)}</td>
                     <td className="py-3 px-3 text-center">{getStockBadge(b.stock_status)}</td>
                     <td className="py-3 px-4 text-center">
                       <button
                         onClick={() => handleOpenEdit(b)}
-                        className="p-1 text-slate-500 hover:text-violet-700 hover:bg-violet-50 rounded transition"
+                        className="p-1 text-ink-secondary hover:text-violet-700 hover:bg-violet-50 rounded transition"
                         title="Assign bin"
                       >
                         <Edit3 size={14} />
@@ -479,7 +479,7 @@ export default function YarnStockPage() {
             </tbody>
             {!isLoading && !errorMessage && batches.length > 0 && (
               <tfoot>
-                <tr className="bg-slate-50 font-semibold text-slate-800 border-t-2 border-slate-200">
+                <tr className="bg-surface-muted font-semibold text-ink border-t-2 border-surface-border">
                   <td className="py-2.5 px-4" colSpan={4}>
                     Total — {fmtNumber(batches.length)} lot{batches.length === 1 ? '' : 's'}
                     {!totalUom && <span className="ml-2 text-micro font-normal text-amber-700">(mixed units — totals are indicative)</span>}
@@ -516,7 +516,7 @@ export default function YarnStockPage() {
           }
         >
           <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-50 rounded-lg text-slate-700 grid grid-cols-2 gap-2 text-caption">
+            <div className="p-3 bg-surface-muted rounded-lg text-ink grid grid-cols-2 gap-2 text-caption">
               <div>Yarn: <strong>{editBatch.yarn_name}</strong></div>
               <div>Count: <strong>{editBatch.count_str || '—'}</strong></div>
               <div>GRN: <strong>{editBatch.grn_no}</strong></div>
@@ -525,13 +525,13 @@ export default function YarnStockPage() {
               {editBatch.internal_ir_no && (
                 <div className="col-span-2">
                   Internal Order: <strong className="text-indigo-700">{editBatch.internal_ir_no}</strong>
-                  {editBatch.style_code && <span className="ml-2 text-slate-500">({editBatch.style_code})</span>}
+                  {editBatch.style_code && <span className="ml-2 text-ink-secondary">({editBatch.style_code})</span>}
                 </div>
               )}
             </div>
 
             <div>
-              <label className="block text-caption font-medium text-slate-600 mb-1">Bin / Rack</label>
+              <label className="block text-caption font-medium text-ink-secondary mb-1">Bin / Rack</label>
               {binsQuery.isLoading ? (
                 <LoadingBlock label="Loading bins…" rows={1} />
               ) : binsQuery.error ? (

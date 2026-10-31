@@ -51,23 +51,23 @@ function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
         {list.isLoading ? <LoadingBlock /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>
                 {['DC no', 'Date', 'Process', 'Process unit', 'Jobs', 'Lines', 'Cones', 'Outward KG', 'Good', 'Reject', 'Loss', 'Balance', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Good|Reject|Loss|Balance|Lines|Cones/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {rows.map((o) => (
-                  <tr key={o.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(o.id)}>
+                  <tr key={o.id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => onOpen(o.id)}>
                     <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{o.ypo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">Reprocess</span> : null}</td>
                     <td className="px-3 py-2">{fmtDate(o.ypo_date)}</td><td className="px-3 py-2">{o.process_name || o.process_code}</td><td className="px-3 py-2">{o.vendor_name}</td>
-                    <td className="px-3 py-2">{o.jobs || '—'} <span className="text-slate-400">({o.job_count})</span></td>
+                    <td className="px-3 py-2">{o.jobs || '—'} <span className="text-ink-muted">({o.job_count})</span></td>
                     <td className="px-3 py-2 text-right">{o.line_count}</td><td className="px-3 py-2 text-right">{o.cones || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{kg(o.outward_kg)}</td><td className="px-3 py-2 text-right tabular-nums text-emerald-700">{kg(o.good_kg)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-red-700">{kg(o.reject_kg)}</td><td className="px-3 py-2 text-right tabular-nums text-amber-700">{kg(o.loss_kg)}</td>
-                    <td className={`px-3 py-2 text-right tabular-nums ${o.balance_kg > 0 ? 'font-semibold text-orange-700' : 'text-slate-400'}`}>{kg(o.balance_kg)}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${o.balance_kg > 0 ? 'font-semibold text-orange-700' : 'text-ink-muted'}`}>{kg(o.balance_kg)}</td>
                     <td className="px-3 py-2"><YpStatus value={o.status} /></td>
                   </tr>
                 ))}
-                {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">No yarn process DCs yet</td></tr>}
+                {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-ink-muted">No yarn process DCs yet</td></tr>}
               </tbody>
             </table>
           </div>
@@ -223,13 +223,13 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
           </div>
           {plan && (
             <table className="mt-2 w-full text-small" id="ypo-plan">
-              <thead className="text-slate-500"><tr>{['Quotation line', 'Job', 'Dye colour', 'Rate', 'Quoted KG', 'Sent earlier', 'Balance', 'Job has', 'Short'].map((h) => <th key={h} className={`px-2 py-1 ${/KG|earlier|Balance|has|Short|Rate/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+              <thead className="text-ink-secondary"><tr>{['Quotation line', 'Job', 'Dye colour', 'Rate', 'Quoted KG', 'Sent earlier', 'Balance', 'Job has', 'Short'].map((h) => <th key={h} className={`px-2 py-1 ${/KG|earlier|Balance|has|Short|Rate/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
               <tbody>{plan.lines.map((l: any) => (
-                <tr key={l.line_id} className="border-t border-slate-100">
+                <tr key={l.line_id} className="border-t border-surface-divider">
                   <td className="px-2 py-1">{l.description || l.yarn_name || '—'}</td><td className="px-2 py-1 font-semibold">{l.job_no ?? '—'}</td><td className="px-2 py-1">{l.dye_colour ?? '—'}</td>
                   <td className="px-2 py-1 text-right">₹{l.rate}</td><td className="px-2 py-1 text-right">{kg(l.quoted_kg)}</td><td className="px-2 py-1 text-right">{kg(l.sent_kg)}</td>
                   <td className="px-2 py-1 text-right font-semibold">{kg(l.balance_kg)}</td><td className="px-2 py-1 text-right">{kg(l.available_kg)}</td>
-                  <td className={`px-2 py-1 text-right ${l.short_kg > 0 ? 'font-semibold text-red-700' : 'text-slate-400'}`}>{l.short_kg > 0 ? kg(l.short_kg) : '—'}</td>
+                  <td className={`px-2 py-1 text-right ${l.short_kg > 0 ? 'font-semibold text-red-700' : 'text-ink-muted'}`}>{l.short_kg > 0 ? kg(l.short_kg) : '—'}</td>
                 </tr>))}</tbody>
             </table>
           )}
@@ -238,7 +238,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
 
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-2.5">
-          <h3 className="text-body font-semibold text-slate-800">Job / lot / cone entry <span className="font-normal text-slate-500">· {groups.length} job(s), {rows.length} line(s), {cones} cone(s)</span></h3>
+          <h3 className="text-body font-semibold text-ink">Job / lot / cone entry <span className="font-normal text-ink-secondary">· {groups.length} job(s), {rows.length} line(s), {cones} cone(s)</span></h3>
           {editable && <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setPicker('job')}><Plus size={13} className="mr-1" /> Add Job</Button>
             <Button size="sm" variant="secondary" onClick={() => setPicker('scan')}><ScanLine size={13} className="mr-1" /> Scan Cone / Lot</Button>
@@ -248,7 +248,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         </div>
         <div className="max-h-[55vh] overflow-auto">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
+            <thead className="sticky top-0 z-10 bg-surface-muted text-ink-secondary"><tr>
               {['#', 'Yarn item', dyeing ? 'Yarn colour' : 'Shade', 'Lot', 'GRN', 'Cone no', 'Cones', dyeing ? 'Dye colour' : null, 'Program', 'Available KG', 'Qty KG', ''].filter((x) => x !== null).map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -256,27 +256,27 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
                 <JobRows key={g.io_no} g={g} editable={editable} shade={dyeing} set={set} remove={(k) => setRows((rs) => rs.filter((r) => r.key !== k))}
                   programs={(programs.data ?? []).filter((p) => !g.rows[0].so_id || p.io_no === g.io_no || Number(p.so_id) === Number(g.rows[0].so_id))} />
               ))}
-              {!rows.length && <tr><td colSpan={dyeing ? 12 : 11} className="px-3 py-10 text-center text-slate-400">“Add Job” picks a job and its yarn lots (its own + general stock); scan a lot / cone, or import every lot of a job</td></tr>}
+              {!rows.length && <tr><td colSpan={dyeing ? 12 : 11} className="px-3 py-10 text-center text-ink-muted">“Add Job” picks a job and its yarn lots (its own + general stock); scan a lot / cone, or import every lot of a job</td></tr>}
             </tbody>
-            <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={dyeing ? 10 : 9} className="px-2 py-2 text-right">Total · {groups.length} job(s) · {cones} cone(s)</td><td className="px-2 py-2 text-right tabular-nums">{kg(total)}</td><td /></tr></tfoot>
+            <tfoot className="sticky bottom-0 bg-surface-header font-bold"><tr><td colSpan={dyeing ? 10 : 9} className="px-2 py-2 text-right">Total · {groups.length} job(s) · {cones} cone(s)</td><td className="px-2 py-2 text-right tabular-nums">{kg(total)}</td><td /></tr></tfoot>
           </table>
         </div>
       </div>
 
       {d && d.status !== 'DRAFT' && (
         <div className="card mt-3 space-y-3 p-4">
-          <h3 className="text-body font-semibold text-slate-800">Job-wise reconciliation — Outward = Good + Reject + Loss + Balance</h3>
+          <h3 className="text-body font-semibold text-ink">Job-wise reconciliation — Outward = Good + Reject + Loss + Balance</h3>
           <ReconCards t={d.reconciliation.total} />
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', 'Lines', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance', 'Status'].map((h) => <th key={h} className={`px-2 py-1.5 ${/KG|Balance|Lines/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Job', 'PO', 'Style', 'Lines', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance', 'Status'].map((h) => <th key={h} className={`px-2 py-1.5 ${/KG|Balance|Lines/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>{d.reconciliation.jobs.map((j: any) => (
-              <tr key={j.io_no} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{j.io_no}</td><td className="px-2 py-1">{j.buyer_po_no || '—'}</td><td className="px-2 py-1">{j.style_code || '—'}</td>
+              <tr key={j.io_no} className="border-t border-surface-divider"><td className="px-2 py-1 font-semibold">{j.io_no}</td><td className="px-2 py-1">{j.buyer_po_no || '—'}</td><td className="px-2 py-1">{j.style_code || '—'}</td>
                 <td className="px-2 py-1 text-right">{j.lines}</td><td className="px-2 py-1 text-right">{kg(j.outward_kg)}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(j.good_kg)}</td>
                 <td className="px-2 py-1 text-right text-red-700">{kg(j.reject_kg)}</td><td className="px-2 py-1 text-right text-amber-700">{kg(j.loss_kg)}</td>
                 <td className={`px-2 py-1 text-right ${j.balance_kg > 0 ? 'font-semibold text-orange-700' : ''}`}>{kg(j.balance_kg)}</td><td className="px-2 py-1"><YpStatus value={j.status} /></td></tr>
             ))}</tbody>
           </table>
-          {d.inwards?.length > 0 && <p className="text-xs text-slate-600">GRNs: {d.inwards.map((i: any) => `${i.inward_no} (${fmtDate(i.inward_date)}, ${i.status === 'POSTED' ? `good ${kg(i.good_kg)} KG` : i.status.toLowerCase()})`).join(' · ')}</p>}
+          {d.inwards?.length > 0 && <p className="text-xs text-ink-secondary">GRNs: {d.inwards.map((i: any) => `${i.inward_no} (${fmtDate(i.inward_date)}, ${i.status === 'POSTED' ? `good ${kg(i.good_kg)} KG` : i.status.toLowerCase()})`).join(' · ')}</p>}
         </div>
       )}
 
@@ -302,19 +302,19 @@ function JobRows({ g, editable, shade, set, remove, programs }: { g: { io_no: st
     <>
       <tr className="bg-sky-50/70"><td colSpan={shade ? 12 : 11} className="px-2 py-1.5 text-small font-semibold text-sky-900">Job {g.io_no}{g.rows[0].buyer_po_no ? ` · PO ${g.rows[0].buyer_po_no}` : ''}</td></tr>
       {g.rows.map((r, i) => (
-        <tr key={r.key} className="border-t border-slate-100">
-          <td className="px-2 py-1 text-slate-400">{i + 1}</td><td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.shade || '—'}</td>
-          <td className="px-2 py-1 tabular-nums">{r.lot_no}</td><td className="px-2 py-1 tabular-nums text-slate-500">{r.grn_no}</td>
+        <tr key={r.key} className="border-t border-surface-divider">
+          <td className="px-2 py-1 text-ink-muted">{i + 1}</td><td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.shade || '—'}</td>
+          <td className="px-2 py-1 tabular-nums">{r.lot_no}</td><td className="px-2 py-1 tabular-nums text-ink-secondary">{r.grn_no}</td>
           <td className="px-1 py-1">{editable ? <input className={`${inp} w-20`} value={r.cone_no} onChange={(e) => set(r.key, { cone_no: e.target.value })} /> : (r.cone_no || '—')}</td>
           <td className="px-1 py-1 text-right">{editable ? <input type="number" className={`${inp} w-14 text-right`} value={r.no_of_cones} onChange={(e) => set(r.key, { no_of_cones: Number(e.target.value) })} /> : (r.no_of_cones || '—')}</td>
           {shade && <td className="px-1 py-1">{editable ? <input className={`${inp} w-28 ${!r.target_shade.trim() ? 'border-amber-400' : ''}`} placeholder="Dye colour *" value={r.target_shade} onChange={(e) => set(r.key, { target_shade: e.target.value })} /> : (r.target_shade || '—')}</td>}
           <td className="px-1 py-1">{editable ? <select className={`${inp} w-28`} value={r.process_id} onChange={(e) => set(r.key, { process_id: e.target.value })}><option value="">—</option>{programs.map((p) => <option key={p.id} value={p.id}>{p.process_no}</option>)}</select> : (r.process_id ? programs.find((p) => String(p.id) === r.process_id)?.process_no ?? '✓' : '—')}</td>
-          <td className="px-2 py-1 text-right tabular-nums text-slate-500">{editable ? kg(r.available_kg) : '—'}</td>
+          <td className="px-2 py-1 text-right tabular-nums text-ink-secondary">{editable ? kg(r.available_kg) : '—'}</td>
           <td className="px-1 py-1 text-right">{editable ? <input type="number" step="0.001" className={`${inp} w-24 text-right`} value={r.qty_kg} onChange={(e) => set(r.key, { qty_kg: Number(e.target.value) })} /> : <span className="tabular-nums">{kg(r.qty_kg)}</span>}</td>
-          <td className="px-1 py-1 text-right">{editable && <button className="p-1 text-slate-400 hover:text-red-600" onClick={() => remove(r.key)}><Trash2 size={13} /></button>}</td>
+          <td className="px-1 py-1 text-right">{editable && <button className="p-1 text-ink-muted hover:text-red-600" onClick={() => remove(r.key)}><Trash2 size={13} /></button>}</td>
         </tr>
       ))}
-      <tr className="bg-slate-50 font-semibold"><td colSpan={shade ? 10 : 9} className="px-2 py-1 text-right text-slate-600">Job {g.io_no} subtotal · {g.rows.length} line(s)</td><td className="px-2 py-1 text-right tabular-nums">{kg(sub)}</td><td /></tr>
+      <tr className="bg-surface-muted font-semibold"><td colSpan={shade ? 10 : 9} className="px-2 py-1 text-right text-ink-secondary">Job {g.io_no} subtotal · {g.rows.length} line(s)</td><td className="px-2 py-1 text-right tabular-nums">{kg(sub)}</td><td /></tr>
     </>
   );
 }
@@ -381,18 +381,18 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <Select label="Job *" className="w-64" value={jobId} placeholder="— Job / IO —" onChange={(e) => { setJobId(e.target.value); setSel({}); }} options={jobs.map((j) => ({ value: j.id, label: `${j.job_no}${j.buyer_name ? ` · ${j.buyer_name}` : ''}` }))} />
         {mode === 'job' && <SearchInput value={q} onChange={setQ} placeholder="Lot, cone, GRN, yarn, PO, supplier…" className="w-72" />}
-        {job && <span className="text-xs text-slate-500">{mode === 'job' ? `Lots held by ${job.job_no} + general stock` : `Lots held by ${job.job_no}`}</span>}
+        {job && <span className="text-xs text-ink-secondary">{mode === 'job' ? `Lots held by ${job.job_no} + general stock` : `Lots held by ${job.job_no}`}</span>}
       </div>
-      <div className="max-h-[50vh] overflow-auto rounded border border-slate-200">
+      <div className="max-h-[50vh] overflow-auto rounded border border-surface-border">
         <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-slate-50 text-slate-500"><tr>{[mode === 'job' ? '' : null, 'Lot', 'Yarn', 'Shade', 'Held by', 'GRN', 'PO', 'Supplier', 'Store', 'Available KG', mode === 'job' ? 'Send KG' : null, mode === 'job' ? 'Cone no' : null, mode === 'job' ? 'Cones' : null].filter((x) => x !== null).map((h, i) => <th key={i} className={`px-2 py-1.5 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="sticky top-0 bg-surface-muted text-ink-secondary"><tr>{[mode === 'job' ? '' : null, 'Lot', 'Yarn', 'Shade', 'Held by', 'GRN', 'PO', 'Supplier', 'Store', 'Available KG', mode === 'job' ? 'Send KG' : null, mode === 'job' ? 'Cone no' : null, mode === 'job' ? 'Cones' : null].filter((x) => x !== null).map((h, i) => <th key={i} className={`px-2 py-1.5 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>
-            {!job && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">Choose the job first</td></tr>}
+            {!job && <tr><td colSpan={13} className="px-2 py-6 text-center text-ink-muted">Choose the job first</td></tr>}
             {job && lots.isLoading && <tr><td colSpan={13} className="px-2 py-2"><LoadingBlock rows={3} /></td></tr>}
             {job && shown.map((l) => {
               const on = !!sel[K(l)];
               return (
-                <tr key={K(l)} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
+                <tr key={K(l)} className={`border-t border-surface-divider ${on ? 'bg-emerald-50' : ''}`}>
                   {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[K(l)]; else x[K(l)] = { kg: l.available_kg, cone: l.cone_no ?? '', cones: l.cones ?? 0 }; return x; })} /></td>}
                   <td className="px-2 py-1 tabular-nums font-semibold">{l.lot_no}{l.processed ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">processed</span> : null}</td>
                   <td className="px-2 py-1">{l.yarn_name}{l.count_str ? ` ${l.count_str}` : ''}</td><td className="px-2 py-1">{l.color_name || l.shade || '—'}</td>
@@ -404,7 +404,7 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
                 </tr>
               );
             })}
-            {job && !lots.isLoading && !shown.length && <tr><td colSpan={13} className="px-2 py-6 text-center text-slate-400">No yarn stock for this job</td></tr>}
+            {job && !lots.isLoading && !shown.length && <tr><td colSpan={13} className="px-2 py-6 text-center text-ink-muted">No yarn stock for this job</td></tr>}
           </tbody>
         </table>
       </div>

@@ -120,13 +120,13 @@ export function CartonEntryPage() {
             <>
               {/* bulk bar: fill weights / dimensions for the ticked cartons, save, verify + seal, post, delete */}
               <div className="flex flex-wrap items-end gap-2 border-b border-surface-border p-3 text-body" id="bulk-bar">
-                <span className="mr-1 self-center text-slate-600"><b>{selected.length}</b> selected</span>
+                <span className="mr-1 self-center text-ink-secondary"><b>{selected.length}</b> selected</span>
                 {DIM_KEYS.map(([k, , label]) => (
-                  <label key={k} className="flex flex-col text-caption text-slate-500">{label}
+                  <label key={k} className="flex flex-col text-caption text-ink-secondary">{label}
                     <input className="input !h-8 w-20 text-right" inputMode="decimal" id={`fill-${k}`} value={fill[k]} onChange={(e) => setFill({ ...fill, [k]: e.target.value.replace(/[^0-9.]/g, '') })} /></label>
                 ))}
                 <Button size="sm" variant="secondary" id="fill-apply" disabled={!selected.length} onClick={applyFill}>Fill selected</Button>
-                <span className="mx-1 h-6 w-px self-center bg-slate-200" />
+                <span className="mx-1 h-6 w-px self-center bg-surface-border" />
                 <Button size="sm" id="bulk-save" disabled={!dirty.length} loading={busy === 'save'} onClick={saveAll}><Save size={13} />Save changes{dirty.length ? ` (${dirty.length})` : ''}</Button>
                 {can('PACKING.UPDATE') && <>
                   <Button size="sm" variant="secondary" id="bulk-verify-seal" disabled={!selected.length || !!dirty.length} loading={busy === 'verify_seal'}
@@ -155,7 +155,7 @@ export function CartonEntryPage() {
                         <td className="td tabular-nums">{c.carton_no}{c.pl_plan_no && <div className="font-sans text-caption text-blue-700" data-plan-ctn={c.carton_no}>{c.pl_plan_no} · ctn {c.pl_ctn_no}</div>}</td>
                         <td className="td whitespace-nowrap" title={c.contents ?? ''}>{shortContents(c.contents)}</td>
                         <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-caption text-amber-700">partial</span> : null}</td>
-                        <td className="td text-right">{c.polybag_qty} <span className="text-slate-400">({c.std_polybag_qty})</span></td>
+                        <td className="td text-right">{c.polybag_qty} <span className="text-ink-muted">({c.std_polybag_qty})</span></td>
                         {DIM_KEYS.map(([k, f]) => (
                           <td key={k} className="td w-20 text-right">{ed
                             ? <input className={clsx('input !h-7 w-20 text-right', edits[c.id]?.[k] !== undefined && edits[c.id]![k] !== str(c[f]) && '!border-amber-400 !bg-amber-50')}
@@ -166,9 +166,9 @@ export function CartonEntryPage() {
                         <td className="td"><PkStatus value={c.carton_status} posted={c.is_posted} /></td>
                         <td className="td whitespace-nowrap text-right">
                           {ed && can('PACKING.UPDATE') &&
-                            <button className="mr-2 inline-flex items-center gap-1 text-slate-600 hover:underline" data-edit={c.carton_no} onClick={() => openEdit(c.id)}><Pencil size={13} />Edit</button>}
+                            <button className="mr-2 inline-flex items-center gap-1 text-ink-secondary hover:underline" data-edit={c.carton_no} onClick={() => openEdit(c.id)}><Pencil size={13} />Edit</button>}
                           <Link className="mr-2 inline-flex items-center gap-1 text-brand-700 hover:underline" to={`/logistics/packing/verify?code=${encodeURIComponent(c.carton_no)}`}><ScanLine size={13} />Verify</Link>
-                          {c.carton_status !== 'VOID' && <button className="inline-flex items-center gap-1 text-slate-600 hover:underline" onClick={() => printCartonLabel(c.id)}><Printer size={13} />Label</button>}
+                          {c.carton_status !== 'VOID' && <button className="inline-flex items-center gap-1 text-ink-secondary hover:underline" onClick={() => printCartonLabel(c.id)}><Printer size={13} />Label</button>}
                         </td>
                       </tr>
                     );

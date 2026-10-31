@@ -81,26 +81,26 @@ export const StyleSizesPanel = forwardRef<StyleSizesHandle, { styleId: number; e
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-body font-bold uppercase tracking-wider text-slate-700">Sizes of this style</h3>
+            <h3 className="text-body font-bold uppercase tracking-wider text-ink">Sizes of this style</h3>
             {cur.data?.version_no != null && (
               <span className="tabular-nums text-caption font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                 Active Version: v{cur.data.version_no}
               </span>
             )}
           </div>
-          <p className="text-small text-slate-500">Pick the sizes one by one. Modifying sizes updates SKUs and increments the style version for audit tracking.</p>
+          <p className="text-small text-ink-secondary">Pick the sizes one by one. Modifying sizes updates SKUs and increments the style version for audit tracking.</p>
         </div>
         {dirty && <span className="rounded bg-amber-100 px-2 py-0.5 text-caption font-semibold text-amber-800">Not saved</span>}
       </div>
       <div className="flex flex-wrap gap-2" id="style-size-chips">
-        {rows.length === 0 && <span className="text-xs text-slate-400">No sizes yet — add sizes or import a size group.</span>}
+        {rows.length === 0 && <span className="text-xs text-ink-muted">No sizes yet — add sizes or import a size group.</span>}
         {rows.map((r, i) => (
-          <span key={r.size_id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${r.is_default ? 'border-brand-400 bg-brand-50' : 'border-slate-300 bg-white'}`} title={r.group_name ? `From ${r.group_name}` : undefined}>
-            {editable && <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => move(i, -1)}>‹</button>}
+          <span key={r.size_id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${r.is_default ? 'border-brand-400 bg-brand-50' : 'border-surface-input bg-white'}`} title={r.group_name ? `From ${r.group_name}` : undefined}>
+            {editable && <button type="button" className="text-ink-muted hover:text-ink" onClick={() => move(i, -1)}>‹</button>}
             <b>{r.size_code}</b>
             {r.source_type === 'ORDER' && <span className="text-micro font-bold text-amber-700">ORDER</span>}
-            {editable && <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => move(i, 1)}>›</button>}
-            {editable && <button type="button" title="Default size" className={r.is_default ? 'text-brand-600' : 'text-slate-300 hover:text-brand-600'} onClick={() => change(rows.map((x) => ({ ...x, is_default: x.size_id === r.size_id ? !x.is_default : false })))}>★</button>}
+            {editable && <button type="button" className="text-ink-muted hover:text-ink" onClick={() => move(i, 1)}>›</button>}
+            {editable && <button type="button" title="Default size" className={r.is_default ? 'text-brand-600' : 'text-ink-disabled hover:text-brand-600'} onClick={() => change(rows.map((x) => ({ ...x, is_default: x.size_id === r.size_id ? !x.is_default : false })))}>★</button>}
             {editable && <button type="button" className="font-bold text-red-500" id={`style-size-remove-${r.size_code}`} onClick={() => change(rows.filter((x) => x.size_id !== r.size_id))}>×</button>}
           </span>
         ))}
@@ -138,10 +138,10 @@ export const StyleSizesPanel = forwardRef<StyleSizesHandle, { styleId: number; e
       )}
       {(cur.data?.log?.length ?? 0) > 0 && (
         <details className="mt-3 text-xs">
-          <summary className="cursor-pointer font-semibold text-slate-600">Size change log ({cur.data!.log.length})</summary>
+          <summary className="cursor-pointer font-semibold text-ink-secondary">Size change log ({cur.data!.log.length})</summary>
           <table className="mt-1 w-full"><tbody>{cur.data!.log.map((l: any) => (
-            <tr key={l.id} className="border-t"><td className="py-0.5 pr-2 text-slate-500">{fmtDateTime(l.created_at)}</td><td className="pr-2 font-semibold">{l.action}</td>
-              <td className="pr-2">{l.size_code || ''} {l.old_value ? `${l.old_value} →` : ''} {l.new_value || ''}</td><td className="pr-2">{l.reason || ''}</td><td className="text-slate-500">{l.user_name}</td></tr>
+            <tr key={l.id} className="border-t"><td className="py-0.5 pr-2 text-ink-secondary">{fmtDateTime(l.created_at)}</td><td className="pr-2 font-semibold">{l.action}</td>
+              <td className="pr-2">{l.size_code || ''} {l.old_value ? `${l.old_value} →` : ''} {l.new_value || ''}</td><td className="pr-2">{l.reason || ''}</td><td className="text-ink-secondary">{l.user_name}</td></tr>
           ))}</tbody></table>
         </details>
       )}

@@ -469,7 +469,7 @@ export default function YarnGRNDetailPage() {
 
   if (!isNew && loadingExisting) {
     return (
-      <div className="py-20 text-center text-slate-400">
+      <div className="py-20 text-center text-ink-muted">
         Loading yarn GRN #{id}...
       </div>
     );
@@ -478,11 +478,11 @@ export default function YarnGRNDetailPage() {
   return (
     <div className="space-y-5 pb-16">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => nav('/procurement/yarn/grn')}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 transition"
+            className="p-1.5 rounded-lg border border-surface-input hover:bg-surface-header text-ink-secondary transition"
             title="Back to Yarn GRNs"
           >
             <ArrowLeft size={16} />
@@ -492,12 +492,12 @@ export default function YarnGRNDetailPage() {
               <span className="p-1.5 rounded-md bg-amber-100 text-amber-700">
                 <PackageCheck size={18} />
               </span>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl font-bold text-ink tracking-tight">
                 {isNew ? 'New Yarn GRN (Weighed Inward)' : `Yarn GRN: ${header.grn_no}`}
               </h1>
               {!isNew && <Badge tone="green">POSTED TO STOCK (KG)</Badge>}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-ink-secondary mt-0.5">
               Weighed KG gross/tare receipt, bag counting, lot verification, tax amounts, and stock ledger posting
             </p>
           </div>
@@ -532,9 +532,9 @@ export default function YarnGRNDetailPage() {
           <div className="text-caption font-semibold text-indigo-700 uppercase tracking-wider">Bags / Packs</div>
           <div className="text-lg font-bold text-indigo-900 mt-0.5 tabular-nums">{totals.totalPacks} Bags</div>
         </div>
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="text-caption font-semibold text-slate-600 uppercase tracking-wider">Taxable Value</div>
-          <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">₹{fmtDecimal(totals.taxableAmount, 2)}</div>
+        <div className="p-3 bg-surface-muted rounded-xl border border-surface-border">
+          <div className="text-caption font-semibold text-ink-secondary uppercase tracking-wider">Taxable Value</div>
+          <div className="text-lg font-bold text-ink mt-0.5 tabular-nums">₹{fmtDecimal(totals.taxableAmount, 2)}</div>
         </div>
         <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
           <div className="text-caption font-semibold text-purple-700 uppercase tracking-wider">
@@ -549,24 +549,24 @@ export default function YarnGRNDetailPage() {
       </div>
 
       {/* Header Fields Card */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-100 gap-2">
-          <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+      <div className="bg-white p-4 rounded-xl border border-surface-border/80 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-surface-divider gap-2">
+          <div className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
             <Disc size={14} className="text-amber-600" />
             <span>Receipt Header Information</span>
           </div>
 
           {/* Inter-State Supply IGST Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs transition">
+          <label className="flex items-center gap-2 cursor-pointer bg-surface-muted hover:bg-surface-header border border-surface-border px-3 py-1 rounded-lg text-xs transition">
             <input
               type="checkbox"
               checked={header.is_interstate}
               disabled={!isNew}
               onChange={(e) => setHeader((h) => ({ ...h, is_interstate: e.target.checked }))}
-              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+              className="rounded border-surface-input text-amber-600 focus:ring-amber-500"
             />
-            <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
-            <span className="text-micro text-slate-400 font-normal">
+            <span className="font-semibold text-ink">Inter-State Supply (IGST Applicable)</span>
+            <span className="text-micro text-ink-muted font-normal">
               {header.is_interstate ? 'Single IGST rate applied' : 'Split CGST + SGST applied'}
             </span>
           </label>
@@ -591,7 +591,7 @@ export default function YarnGRNDetailPage() {
           {isNew ? (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-caption font-medium text-slate-600">
+                <label className="text-caption font-medium text-ink-secondary">
                   Link Yarn POs ({selectedPoIds.length} selected)
                 </label>
                 {selectedPoIds.length > 0 && (
@@ -601,7 +601,7 @@ export default function YarnGRNDetailPage() {
               <select
                 value=""
                 onChange={(e) => handleAddPO(e.target.value)}
-                className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:border-amber-500 font-semibold text-amber-900"
+                className="w-full text-xs rounded-lg border border-surface-input py-1.5 px-2 focus:border-amber-500 font-semibold text-amber-900"
               >
                 <option value="">+ Add PO to this GRN...</option>
                 {poList.filter((p) => !selectedPoIds.includes(String(p.id)) && openForGrn(p)).map((p) => (
@@ -642,7 +642,7 @@ export default function YarnGRNDetailPage() {
             </div>
           ) : (
             <div>
-              <label className="block text-caption font-medium text-slate-600 mb-1">
+              <label className="block text-caption font-medium text-ink-secondary mb-1">
                 Linked Purchase Orders ({selectedPoIds.length || (header.po_id ? 1 : 0)})
               </label>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -652,7 +652,7 @@ export default function YarnGRNDetailPage() {
                   </span>
                 ))}
                 {!selectedPoIds.length && !header.po_id && (
-                  <span className="text-xs text-slate-400">Direct Receipt</span>
+                  <span className="text-xs text-ink-muted">Direct Receipt</span>
                 )}
               </div>
             </div>
@@ -660,7 +660,7 @@ export default function YarnGRNDetailPage() {
 
           {isNew ? (
             <div>
-              <label className="block text-caption font-medium text-slate-600 mb-1">
+              <label className="block text-caption font-medium text-ink-secondary mb-1">
                 Map Gate Entry (Auto-fills details)
               </label>
               <select
@@ -738,13 +738,13 @@ export default function YarnGRNDetailPage() {
           />
 
           <div>
-            <label className="block text-caption font-medium text-slate-600 mb-1">
+            <label className="block text-caption font-medium text-ink-secondary mb-1">
               Overall QC Status
             </label>
             <select
               value={header.qc_status}
               onChange={(e) => setHeader((p) => ({ ...p, qc_status: e.target.value }))}
-              className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 font-semibold"
+              className="w-full text-xs rounded-lg border border-surface-input py-1.5 px-2 font-semibold"
               disabled={!isNew}
             >
               <option value="ACCEPTED">ACCEPTED (Post to Available Stock)</option>
@@ -766,21 +766,21 @@ export default function YarnGRNDetailPage() {
       </div>
 
       {/* Yarn Line Items Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden space-y-3 p-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm overflow-hidden space-y-3 p-4">
+        <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
           <div>
-            <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <Layers size={14} className="text-amber-600" />
               <span>Yarn Inward Items & Amount Details ({lines.length})</span>
             </h2>
-            <p className="text-caption text-slate-400">
+            <p className="text-caption text-ink-muted">
               Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
             </p>
           </div>
           {isNew && (
             <button
               onClick={() => setLines((p) => [...p, emptyYarnGrnLine()])}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
             >
               <Plus size={13} />
               <span>Add Yarn Item</span>
@@ -791,7 +791,7 @@ export default function YarnGRNDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+              <tr className="bg-surface-muted text-ink-secondary font-semibold border-b border-surface-border">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
                 <th className="py-2.5 px-2 min-w-[100px]">PO Ref</th>
                 <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
@@ -816,13 +816,13 @@ export default function YarnGRNDetailPage() {
                 {isNew && <th className="py-2.5 px-2 text-center w-8"></th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {lines.map((l, idx) => {
                 const lineTax = Math.round(((l.taxable_amount || 0) * ((Number(l.gst_rate) || 5) / 100)) * 100) / 100;
                 return (
-                  <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
+                  <tr key={l._key || idx} className="hover:bg-surface-muted/70 transition">
                     {/* # S.No */}
-                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-caption">{idx + 1}</td>
+                    <td className="py-2.5 px-2 text-center text-ink-muted tabular-nums text-caption">{idx + 1}</td>
 
                     {/* PO Ref */}
                     <td className="py-2.5 px-2">
@@ -831,7 +831,7 @@ export default function YarnGRNDetailPage() {
                           {l.po_no || `PO #${l.po_id}`}
                         </span>
                       ) : (
-                        <span className="text-slate-400 text-caption">—</span>
+                        <span className="text-ink-muted text-caption">—</span>
                       )}
                     </td>
 
@@ -844,7 +844,7 @@ export default function YarnGRNDetailPage() {
                             const so = (salesOrders.data ?? []).find((x: any) => String(x.id) === e.target.value);
                             updateLine(idx, { so_id: e.target.value, ...(so?.style_id ? { style_id: String(so.style_id) } : {}) });
                           }}
-                          className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                          className="w-full text-xs rounded border border-surface-input py-1 px-1 bg-white"
                         >
                           <option value="">Stock / General</option>
                           {toOptions(salesOrders.data).map((so) => (
@@ -852,7 +852,7 @@ export default function YarnGRNDetailPage() {
                           ))}
                         </select>
                       ) : (
-                        <span className="font-medium text-slate-700">
+                        <span className="font-medium text-ink">
                           {l.so_id ? String((salesOrders.data ?? []).find((x: any) => String(x.id) === String(l.so_id))?.job_no ?? `SO #${l.so_id}`) : 'Stock / General'}
                         </span>
                       )}
@@ -864,7 +864,7 @@ export default function YarnGRNDetailPage() {
                         <select
                           value={l.style_id || ''}
                           onChange={(e) => updateLine(idx, { style_id: e.target.value })}
-                          className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                          className="w-full text-xs rounded border border-surface-input py-1 px-1 bg-white"
                         >
                           <option value="">—</option>
                           {toOptions(styles.data).map((st) => (
@@ -872,7 +872,7 @@ export default function YarnGRNDetailPage() {
                           ))}
                         </select>
                       ) : (
-                        <span className="font-medium text-slate-700">
+                        <span className="font-medium text-ink">
                           {l.style_id ? `Style #${l.style_id}` : '—'}
                         </span>
                       )}
@@ -884,7 +884,7 @@ export default function YarnGRNDetailPage() {
                         <select
                           value={l.yarn_id}
                           onChange={(e) => updateLine(idx, { yarn_id: e.target.value, yarn_count_str: countOf(e.target.value) })}
-                          className="w-full text-xs rounded border border-slate-300 py-1 px-1.5"
+                          className="w-full text-xs rounded border border-surface-input py-1 px-1.5"
                         >
                           <option value="">Select Yarn</option>
                           {toOptions(yarns.data).map((o) => (
@@ -894,7 +894,7 @@ export default function YarnGRNDetailPage() {
                           ))}
                         </select>
                       ) : (
-                        <div className="font-semibold text-slate-900">{l.yarn_name || 'Yarn Item'}</div>
+                        <div className="font-semibold text-ink">{l.yarn_name || 'Yarn Item'}</div>
                       )}
                     </td>
 
@@ -902,7 +902,7 @@ export default function YarnGRNDetailPage() {
                     <td className="py-2.5 px-2" id={`yg-count-${idx}`}>
                       {isNew ? (
                         <select value="" id={`yg-count-${idx}-select`} title="Count of the yarn item — changing it switches to the base's item for that count"
-                          onChange={(e) => void switchCount(idx, l.yarn_id, e.target.value)} className="w-24 text-xs rounded border border-slate-300 py-0.5 px-1">
+                          onChange={(e) => void switchCount(idx, l.yarn_id, e.target.value)} className="w-24 text-xs rounded border border-surface-input py-0.5 px-1">
                           <option value="">{l.yarn_count_str || '—'}</option>
                           {(yarnCounts.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
@@ -910,7 +910,7 @@ export default function YarnGRNDetailPage() {
                     </td>
 
                     {/* Yarn Type */}
-                    <td className="py-2.5 px-2 text-slate-600">
+                    <td className="py-2.5 px-2 text-ink-secondary">
                       {isNew ? (
                         <select
                           value={l.yarn_type}
@@ -947,10 +947,10 @@ export default function YarnGRNDetailPage() {
                             placeholder="Shade"
                           />
                         ) : (
-                          <span className="text-slate-400 text-xs block text-center">—</span>
+                          <span className="text-ink-muted text-xs block text-center">—</span>
                         )
                       ) : (
-                        <span className="tabular-nums text-slate-700 text-xs">{l.shade_code || l.color_name || '—'}</span>
+                        <span className="tabular-nums text-ink text-xs">{l.shade_code || l.color_name || '—'}</span>
                       )}
                     </td>
                     <td className="py-2.5 px-2">
@@ -959,16 +959,16 @@ export default function YarnGRNDetailPage() {
                           type="text"
                           value={l.lot_no}
                           onChange={(e) => updateLine(idx, { lot_no: e.target.value })}
-                          className="w-20 text-xs tabular-nums border border-slate-300 rounded px-1.5 py-1"
+                          className="w-20 text-xs tabular-nums border border-surface-input rounded px-1.5 py-1"
                         />
                       ) : (
-                        <span className="tabular-nums text-slate-700">{l.lot_no}</span>
+                        <span className="tabular-nums text-ink">{l.lot_no}</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-2 text-right text-slate-500 whitespace-nowrap">
+                    <td className="py-2.5 px-2 text-right text-ink-secondary whitespace-nowrap">
                       {l.ordered_qty != null ? (
                         <div className="leading-tight">
-                          <div>{fmtDecimal(l.ordered_qty)} <span className="text-micro text-slate-400">ordered</span></div>
+                          <div>{fmtDecimal(l.ordered_qty)} <span className="text-micro text-ink-muted">ordered</span></div>
                           {Number(l.prev_received) > 0 && <div>{fmtDecimal(l.prev_received)} <span className="text-micro">recd earlier</span></div>}
                           <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-micro font-normal">pending</span></div>
                           {isNew && l.po_line_id && <div><LineReceiptSelect id={`ygrn-line-${idx}-receipt`} value={l.receipt_type} onChange={(v) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, receipt_type: v } : x)))} /></div>}
@@ -986,7 +986,7 @@ export default function YarnGRNDetailPage() {
                           onChange={(e) =>
                             updateLine(idx, { received_qty: parseFloat(e.target.value) || 0 })
                           }
-                          className="w-20 text-xs text-right font-bold text-amber-700 border border-slate-300 rounded px-1.5 py-1"
+                          className="w-20 text-xs text-right font-bold text-amber-700 border border-surface-input rounded px-1.5 py-1"
                         />
                       ) : (
                         <span className="font-bold text-amber-700">{fmtDecimal(l.received_qty)}</span>
@@ -1000,7 +1000,7 @@ export default function YarnGRNDetailPage() {
                           onChange={(e) =>
                             updateLine(idx, { packs: parseInt(e.target.value) || 0 })
                           }
-                          className="w-14 text-xs text-center border border-slate-300 rounded px-1 py-1"
+                          className="w-14 text-xs text-center border border-surface-input rounded px-1 py-1"
                         />
                       ) : (
                         <span className="font-medium">{l.packs}</span>
@@ -1018,7 +1018,7 @@ export default function YarnGRNDetailPage() {
                           onChange={(e) =>
                             updateLine(idx, { rejected_qty: parseFloat(e.target.value) || 0 })
                           }
-                          className="w-14 text-xs text-right text-red-600 border border-slate-300 rounded px-1 py-1"
+                          className="w-14 text-xs text-right text-red-600 border border-surface-input rounded px-1 py-1"
                         />
                       ) : (
                         <span className="text-red-600">{fmtDecimal(l.rejected_qty)}</span>
@@ -1033,7 +1033,7 @@ export default function YarnGRNDetailPage() {
                           onChange={(e) =>
                             updateLine(idx, { hold_qty: parseFloat(e.target.value) || 0 })
                           }
-                          className="w-14 text-xs text-right text-amber-600 border border-slate-300 rounded px-1 py-1"
+                          className="w-14 text-xs text-right text-amber-600 border border-surface-input rounded px-1 py-1"
                         />
                       ) : (
                         <span className="text-amber-600">{fmtDecimal(l.hold_qty)}</span>
@@ -1048,7 +1048,7 @@ export default function YarnGRNDetailPage() {
                           step="0.1"
                           value={l.rate}
                           onChange={(e) => updateLine(idx, { rate: parseFloat(e.target.value) || 0 })}
-                          className="w-16 text-xs text-right tabular-nums border border-slate-300 rounded px-1 py-1"
+                          className="w-16 text-xs text-right tabular-nums border border-surface-input rounded px-1 py-1"
                         />
                       ) : (
                         <span className="tabular-nums">₹{fmtDecimal(l.rate, 2)}</span>
@@ -1056,7 +1056,7 @@ export default function YarnGRNDetailPage() {
                     </td>
 
                     {/* Taxable Amount */}
-                    <td className="py-2.5 px-2 text-right tabular-nums font-medium text-slate-900">
+                    <td className="py-2.5 px-2 text-right tabular-nums font-medium text-ink">
                       ₹{fmtDecimal(l.taxable_amount, 2)}
                     </td>
 
@@ -1066,7 +1066,7 @@ export default function YarnGRNDetailPage() {
                         <select
                           value={l.gst_rate}
                           onChange={(e) => updateLine(idx, { gst_rate: parseFloat(e.target.value) || 5 })}
-                          className="w-16 text-xs text-center border border-slate-300 rounded px-1 py-1 bg-white tabular-nums"
+                          className="w-16 text-xs text-center border border-surface-input rounded px-1 py-1 bg-white tabular-nums"
                         >
                           <option value="0">0%</option>
                           <option value="5">5%</option>
@@ -1085,7 +1085,7 @@ export default function YarnGRNDetailPage() {
                     </td>
 
                     {/* Total Amount */}
-                    <td className="py-2.5 px-2 text-right tabular-nums font-bold text-slate-900">
+                    <td className="py-2.5 px-2 text-right tabular-nums font-bold text-ink">
                       ₹{fmtDecimal(l.total_amount, 2)}
                     </td>
 
@@ -1094,7 +1094,7 @@ export default function YarnGRNDetailPage() {
                         <select
                           value={l.qc_status}
                           onChange={(e) => updateLine(idx, { qc_status: e.target.value })}
-                          className="text-caption rounded border border-slate-300 py-0.5 px-1 font-semibold"
+                          className="text-caption rounded border border-surface-input py-0.5 px-1 font-semibold"
                         >
                           <option value="ACCEPTED">ACCEPTED</option>
                           <option value="CONDITIONAL">CONDITIONAL</option>
@@ -1110,7 +1110,7 @@ export default function YarnGRNDetailPage() {
                       <td className="py-2.5 px-2 text-center">
                         <button
                           onClick={() => setLines((p) => p.filter((_, i) => i !== idx))}
-                          className="p-1 text-slate-400 hover:text-red-600 rounded"
+                          className="p-1 text-ink-muted hover:text-red-600 rounded"
                           disabled={lines.length === 1}
                         >
                           <Trash2 size={13} />
@@ -1121,19 +1121,19 @@ export default function YarnGRNDetailPage() {
                 );
               })}
             </tbody>
-            <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
+            <tfoot className="bg-surface-muted/80 border-t border-surface-border font-bold text-ink">
               <tr>
-                <td colSpan={9} className="py-3 px-3 text-right text-slate-600">Totals:</td>
+                <td colSpan={9} className="py-3 px-3 text-right text-ink-secondary">Totals:</td>
                 <td className="py-3 px-2 text-right tabular-nums text-amber-800">{fmtDecimal(totals.totalKg, 2)}</td>
                 <td className="py-3 px-2 text-center tabular-nums">{totals.totalPacks}</td>
                 <td className="py-3 px-2 text-right tabular-nums text-emerald-800">{fmtDecimal(totals.acceptedKg, 2)}</td>
-                <td colSpan={3} className="py-3 px-2 text-right text-slate-500 text-xs">Taxable Total:</td>
+                <td colSpan={3} className="py-3 px-2 text-right text-ink-secondary text-xs">Taxable Total:</td>
                 <td className="py-3 px-2 text-right tabular-nums">₹{fmtDecimal(totals.taxableAmount, 2)}</td>
-                <td className="py-3 px-2 text-center text-xs text-slate-500">
+                <td className="py-3 px-2 text-center text-xs text-ink-secondary">
                   {header.is_interstate ? 'IGST:' : 'CGST+SGST:'}
                 </td>
                 <td className="py-3 px-2 text-right tabular-nums text-purple-700">₹{fmtDecimal(totals.totalTax, 2)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-sm font-bold text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-sm font-bold text-ink">
                   ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td colSpan={2}></td>

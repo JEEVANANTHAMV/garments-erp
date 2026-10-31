@@ -33,14 +33,14 @@ export function FabricRollTrackingPage() {
           <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-8">
             {[['Roll no', d.roll.roll_no], ['Fabric', d.roll.fabric_name], ['Job', d.roll.io_no || '—'], ['Colour', d.roll.color_name || '—'], ['GSM / dia', `${d.roll.gsm ?? '—'} / ${d.roll.dia ?? '—'}`],
               ['In store', `${kg(d.roll.balance_kg)} KG`], ['Store', d.roll.warehouse_name || '—'], ['Current status', `${d.roll.process_state}${d.roll.balance_kg > 0 ? ' · in stock' : ' · used'}`]].map(([k, v]) => (
-              <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+              <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{k}</div><div className="font-semibold">{v}</div></div>))}
           </div>
           <div className="card mb-3 overflow-x-auto">
-            <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">Movement history</h3>
+            <h3 className="px-4 pt-3 text-body font-semibold text-ink">Movement history</h3>
             <table className="mt-2 w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['#', 'Date', 'Transaction', 'Doc no', 'Process', 'From', 'To', 'Roll no', 'Job', 'Qty KG', 'Remarks'].map((x) => <th key={x} className={`px-2 py-2 ${x === 'Qty KG' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{['#', 'Date', 'Transaction', 'Doc no', 'Process', 'From', 'To', 'Roll no', 'Job', 'Qty KG', 'Remarks'].map((x) => <th key={x} className={`px-2 py-2 ${x === 'Qty KG' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.timeline.map((e: any, i: number) => (
-                <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1 text-slate-400">{i + 1}</td><td className="px-2 py-1">{fmtDate(e.when)}</td>
+                <tr key={i} className="border-t border-surface-divider"><td className="px-2 py-1 text-ink-muted">{i + 1}</td><td className="px-2 py-1">{fmtDate(e.when)}</td>
                   <td className="px-2 py-1 font-semibold">{EVENT_LABEL[e.event] ?? e.event}</td><td className="px-2 py-1 tabular-nums">{e.ref_no || '—'}</td><td className="px-2 py-1">{e.process || '—'}</td>
                   <td className="px-2 py-1">{e.from || '—'}</td><td className="px-2 py-1">{e.to || '—'}</td><td className="px-2 py-1 tabular-nums">{e.roll_no}</td><td className="px-2 py-1">{e.io_no || '—'}</td>
                   <td className="px-2 py-1 text-right">{kg(e.qty_kg)}</td><td className="px-2 py-1">{e.remarks || ''}</td></tr>
@@ -48,11 +48,11 @@ export function FabricRollTrackingPage() {
             </table>
           </div>
           <div className="card overflow-x-auto">
-            <h3 className="px-4 pt-3 text-body font-semibold text-slate-800">Process flow — rolls in this lineage</h3>
+            <h3 className="px-4 pt-3 text-body font-semibold text-ink">Process flow — rolls in this lineage</h3>
             <table className="mt-2 w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['Roll', 'State', 'Colour', 'Job', 'GRN', 'Store', 'KG', 'In store'].map((x) => <th key={x} className={`px-2 py-2 ${/KG|store$/.test(x) && x !== 'Store' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{['Roll', 'State', 'Colour', 'Job', 'GRN', 'Store', 'KG', 'In store'].map((x) => <th key={x} className={`px-2 py-2 ${/KG|store$/.test(x) && x !== 'Store' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.lineage.map((r: any) => (
-                <tr key={r.id} className={`border-t border-slate-100 ${r.id === d.roll.id ? 'bg-sky-50' : ''}`}><td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name || '—'}</td>
+                <tr key={r.id} className={`border-t border-surface-divider ${r.id === d.roll.id ? 'bg-sky-50' : ''}`}><td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name || '—'}</td>
                   <td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{r.grn_no}</td><td className="px-2 py-1">{r.warehouse_name || '—'}</td><td className="px-2 py-1 text-right">{kg(r.weight_kg)}</td><td className="px-2 py-1 text-right">{kg(r.balance_kg)}</td></tr>
               ))}</tbody>
             </table>
@@ -90,33 +90,33 @@ export function FabricProcessLedgerPage() {
       <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-6">
         {[['Outward', tot('outward_kg'), 'bg-sky-50 border-sky-200'], ['Good (inward)', tot('good_kg'), 'bg-emerald-50 border-emerald-200'], ['Reject', tot('reject_kg'), 'bg-red-50 border-red-200'],
           ['Process loss', tot('loss_kg'), 'bg-amber-50 border-amber-200'], ['Returned', tot('return_kg'), 'bg-purple-50 border-purple-200'], ['Pending at vendor', tot('balance_kg'), 'bg-orange-50 border-orange-200']].map(([k, v, c]) => (
-          <div key={String(k)} className={`rounded-lg border px-3 py-2 ${c}`}><div className="text-caption font-semibold uppercase tracking-wider text-slate-600">{k} (KG)</div><div className="text-lg font-bold tabular-nums">{kg(v)}</div></div>))}
+          <div key={String(k)} className={`rounded-lg border px-3 py-2 ${c}`}><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{k} (KG)</div><div className="text-lg font-bold tabular-nums">{kg(v)}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
         <div className="px-4 pt-2"><Tabs tabs={[{ key: 'summary', label: 'Process summary' }, { key: 'jobs', label: 'Job-wise status' }, { key: 'ledger', label: 'Date-wise ledger' }]} active={tab} onChange={setTab} /></div>
         {tab === 'summary' && (
           <>
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['Process', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Loss %', 'Returned KG', 'Balance KG'].map((h) => <th key={h} className={`px-3 py-2 ${h === 'Process' ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{['Process', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Loss %', 'Returned KG', 'Balance KG'].map((h) => <th key={h} className={`px-3 py-2 ${h === 'Process' ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
               <tbody>{P.map((p: any) => (
-                <tr key={p.sub_process} className="border-t border-slate-100"><td className="px-3 py-1.5 font-semibold">{p.process_name || p.sub_process}{p.is_reprocess ? ' (reprocess)' : ''}</td><td className="px-3 py-1.5 text-right">{kg(p.outward_kg)}</td>
+                <tr key={p.sub_process} className="border-t border-surface-divider"><td className="px-3 py-1.5 font-semibold">{p.process_name || p.sub_process}{p.is_reprocess ? ' (reprocess)' : ''}</td><td className="px-3 py-1.5 text-right">{kg(p.outward_kg)}</td>
                   <td className="px-3 py-1.5 text-right text-emerald-700">{kg(p.good_kg)}</td><td className="px-3 py-1.5 text-right text-red-700">{kg(p.reject_kg)}</td><td className="px-3 py-1.5 text-right text-amber-700">{kg(p.loss_kg)}</td>
                   <td className="px-3 py-1.5 text-right">{fmtDecimal(p.loss_pct, 2)}%</td><td className="px-3 py-1.5 text-right">{kg(p.return_kg)}</td><td className="px-3 py-1.5 text-right font-semibold">{kg(p.balance_kg)}</td></tr>
-              ))}{!P.length && <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-400">No process movement in this period</td></tr>}</tbody>
+              ))}{!P.length && <tr><td colSpan={8} className="px-3 py-8 text-center text-ink-muted">No process movement in this period</td></tr>}</tbody>
             </table>
             {rep.length > 0 && (
               <table className="mt-4 w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500"><tr>{['Reprocess', 'Total KG', 'Billable KG', 'Non-billable KG', 'Billable amount', 'Internal cost'].map((h) => <th key={h} className={`px-3 py-2 ${h === 'Reprocess' ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
-                <tbody>{rep.map((r: any) => <tr key={r.sub_process} className="border-t border-slate-100"><td className="px-3 py-1.5 font-semibold">{r.sub_process}</td><td className="px-3 py-1.5 text-right">{kg(r.kg)}</td><td className="px-3 py-1.5 text-right">{kg(r.billable_kg)}</td><td className="px-3 py-1.5 text-right">{kg(r.non_billable_kg)}</td><td className="px-3 py-1.5 text-right">₹{fmtDecimal(r.billable_amount, 2)}</td><td className="px-3 py-1.5 text-right">₹{fmtDecimal(r.internal_cost, 2)}</td></tr>)}</tbody>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>{['Reprocess', 'Total KG', 'Billable KG', 'Non-billable KG', 'Billable amount', 'Internal cost'].map((h) => <th key={h} className={`px-3 py-2 ${h === 'Reprocess' ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
+                <tbody>{rep.map((r: any) => <tr key={r.sub_process} className="border-t border-surface-divider"><td className="px-3 py-1.5 font-semibold">{r.sub_process}</td><td className="px-3 py-1.5 text-right">{kg(r.kg)}</td><td className="px-3 py-1.5 text-right">{kg(r.billable_kg)}</td><td className="px-3 py-1.5 text-right">{kg(r.non_billable_kg)}</td><td className="px-3 py-1.5 text-right">₹{fmtDecimal(r.billable_amount, 2)}</td><td className="px-3 py-1.5 text-right">₹{fmtDecimal(r.internal_cost, 2)}</td></tr>)}</tbody>
               </table>
             )}
           </>
         )}
         {tab === 'jobs' && (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Job no', 'PO no', 'Style no', 'Colour', 'Process', 'DCs', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Pending KG', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|DCs/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Job no', 'PO no', 'Style no', 'Colour', 'Process', 'DCs', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Pending KG', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|DCs/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>{(jobs.data ?? []).map((j, i) => (
-              <tr key={i} className="border-t border-slate-100"><td className="px-3 py-1.5 font-semibold">{j.io_no}</td><td className="px-3 py-1.5">{j.buyer_po_no || '—'}</td><td className="px-3 py-1.5">{j.style_code || '—'}</td><td className="px-3 py-1.5">{j.color_name || '—'}</td>
+              <tr key={i} className="border-t border-surface-divider"><td className="px-3 py-1.5 font-semibold">{j.io_no}</td><td className="px-3 py-1.5">{j.buyer_po_no || '—'}</td><td className="px-3 py-1.5">{j.style_code || '—'}</td><td className="px-3 py-1.5">{j.color_name || '—'}</td>
                 <td className="px-3 py-1.5">{j.sub_process}</td><td className="px-3 py-1.5 text-right">{j.dcs}</td><td className="px-3 py-1.5 text-right">{kg(j.outward_kg)}</td><td className="px-3 py-1.5 text-right text-emerald-700">{kg(j.good_kg)}</td>
                 <td className="px-3 py-1.5 text-right text-red-700">{kg(j.reject_kg)}</td><td className="px-3 py-1.5 text-right text-amber-700">{kg(j.loss_kg)}</td><td className="px-3 py-1.5 text-right font-semibold">{kg(j.pending_kg)}</td><td className="px-3 py-1.5"><FpStatus value={j.status} /></td></tr>
             ))}</tbody>
@@ -124,9 +124,9 @@ export function FabricProcessLedgerPage() {
         )}
         {tab === 'ledger' && (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['#', 'Doc date', 'Doc no', 'Transaction', 'Process', 'Contractor', 'Jobs', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance at vendor', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Balance/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['#', 'Doc date', 'Doc no', 'Transaction', 'Process', 'Contractor', 'Jobs', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance at vendor', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Balance/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>{(ledger.data ?? []).map((r, i) => (
-              <tr key={i} className="border-t border-slate-100"><td className="px-3 py-1.5 text-slate-400">{i + 1}</td><td className="px-3 py-1.5">{fmtDate(r.doc_date)}</td><td className="px-3 py-1.5 tabular-nums">{r.doc_no}</td><td className="px-3 py-1.5 font-semibold">{r.txn}</td>
+              <tr key={i} className="border-t border-surface-divider"><td className="px-3 py-1.5 text-ink-muted">{i + 1}</td><td className="px-3 py-1.5">{fmtDate(r.doc_date)}</td><td className="px-3 py-1.5 tabular-nums">{r.doc_no}</td><td className="px-3 py-1.5 font-semibold">{r.txn}</td>
                 <td className="px-3 py-1.5">{r.sub_process}</td><td className="px-3 py-1.5">{r.contractor}</td><td className="px-3 py-1.5">{r.jobs || '—'}</td><td className="px-3 py-1.5 text-right">{r.outward_kg ? kg(r.outward_kg) : ''}</td>
                 <td className="px-3 py-1.5 text-right">{r.good_kg ? kg(r.good_kg) : ''}</td><td className="px-3 py-1.5 text-right">{r.reject_kg ? kg(r.reject_kg) : ''}</td><td className="px-3 py-1.5 text-right">{r.loss_kg ? kg(r.loss_kg) : ''}</td>
                 <td className="px-3 py-1.5 text-right font-semibold">{kg(r.balance_kg)}</td><td className="px-3 py-1.5"><FpStatus value={r.status} /></td></tr>

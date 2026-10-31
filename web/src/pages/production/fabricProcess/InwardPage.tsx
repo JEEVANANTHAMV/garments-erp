@@ -56,18 +56,18 @@ function InwardList({ onOpen, onNew }: { onOpen: (id: number) => void; onNew: ()
         </div>
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['GRN no', 'Date', 'Status', 'Outward DC', 'Process', 'Supplier / Vendor', 'Jobs', 'Rolls', 'Good KG', 'Reject KG', 'Loss KG', 'Challan', 'Billed'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['GRN no', 'Date', 'Status', 'Outward DC', 'Process', 'Supplier / Vendor', 'Jobs', 'Rolls', 'Good KG', 'Reject KG', 'Loss KG', 'Challan', 'Billed'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
+                <tr key={r.id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => onOpen(r.id)}>
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">Reprocess</span> : null}</td>
                   <td className="px-3 py-2">{fmtDate(r.inward_date)}</td><td className="px-3 py-2"><FpStatus value={r.status} /></td><td className="px-3 py-2 tabular-nums">{r.fpo_no}</td><td className="px-3 py-2">{r.process_name || r.sub_process}</td>
                   <td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2 text-right">{r.roll_count}</td>
                   <td className="px-3 py-2 text-right text-emerald-700">{kg(r.good_kg)}</td><td className="px-3 py-2 text-right text-red-700">{kg(r.reject_kg)}</td><td className="px-3 py-2 text-right text-amber-700">{kg(r.loss_kg)}</td>
-                  <td className="px-3 py-2">{r.challan_no || '—'}</td><td className="px-3 py-2">{r.bill_id ? <FpStatus value="BILLED" /> : r.is_reprocess ? '—' : <span className="text-slate-400">No</span>}</td>
+                  <td className="px-3 py-2">{r.challan_no || '—'}</td><td className="px-3 py-2">{r.bill_id ? <FpStatus value="BILLED" /> : r.is_reprocess ? '—' : <span className="text-ink-muted">No</span>}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">No GRNs yet</td></tr>}
+              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-ink-muted">No GRNs yet</td></tr>}
             </tbody>
           </table>
         )}
@@ -190,7 +190,7 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
         <Select label="Reject store" value={head.reject_warehouse_id} onChange={(e) => setHead({ ...head, reject_warehouse_id: e.target.value })} options={toOptions(warehouses.data)} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-3" rows={1} value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
       </div>
-      {!fpoId && <div className="card p-10 text-center text-sm text-slate-400">Choose the outward DC to load its rolls</div>}
+      {!fpoId && <div className="card p-10 text-center text-sm text-ink-muted">Choose the outward DC to load its rolls</div>}
       {fpoId && dc.isLoading && <LoadingBlock />}
       {d && (
         <>
@@ -202,7 +202,7 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
             {tab === 'entry' ? (
               <div className="max-h-[55vh] overflow-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
+                  <thead className="sticky top-0 z-10 bg-surface-muted text-ink-secondary"><tr>
                     {['Input roll', 'Open KG', 'Output roll (blank = auto)', ...(dyeing ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'Mtr (measured)', 'Calc Mtr', 'GSM', 'Dia', 'Shade', ''].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Mtr/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                   </tr></thead>
                   <tbody>
@@ -210,25 +210,25 @@ function InwardEditor({ editId, fpoId: fpoParam, onBack, onDone, onPickDc }: { e
                       <GrnJobRows key={g.io_no} g={g} dyeing={dyeing} rules={rules} reasons={(reasons.data ?? []).filter((x) => x.kind !== 'BILLING')} set={set} split={split} accounted={accounted}
                         remove={(k) => setLines((ls) => ls.filter((l) => l.key !== k))} />
                     ))}
-                    {!lines.length && <tr><td colSpan={dyeing ? 15 : 14} className="px-3 py-8 text-center text-slate-400">Every roll of this DC is already received</td></tr>}
+                    {!lines.length && <tr><td colSpan={dyeing ? 15 : 14} className="px-3 py-8 text-center text-ink-muted">Every roll of this DC is already received</td></tr>}
                   </tbody>
-                  <tfoot className="sticky bottom-0 bg-slate-100 font-bold">
+                  <tfoot className="sticky bottom-0 bg-surface-header font-bold">
                     <tr><td colSpan={dyeing ? 5 : 4} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={7} /></tr>
                   </tfoot>
                 </table>
               </div>
             ) : (
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Rolls', 'Open KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance after GRN'].map((h) => <th key={h} className={`px-3 py-2 ${h === 'Job' ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>{['Job', 'Rolls', 'Open KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance after GRN'].map((h) => <th key={h} className={`px-3 py-2 ${h === 'Job' ? 'text-left' : 'text-right'}`}>{h}</th>)}</tr></thead>
                 <tbody>{jobSummary.map((j) => (
-                  <tr key={j.io_no} className="border-t border-slate-100"><td className="px-3 py-1.5 font-semibold">{j.io_no}</td><td className="px-3 py-1.5 text-right">{j.rolls}</td><td className="px-3 py-1.5 text-right">{kg(j.open)}</td>
+                  <tr key={j.io_no} className="border-t border-surface-divider"><td className="px-3 py-1.5 font-semibold">{j.io_no}</td><td className="px-3 py-1.5 text-right">{j.rolls}</td><td className="px-3 py-1.5 text-right">{kg(j.open)}</td>
                     <td className="px-3 py-1.5 text-right text-emerald-700">{kg(j.good)}</td><td className="px-3 py-1.5 text-right text-red-700">{kg(j.rej)}</td><td className="px-3 py-1.5 text-right text-amber-700">{kg(j.loss)}</td>
                     <td className={`px-3 py-1.5 text-right ${j.bal > 0.0005 ? 'font-semibold text-orange-700' : ''}`}>{kg(j.bal)}</td></tr>
                 ))}</tbody>
               </table>
             )}
           </div>
-          {recon && <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">Reconciliation with DC {d.fpo_no} (after this GRN)</h3><ReconCards t={recon} /></div>}
+          {recon && <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-ink">Reconciliation with DC {d.fpo_no} (after this GRN)</h3><ReconCards t={recon} /></div>}
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="secondary" onClick={onBack}>Cancel</Button>
             <Button variant="secondary" loading={busy} onClick={() => save('DRAFT')}><Save size={14} className="mr-1" /> Save Draft</Button>
@@ -250,11 +250,11 @@ function GrnJobRows({ g, dyeing, rules, reasons, set, split, remove, accounted }
         const first = i === 0 || g.rows[i - 1].roll_in_id !== l.roll_in_id;
         const over = accounted(l.roll_in_id) > l.open_kg + 0.0005;
         return (
-          <tr key={l.key} className={`border-t border-slate-100 ${over ? 'bg-red-50' : ''}`}>
-            <td className="px-2 py-1 tabular-nums">{first ? l.input_roll : <span className="text-slate-400">↳ split</span>}</td>
+          <tr key={l.key} className={`border-t border-surface-divider ${over ? 'bg-red-50' : ''}`}>
+            <td className="px-2 py-1 tabular-nums">{first ? l.input_roll : <span className="text-ink-muted">↳ split</span>}</td>
             <td className="px-2 py-1 text-right tabular-nums">{first ? kg(l.open_kg) : ''}</td>
             <td className="px-1 py-1"><input className={`${inp} w-28`} value={l.output_roll_no} onChange={(e) => set(l.key, { output_roll_no: e.target.value })} /></td>
-            {dyeing && <td className="px-2 py-1 text-slate-600">{first ? (l.fabric_color || '—') : ''}</td>}
+            {dyeing && <td className="px-2 py-1 text-ink-secondary">{first ? (l.fabric_color || '—') : ''}</td>}
             <td className="px-1 py-1"><input className={`${inp} ${dyeing ? 'w-28' : 'w-20'}`} placeholder={dyeing ? 'Dye colour' : ''} value={l.color_name} onChange={(e) => set(l.key, { color_name: e.target.value })} /></td>
             {(['good_kg', 'reject_kg', 'loss_kg'] as const).map((k) => (
               <td key={k} className="px-1 py-1"><input type="number" step="0.001" className={`${inp} w-[84px] text-right ${k === 'good_kg' ? 'text-emerald-700' : k === 'reject_kg' ? 'text-red-700' : 'text-amber-700'}`} value={l[k]}
@@ -274,8 +274,8 @@ function GrnJobRows({ g, dyeing, rules, reasons, set, split, remove, accounted }
             <td className="px-1 py-1"><input className={`${inp} w-14`} value={l.dia} onChange={(e) => set(l.key, { dia: e.target.value })} /></td>
             <td className="px-1 py-1"><input className={`${inp} w-16`} value={l.shade_no} onChange={(e) => set(l.key, { shade_no: e.target.value })} /></td>
             <td className="whitespace-nowrap px-1 py-1">
-              <button title="Split into another output roll" className="p-1 text-slate-400 hover:text-sky-700" onClick={() => split(l)}><Split size={13} /></button>
-              {!first && <button className="p-1 text-slate-400 hover:text-red-600" onClick={() => remove(l.key)}><Trash2 size={13} /></button>}
+              <button title="Split into another output roll" className="p-1 text-ink-muted hover:text-sky-700" onClick={() => split(l)}><Split size={13} /></button>
+              {!first && <button className="p-1 text-ink-muted hover:text-red-600" onClick={() => remove(l.key)}><Trash2 size={13} /></button>}
             </td>
           </tr>
         );
@@ -304,21 +304,21 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
         actions={<><FpStatus value={g.bill_id ? 'BILLED' : 'POSTED'} /><Button variant="secondary" onClick={print}><Printer size={14} className="mr-1" /> Print GRN</Button><Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-6">
         {[['GRN date', fmtDate(g.inward_date)], ['Challan', g.challan_no || '—'], ['Vehicle', g.vehicle_no || '—'], ['Received by', g.received_by || '—'], ['Store', g.warehouse_name], ['Reject store', g.reject_store || '—']].map(([k, v]) => (
-          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{k}</div><div className="font-semibold">{v}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'PO', 'Style', 'Input roll', 'Output roll', ...(isDyeing(g.sub_process) ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'GSM', 'Dia'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['Job', 'PO', 'Style', 'Input roll', 'Output roll', ...(isDyeing(g.sub_process) ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', 'GSM', 'Dia'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{g.lines.map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no}</td><td className="px-2 py-1">{l.buyer_po_no || '—'}</td><td className="px-2 py-1">{l.style_code || '—'}</td>
+            <tr key={l.id} className="border-t border-surface-divider"><td className="px-2 py-1 font-semibold">{l.io_no}</td><td className="px-2 py-1">{l.buyer_po_no || '—'}</td><td className="px-2 py-1">{l.style_code || '—'}</td>
               <td className="px-2 py-1 tabular-nums">{l.input_roll_no}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td>{isDyeing(g.sub_process) && <td className="px-2 py-1">{l.fabric_color || '—'}</td>}<td className="px-2 py-1">{l.color_name || '—'}</td>
               <td className="px-2 py-1 text-right">{kg(l.input_kg)}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(l.weight_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(l.reject_kg)}</td>
               <td className="px-2 py-1 text-right text-amber-700">{kg(l.loss_kg)}</td><td className="px-2 py-1">{l.reject_reason || '—'}</td><td className="px-2 py-1">{l.gsm || '—'}</td><td className="px-2 py-1">{l.dia || '—'}</td></tr>
           ))}</tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.sub_process) ? 8 : 7} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={3} /></tr></tfoot>
+          <tfoot className="bg-surface-header font-bold"><tr><td colSpan={isDyeing(g.sub_process) ? 8 : 7} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={3} /></tr></tfoot>
         </table>
       </div>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.fpo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-ink">DC {g.fpo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }
@@ -369,55 +369,55 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
           <Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button>
         </>} />
       {g.status === 'QC_PENDING' && <div className="mb-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-xs text-orange-900">Waiting for QC — no stock has moved. Record the QC result below, then post.</div>}
-      {g.status === 'DRAFT' && <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">Draft — no stock has moved.{g.requires_qc ? ' This process requires QC: send it for QC before posting.' : ''}</div>}
+      {g.status === 'DRAFT' && <div className="mb-3 rounded-lg border border-surface-border bg-surface-muted px-4 py-2 text-xs text-ink">Draft — no stock has moved.{g.requires_qc ? ' This process requires QC: send it for QC before posting.' : ''}</div>}
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-6">
         {[['GRN date', fmtDate(g.inward_date)], ['Challan', g.challan_no || '—'], ['Vehicle', g.vehicle_no || '—'], ['Received by', g.received_by || '—'], ['Store', g.warehouse_name], ['QC', g.qc_at ? `${fmtDate(g.qc_at)}${g.qc_remarks ? ` · ${g.qc_remarks}` : ''}` : '—']].map(([k, v]) => (
-          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{k}</div><div className="font-semibold">{v}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
-        <div className="flex items-center gap-2 px-4 pt-3 text-body font-semibold text-slate-800"><ClipboardCheck size={15} /> Received rolls{params.length ? ' & QC' : ''}</div>
+        <div className="flex items-center gap-2 px-4 pt-3 text-body font-semibold text-ink"><ClipboardCheck size={15} /> Received rolls{params.length ? ' & QC' : ''}</div>
         <table className="mt-2 w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>
             {['Job', 'Input roll', 'Output roll', ...(isDyeing(g.sub_process) ? ['Fabric colour', 'Dye colour'] : ['Colour']), 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
-            {params.map((p) => <th key={p.id} className="px-2 py-2 text-left" title={`min ${p.min_value ?? '—'} / max ${p.max_value ?? '—'}`}>{p.param_name}{p.uom ? ` (${p.uom})` : ''}{p.is_mandatory ? ' *' : ''}<div className="font-normal normal-case text-slate-400">{p.min_value ?? '…'} – {p.max_value ?? '…'}</div></th>)}
+            {params.map((p) => <th key={p.id} className="px-2 py-2 text-left" title={`min ${p.min_value ?? '—'} / max ${p.max_value ?? '—'}`}>{p.param_name}{p.uom ? ` (${p.uom})` : ''}{p.is_mandatory ? ' *' : ''}<div className="font-normal normal-case text-ink-muted">{p.min_value ?? '…'} – {p.max_value ?? '…'}</div></th>)}
             <th className="px-2 py-2 text-left">QC status</th><th className="px-2 py-2 text-left">QC remarks</th>
           </tr></thead>
           <tbody>
             {lines.map((l) => {
               const k = l.line_index as number; const good = n(l.good_kg) > 0; const f = fails(k);
               return (
-                <tr key={k} className={`border-t border-slate-100 ${f.length ? 'bg-red-50/60' : ''}`}>
-                  <td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{l.input_roll_no}</td><td className="px-2 py-1 tabular-nums">{l.output_roll_no || <span className="text-slate-400">auto</span>}</td>
+                <tr key={k} className={`border-t border-surface-divider ${f.length ? 'bg-red-50/60' : ''}`}>
+                  <td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{l.input_roll_no}</td><td className="px-2 py-1 tabular-nums">{l.output_roll_no || <span className="text-ink-muted">auto</span>}</td>
                   {isDyeing(g.sub_process) && <td className="px-2 py-1">{l.fabric_color || '—'}</td>}<td className="px-2 py-1">{l.color_name || '—'}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(l.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(l.reject_kg)}</td><td className="px-2 py-1 text-right text-amber-700">{kg(l.loss_kg)}</td>
                   {params.map((p) => {
                     const raw = vals[k]?.[String(p.id)]; const rs = result(p, raw);
                     return <td key={p.id} className="px-1 py-1">{good ? (qcOpen
                       ? <input type="number" step="0.001" className={`${inp} w-20 text-right ${rs === 'FAIL' ? 'border-red-400 text-red-700' : rs === 'PASS' ? 'text-emerald-700' : ''}`} value={raw ?? ''}
                           onChange={(e) => setVals((v) => ({ ...v, [k]: { ...(v[k] ?? {}), [String(p.id)]: e.target.value } }))} />
-                      : <span className={rs === 'FAIL' ? 'font-semibold text-red-700' : ''}>{raw || '—'}{rs !== 'NA' ? ` · ${rs}` : ''}</span>) : <span className="text-slate-300">—</span>}</td>;
+                      : <span className={rs === 'FAIL' ? 'font-semibold text-red-700' : ''}>{raw || '—'}{rs !== 'NA' ? ` · ${rs}` : ''}</span>) : <span className="text-ink-disabled">—</span>}</td>;
                   })}
                   <td className="px-1 py-1">{good ? (qcOpen
                     ? <select className={`${inp} w-28`} value={stat[k] ?? ''} onChange={(e) => setStat((x) => ({ ...x, [k]: e.target.value }))}>
                         <option value="">{f.length ? 'Auto: Rejected' : 'Auto: Accepted'}</option><option value="ACCEPTED">Accepted</option><option value="HOLD">Hold</option><option value="REJECTED">Rejected</option>
                       </select>
-                    : (l.qc ? <FpStatus value={l.qc.status} /> : <span className="text-slate-400">—</span>)) : <span className="text-slate-300">—</span>}</td>
+                    : (l.qc ? <FpStatus value={l.qc.status} /> : <span className="text-ink-muted">—</span>)) : <span className="text-ink-disabled">—</span>}</td>
                   <td className="px-1 py-1">{good && qcOpen ? <input className={`${inp} w-36`} value={lineRem[k] ?? ''} onChange={(e) => setLineRem((x) => ({ ...x, [k]: e.target.value }))} /> : (l.qc?.remarks || '')}</td>
                 </tr>
               );
             })}
           </tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.sub_process) ? 5 : 4} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={params.length + 2} /></tr></tfoot>
+          <tfoot className="bg-surface-header font-bold"><tr><td colSpan={isDyeing(g.sub_process) ? 5 : 4} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td colSpan={params.length + 2} /></tr></tfoot>
         </table>
         {qcOpen && (
           <div className="flex flex-wrap items-end justify-end gap-2 border-t border-surface-border p-3">
-            {!params.length && <span className="mr-auto text-small text-slate-500">No QC parameters for this process — set them on Process Types & QC; you can still accept / hold / reject each roll.</span>}
+            {!params.length && <span className="mr-auto text-small text-ink-secondary">No QC parameters for this process — set them on Process Types & QC; you can still accept / hold / reject each roll.</span>}
             <Input label="QC remarks" className="w-72" value={qcRemarks} onChange={(e) => setQcRemarks(e.target.value)} />
             <Button loading={busy === 'qc'} onClick={saveQc}><ClipboardCheck size={14} className="mr-1" /> Save QC result</Button>
           </div>
         )}
       </div>
-      <p className="mt-2 text-small text-slate-500">On posting, QC-rejected rolls go to the reject store with the failed parameters as the reason; rolls on hold go to the store on QC hold.</p>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.fpo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
+      <p className="mt-2 text-small text-ink-secondary">On posting, QC-rejected rolls go to the reject store with the failed parameters as the reason; rolls on hold go to the store on QC hold.</p>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-ink">DC {g.fpo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }

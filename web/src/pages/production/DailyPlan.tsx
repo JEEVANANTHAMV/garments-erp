@@ -15,7 +15,7 @@ export function DailyProductionPlansPage() {
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'style_code', header: 'Style',
         render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
-          <p className="text-caption text-slate-500">{r.style_name}</p></div> },
+          <p className="text-caption text-ink-secondary">{r.style_name}</p></div> },
       { key: 'line_name', header: 'Line',
         render: (r: any) => r.line_name ? <Badge tone="indigo">{r.line_name}</Badge> : '—' },
       { key: 'shift_name', header: 'Shift',

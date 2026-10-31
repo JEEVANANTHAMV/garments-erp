@@ -51,12 +51,12 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
         {list.isLoading ? <LoadingBlock rows={3} /> : (
           <div className="space-y-4">
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500">
+              <thead className="bg-surface-muted text-ink-secondary">
                 <tr><th className="px-2 py-2 text-left">Version</th><th className="px-2 py-2 text-left">Saved</th><th className="px-2 py-2 text-right">Total</th><th className="px-2 py-2 text-left">Replaced</th><th /></tr>
               </thead>
               <tbody>
                 {(list.data?.versions ?? []).map((v) => (
-                  <tr key={v.version} className={`border-t border-slate-100 ${view === v.version ? 'bg-brand-50' : ''}`}>
+                  <tr key={v.version} className={`border-t border-surface-divider ${view === v.version ? 'bg-brand-50' : ''}`}>
                     <td className="px-2 py-1.5 tabular-nums font-bold">V{v.version}{v.current && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-micro font-semibold text-emerald-800">current</span>}</td>
                     <td className="px-2 py-1.5">{v.current ? `${fmtDate(v.saved_at)}${v.saved_by ? ` · ${v.saved_by}` : ''}` : '—'}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(v.total_amount, 2)}</td>
@@ -68,24 +68,24 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
                 ))}
               </tbody>
             </table>
-            {count === 1 && <p className="text-small text-slate-500">No earlier versions yet — each saved change to this quotation keeps the previous one as V{cur}.</p>}
+            {count === 1 && <p className="text-small text-ink-secondary">No earlier versions yet — each saved change to this quotation keeps the previous one as V{cur}.</p>}
             {view !== null && (
               snap.isLoading ? <LoadingBlock rows={3} /> : snap.data && (
                 <div>
-                  <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
-                    V{view} <span className="font-normal normal-case tracking-normal text-slate-400">(replaced {fmtDate(snap.data.replaced_at)}) · total {fmtDecimal(snap.data.header?.total_amount, 2)} · cells changed since are highlighted</span>
+                  <h4 className="mb-2 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">
+                    V{view} <span className="font-normal normal-case tracking-normal text-ink-muted">(replaced {fmtDate(snap.data.replaced_at)}) · total {fmtDecimal(snap.data.header?.total_amount, 2)} · cells changed since are highlighted</span>
                   </h4>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-slate-50 text-slate-500">
+                      <thead className="bg-surface-muted text-ink-secondary">
                         <tr><th className="px-2 py-1.5 text-left">#</th>{COLS.map((c) => <th key={c.key} className={`px-2 py-1.5 ${c.num ? 'text-right' : 'text-left'}`}>{c.label}</th>)}</tr>
                       </thead>
                       <tbody>
                         {snap.data.lines.map((l, i) => {
                           const now = currentLines[i];
                           return (
-                            <tr key={i} className="border-t border-slate-100">
-                              <td className="px-2 py-1 text-slate-400">{i + 1}</td>
+                            <tr key={i} className="border-t border-surface-divider">
+                              <td className="px-2 py-1 text-ink-muted">{i + 1}</td>
                               {COLS.map((c) => {
                                 const changed = !now || !same(l[c.key], now[c.key], c.num);
                                 return (
@@ -102,7 +102,7 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
                     </table>
                   </div>
                   {currentLines.length !== snap.data.lines.length && (
-                    <p className="mt-1 text-caption text-slate-500">V{view} had {snap.data.lines.length} line(s); the current version has {currentLines.length}.</p>
+                    <p className="mt-1 text-caption text-ink-secondary">V{view} had {snap.data.lines.length} line(s); the current version has {currentLines.length}.</p>
                   )}
                 </div>
               )

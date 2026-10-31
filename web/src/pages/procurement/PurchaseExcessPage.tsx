@@ -41,22 +41,22 @@ function Defaults({ editable }: { editable: boolean }) {
   };
   return (
     <div className="card p-4">
-      <h3 className="mb-3 text-body font-semibold text-slate-800">Company defaults (every job, unless the job has its own)</h3>
+      <h3 className="mb-3 text-body font-semibold text-ink">Company defaults (every job, unless the job has its own)</h3>
       <div className="mb-3 flex flex-wrap items-center gap-4 text-xs">
-        <span className="font-semibold text-slate-700">When a PO goes above the limit:</span>
+        <span className="font-semibold text-ink">When a PO goes above the limit:</span>
         {[['BLOCK', 'Refuse the PO'], ['WARN', 'Save, but warn'], ['OFF', 'No check']].map(([k, l]) => (
           <label key={k} className="flex items-center gap-1.5"><input type="radio" name="pe-control" disabled={!editable} checked={v.control === k} onChange={() => setV({ ...v, control: k })} id={`pe-control-${k}`} /> {l}</label>
         ))}
       </div>
       <table className="w-full max-w-3xl text-xs">
-        <thead className="bg-slate-50 text-slate-500"><tr><th className="px-3 py-2 text-left">Material</th><th className="px-3 py-2 text-left">Excess %</th><th className="px-3 py-2 text-left">+ Extra qty</th></tr></thead>
+        <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-3 py-2 text-left">Material</th><th className="px-3 py-2 text-left">Excess %</th><th className="px-3 py-2 text-left">+ Extra qty</th></tr></thead>
         <tbody>{GROUPS.map(([g, label, uom]) => (
-          <tr key={g} className="border-t border-slate-100">
+          <tr key={g} className="border-t border-surface-divider">
             <td className="px-3 py-1.5 font-medium">{label}</td>
             <td className="px-3 py-1.5"><input type="number" step="0.01" className="input w-28 py-1 text-right text-xs" disabled={!editable} value={v.defaults[g].pct} id={`pe-def-${g}-pct`}
               onChange={(e) => setV({ ...v, defaults: { ...v.defaults, [g]: { ...v.defaults[g], pct: e.target.value } } })} /> %</td>
             <td className="px-3 py-1.5"><input type="number" step="0.001" className="input w-28 py-1 text-right text-xs" disabled={!editable} value={v.defaults[g].qty} id={`pe-def-${g}-qty`}
-              onChange={(e) => setV({ ...v, defaults: { ...v.defaults, [g]: { ...v.defaults[g], qty: e.target.value } } })} /> <span className="text-slate-400">{uom}</span></td>
+              onChange={(e) => setV({ ...v, defaults: { ...v.defaults, [g]: { ...v.defaults[g], qty: e.target.value } } })} /> <span className="text-ink-muted">{uom}</span></td>
           </tr>))}</tbody>
       </table>
       {editable && <div className="mt-3"><Button loading={busy} onClick={save} id="btn-save-pe-defaults"><Save size={14} className="mr-1" /> Save defaults</Button></div>}
@@ -90,7 +90,7 @@ function JobLimits({ editable }: { editable: boolean }) {
             <option value="">— Select job —</option>
             {(jobs.data ?? []).map((j: any) => <option key={j.id} value={j.id}>{j.job_no}{j.buyer_name ? ` · ${j.buyer_name}` : ''}</option>)}
           </select></label>
-        {d && <span className={`rounded px-2 py-1 text-caption font-semibold ${d.control === 'BLOCK' ? 'bg-red-50 text-red-800' : d.control === 'WARN' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+        {d && <span className={`rounded px-2 py-1 text-caption font-semibold ${d.control === 'BLOCK' ? 'bg-red-50 text-red-800' : d.control === 'WARN' ? 'bg-amber-50 text-amber-800' : 'bg-surface-header text-ink-secondary'}`}>
           <ShieldCheck size={12} className="mr-1 inline" />{d.control === 'BLOCK' ? 'POs above the limit are refused' : d.control === 'WARN' ? 'POs above the limit save with a warning' : 'No check'}</span>}
       </div>
       {soId && st.isLoading && <LoadingBlock />}
@@ -101,8 +101,8 @@ function JobLimits({ editable }: { editable: boolean }) {
             {GROUPS.map(([g, label]) => {
               const e = edit[g]; if (!e) return null;
               return (
-                <div key={g} className="rounded-lg border border-slate-200 p-3 text-xs" id={`pe-job-${g}`}>
-                  <div className="mb-2 flex items-center justify-between font-semibold text-slate-800">{label}
+                <div key={g} className="rounded-lg border border-surface-border p-3 text-xs" id={`pe-job-${g}`}>
+                  <div className="mb-2 flex items-center justify-between font-semibold text-ink">{label}
                     <label className="flex items-center gap-1 font-normal"><input type="checkbox" disabled={!editable} checked={e.custom} onChange={(x) => setEdit({ ...edit, [g]: { ...e, custom: x.target.checked } })} id={`pe-custom-${g}`} /> own allowance</label>
                   </div>
                   <div className="flex items-end gap-2">
@@ -111,31 +111,31 @@ function JobLimits({ editable }: { editable: boolean }) {
                     {editable && <Button size="sm" onClick={() => void saveGroup(g)} id={`btn-pe-save-${g}`}>Save</Button>}
                   </div>
                   {e.custom && <Input label="Reason" className="mt-2" value={e.remarks} disabled={!editable} onChange={(x) => setEdit({ ...edit, [g]: { ...e, remarks: x.target.value } })} id={`pe-${g}-remarks`} placeholder="e.g. 25 KG bag round-off" />}
-                  {!e.custom && <p className="mt-1 text-slate-500">Company default</p>}
+                  {!e.custom && <p className="mt-1 text-ink-secondary">Company default</p>}
                 </div>
               );
             })}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs" id="pe-items">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['Material', 'Type', 'UOM', 'Requirement (BOM)', 'Allowance', 'Allowed total', 'Ordered (POs)', 'Balance to buy', 'Over', 'POs'].map((h) => <th key={h} className={`px-2 py-2 ${/Requirement|Allowed|Ordered|Balance|Over/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{['Material', 'Type', 'UOM', 'Requirement (BOM)', 'Allowance', 'Allowed total', 'Ordered (POs)', 'Balance to buy', 'Over', 'POs'].map((h) => <th key={h} className={`px-2 py-2 ${/Requirement|Allowed|Ordered|Balance|Over/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
               <tbody>
                 {d.rows.map((r: any) => (
-                  <tr key={r.key} className={`border-t border-slate-100 ${r.over > 0 ? 'bg-red-50/60' : ''}`}>
+                  <tr key={r.key} className={`border-t border-surface-divider ${r.over > 0 ? 'bg-red-50/60' : ''}`}>
                     <td className="px-2 py-1.5 font-medium">{r.name}</td><td className="px-2 py-1.5">{r.material_type}</td><td className="px-2 py-1.5">{r.uom_code ?? '—'}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(r.required, 3)}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{r.excess_pct}%{r.excess_qty ? ` + ${r.excess_qty}` : ''}{r.allowance_source === 'JOB' ? ' (job)' : ''}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-ink-secondary">{r.excess_pct}%{r.excess_qty ? ` + ${r.excess_qty}` : ''}{r.allowance_source === 'JOB' ? ' (job)' : ''}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{fmtDecimal(r.allowed, 3)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(r.ordered, 3)}</td>
                     <td className={`px-2 py-1.5 text-right tabular-nums ${r.balance < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{fmtDecimal(Math.max(0, r.balance), 3)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-red-700">{r.over > 0 ? fmtDecimal(r.over, 3) : ''}</td>
-                    <td className="px-2 py-1.5 tabular-nums text-caption text-slate-500">{r.pos ?? '—'}</td>
+                    <td className="px-2 py-1.5 tabular-nums text-caption text-ink-secondary">{r.pos ?? '—'}</td>
                   </tr>))}
-                {!d.rows.length && <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">No BOM materials for this job</td></tr>}
+                {!d.rows.length && <tr><td colSpan={10} className="px-3 py-6 text-center text-ink-muted">No BOM materials for this job</td></tr>}
               </tbody>
             </table>
           </div>
-          {d.notes?.length > 0 && <ul className="mt-2 list-disc pl-5 text-caption text-slate-500">{d.notes.map((n: string, i: number) => <li key={i}>{n}</li>)}</ul>}
+          {d.notes?.length > 0 && <ul className="mt-2 list-disc pl-5 text-caption text-ink-secondary">{d.notes.map((n: string, i: number) => <li key={i}>{n}</li>)}</ul>}
         </>
       )}
     </div>

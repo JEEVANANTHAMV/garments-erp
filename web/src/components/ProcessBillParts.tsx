@@ -68,7 +68,7 @@ export function ProcessBillHeader({ h, setH, suppliers, vendorLabel, idPrefix, o
         {h.vendor_id
           ? <GateEntryPicker partyId={h.vendor_id} value={h.gate_inward_id} idPrefix={idPrefix} onChange={(v) => setH((x) => ({ ...x, gate_inward_id: v }))}
               onPick={(g) => setH((x) => ({ ...x, gate_inward_id: String(g.id), party_bill_no: x.party_bill_no || g.supplier_inv_no || g.supplier_dc_no || '' }))} />
-          : <p className="pb-2 text-xs text-slate-400">Choose the contractor to see their gate entries and GRNs</p>}
+          : <p className="pb-2 text-xs text-ink-muted">Choose the contractor to see their gate entries and GRNs</p>}
       </div>
     </div>
   );
@@ -90,7 +90,7 @@ export function GrnPicker({ options, picked, onAdd, onRemove, onAddAll, idPrefix
       </div>
       {picked.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-dashed border-indigo-100 pt-2" id={`${idPrefix}-chips`}>
-          <span className="flex items-center gap-1 font-bold text-slate-600"><Layers size={13} className="text-indigo-600" /> On this bill ({picked.length}):</span>
+          <span className="flex items-center gap-1 font-bold text-ink-secondary"><Layers size={13} className="text-indigo-600" /> On this bill ({picked.length}):</span>
           {picked.map((k) => (
             <span key={k} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-800">
               {options.find((o) => o.key === k)?.label.split(' · ')[0] ?? k}
@@ -106,7 +106,7 @@ export function GrnPicker({ options, picked, onAdd, onRemove, onAddAll, idPrefix
 /** GRN / rate / gate matching, computed (not ticked by hand). */
 export function MatchStrip({ grnCount, rateDiffs, gate }: { grnCount: number; rateDiffs: string[]; gate: boolean }) {
   const chip = (ok: boolean | null, label: string, detail: string) => (
-    <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 ${ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : ok === null ? 'border-slate-200 bg-slate-50 text-slate-500' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+    <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 ${ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : ok === null ? 'border-surface-border bg-surface-muted text-ink-secondary' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
       {ok ? <CheckCircle2 size={13} /> : ok === null ? <MinusCircle size={13} /> : <AlertTriangle size={13} />}<b>{label}</b> {detail}
     </span>
   );
@@ -116,7 +116,7 @@ export function MatchStrip({ grnCount, rateDiffs, gate }: { grnCount: number; ra
       {chip(grnCount > 0, 'GRN', grnCount ? `${grnCount} linked — qty = GRN good KG` : 'none')}
       {chip(!rateDiffs.length, 'Rate', rateDiffs.length ? `differs from quotation: ${rateDiffs.join(', ')}` : 'as quotation')}
       {chip(gate ? true : null, 'Gate', gate ? 'entry mapped' : 'not mapped')}
-      <span className="ml-auto font-semibold text-slate-700">Match status: <span id="pb-match-status">{status}</span></span>
+      <span className="ml-auto font-semibold text-ink">Match status: <span id="pb-match-status">{status}</span></span>
     </div>
   );
 }
@@ -130,10 +130,10 @@ export function ProcessBillCharges({ h, setH, charges, setCharges, totals, gross
     <div className="mb-3 grid gap-3 lg:grid-cols-[1fr_380px]">
       <div className="card space-y-3 p-4 text-xs">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-bold uppercase tracking-wider text-slate-700">GST nature:</span>
+          <span className="font-bold uppercase tracking-wider text-ink">GST nature:</span>
           {(['INTRA_STATE', 'INTER_STATE'] as const).map((m) => (
             <button key={m} type="button" id={`${idPrefix}-gst-${m}`} onClick={() => setH((x) => ({ ...x, gst_type: m }))}
-              className={`rounded-md border px-2.5 py-1 font-semibold ${h.gst_type === m ? 'border-indigo-300 bg-white text-indigo-700 shadow-xs' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+              className={`rounded-md border px-2.5 py-1 font-semibold ${h.gst_type === m ? 'border-indigo-300 bg-white text-indigo-700 shadow-xs' : 'border-surface-border bg-surface-muted text-ink-secondary'}`}>
               {m === 'INTRA_STATE' ? 'Intra-state (CGST + SGST)' : 'Inter-state (IGST)'}</button>
           ))}
         </div>
@@ -148,7 +148,7 @@ export function ProcessBillCharges({ h, setH, charges, setCharges, totals, gross
             {recovery > 0 && <tr className="text-red-700"><td>Less: recovery from contractor</td><td className="text-right tabular-nums">− {money(recovery)}</td></tr>}
             {n(h.discount_amount) > 0 && <tr><td>Less: discount</td><td className="text-right tabular-nums">− {money(h.discount_amount)}</td></tr>}
             {n(h.debit_amount) > 0 && <tr><td>Less: debit / shortage</td><td className="text-right tabular-nums">− {money(h.debit_amount)}</td></tr>}
-            <tr className="border-t border-slate-200 font-semibold"><td className="pt-1">Taxable value</td><td className={`pt-1 text-right tabular-nums ${totals.base < 0 ? 'text-red-700' : ''}`}>{money(totals.base)}</td></tr>
+            <tr className="border-t border-surface-border font-semibold"><td className="pt-1">Taxable value</td><td className={`pt-1 text-right tabular-nums ${totals.base < 0 ? 'text-red-700' : ''}`}>{money(totals.base)}</td></tr>
           </tbody>
         </table>
         <Textarea label="Remarks" rows={2} value={h.remarks} id={`${idPrefix}-remarks`} onChange={(e) => setH((x) => ({ ...x, remarks: e.target.value }))} />
@@ -180,7 +180,7 @@ export function ProcessBillTotalsView({ b }: { b: any }) {
         {v2 && n(b.tcs_amount) > 0 && row(`TCS ${b.tcs_section ?? ''} ${fmtDecimal(b.tcs_pct, 3)}%`, b.tcs_amount)}
         {v2 && n(b.tds_amount) > 0 && row(`Less TDS ${b.tds_section ?? ''} ${fmtDecimal(b.tds_pct, 3)}%`, -n(b.tds_amount), 'text-red-700')}
         {v2 && n(b.round_off) !== 0 && row('Round off', b.round_off)}
-        <tr className="border-t border-slate-300 text-sm font-bold"><td className="px-2 py-1">Net payable</td><td className="px-2 py-1 text-right tabular-nums" id="pb-net">{money(b.net_amount)}</td></tr>
+        <tr className="border-t border-surface-input text-sm font-bold"><td className="px-2 py-1">Net payable</td><td className="px-2 py-1 text-right tabular-nums" id="pb-net">{money(b.net_amount)}</td></tr>
       </tbody>
     </table>
   );

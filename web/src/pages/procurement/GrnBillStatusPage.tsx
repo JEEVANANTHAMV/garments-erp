@@ -56,24 +56,24 @@ export default function GrnBillStatusPage() {
       <div className="card overflow-x-auto">
         {q.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['GRN', 'Date', 'Days', 'Type', 'Supplier / contractor', 'PO', 'Supplier inv / challan', 'Qty', 'GRN value', 'Billed', 'Bill no', 'Status', ''].map((h) => <th key={h} className={`px-3 py-2 ${/Qty|value|Billed|Days/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['GRN', 'Date', 'Days', 'Type', 'Supplier / contractor', 'PO', 'Supplier inv / challan', 'Qty', 'GRN value', 'Billed', 'Bill no', 'Status', ''].map((h) => <th key={h} className={`px-3 py-2 ${/Qty|value|Billed|Days/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={`${r.source}${r.grn_id}`} className={`border-t border-slate-100 ${r.overdue ? 'bg-red-50/50' : ''}`}>
+                <tr key={`${r.source}${r.grn_id}`} className={`border-t border-surface-divider ${r.overdue ? 'bg-red-50/50' : ''}`}>
                   <td className="px-3 py-1.5"><Link to={r.link} className="tabular-nums font-semibold text-brand-700 hover:underline">{r.grn_no}</Link></td>
                   <td className="px-3 py-1.5">{fmtDate(r.grn_date)}</td>
                   <td className={`px-3 py-1.5 text-right tabular-nums ${r.overdue ? 'font-bold text-red-700' : ''}`}>{r.days}</td>
-                  <td className="px-3 py-1.5">{SRC_LABEL[r.source]}{r.source === 'PURCHASE' && r.material ? <span className="text-slate-400"> · {String(r.material).toLowerCase()}</span> : null}</td>
+                  <td className="px-3 py-1.5">{SRC_LABEL[r.source]}{r.source === 'PURCHASE' && r.material ? <span className="text-ink-muted"> · {String(r.material).toLowerCase()}</span> : null}</td>
                   <td className="px-3 py-1.5 font-medium">{r.supplier || '—'}</td><td className="px-3 py-1.5">{r.po_nos || '—'}</td><td className="px-3 py-1.5">{r.supplier_inv_no || '—'}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{fmtDecimal(r.grn_qty, 3)}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.grn_value ? `₹${fmtDecimal(r.grn_value, 2)}` : '—'}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.billed_value ? `₹${fmtDecimal(r.billed_value, 2)}` : '—'}</td>
-                  <td className="px-3 py-1.5">{r.bill_nos ? <span className="tabular-nums">{r.bill_nos}</span> : '—'}{r.bill_status ? <span className="ml-1 text-slate-400">({String(r.bill_status).toLowerCase()})</span> : null}</td>
+                  <td className="px-3 py-1.5">{r.bill_nos ? <span className="tabular-nums">{r.bill_nos}</span> : '—'}{r.bill_status ? <span className="ml-1 text-ink-muted">({String(r.bill_status).toLowerCase()})</span> : null}</td>
                   <td className="px-3 py-1.5"><Badge tone={r.status === 'RECEIVED' ? 'green' : r.status === 'PARTIAL' ? 'amber' : 'red'}>{r.status === 'RECEIVED' ? 'Bill received' : r.status === 'PARTIAL' ? 'Partly billed' : 'Bill pending'}</Badge>{r.overdue ? <span className="ml-1 text-caption font-bold text-red-700">overdue</span> : null}</td>
                   <td className="px-3 py-1.5 text-right">{r.status !== 'RECEIVED' && <Link to={BOOK[r.source]} className="inline-flex items-center gap-1 text-caption font-semibold text-brand-700 hover:underline"><Receipt size={12} /> Book bill</Link>}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">Nothing here</td></tr>}
+              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-ink-muted">Nothing here</td></tr>}
             </tbody>
           </table>
         )}

@@ -322,8 +322,8 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{label} Line Allocation</h1>
-          <p className="text-sm text-slate-500">Allocate jobs and bundles to {label.toLowerCase()} lines within line capacity</p>
+          <h1 className="text-2xl font-bold text-ink">{label} Line Allocation</h1>
+          <p className="text-sm text-ink-secondary">Allocate jobs and bundles to {label.toLowerCase()} lines within line capacity</p>
         </div>
         <div className="flex items-center gap-2">
           <DocStatus no={docNo} status={docStatus} />
@@ -338,8 +338,8 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
           <Input label="Date *" type="date" className="w-40" value={allocDate} disabled={!editable} onChange={(e) => setAllocDate(e.target.value)} />
           <Input label={`${label} Floor`} className="w-44" value={floorName} disabled={!editable} onChange={(e) => setFloorName(e.target.value)} />
           <Select label="Shift" className="w-44" value={shiftId} disabled={!editable} onChange={(e) => setShiftId(e.target.value)} placeholder="Select shift" options={toOptions(shifts.data)} />
-          <div className="flex h-10 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3">
-            <span className="text-xs font-medium text-slate-600">Plan Type</span>
+          <div className="flex h-10 items-center gap-3 rounded-lg border border-surface-border bg-white px-3">
+            <span className="text-xs font-medium text-ink-secondary">Plan Type</span>
             <label className="flex cursor-pointer items-center gap-1.5">
               <input type="radio" checked={planType === 'LINE_WISE'} onChange={() => setPlanType('LINE_WISE')} className="accent-brand-600" />
               <span className="text-xs">Line / Bundle Wise</span>
@@ -383,7 +383,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
           <Card title={`Job / Style Details (Pending for ${label})`}>
             <div className="max-h-[28vh] overflow-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                <thead className="sticky top-0 bg-surface-muted text-ink-secondary">
                   <tr>
                     <th className="w-8 px-2 py-2" />
                     <th className="px-2 py-2 text-left">Job No</th>
@@ -398,7 +398,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                 </thead>
                 <tbody>
                   {jobGrid.map((j) => (
-                    <tr key={j.io_no} className="border-t border-slate-100 hover:bg-slate-50">
+                    <tr key={j.io_no} className="border-t border-surface-divider hover:bg-surface-muted">
                       <td className="px-2 py-1.5 text-center">
                         <input type="checkbox" checked={selJobs.has(j.io_no)} onChange={() => setSelJobs((s) => { const x = new Set(s); x.has(j.io_no) ? x.delete(j.io_no) : x.add(j.io_no); return x; })} />
                       </td>
@@ -408,28 +408,28 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                       <td className="px-2 py-1.5">{j.buyer || '—'}</td>
                       <td className="px-2 py-1.5">{j.po_no || '—'}</td>
                       <td className="px-2 py-1.5 font-medium">{j.style_no || '—'}</td>
-                      <td className="px-2 py-1.5 text-slate-500">{j.style_description || '—'}</td>
+                      <td className="px-2 py-1.5 text-ink-secondary">{j.style_description || '—'}</td>
                       <td className="px-2 py-1.5 text-right">{fmtNumber(j.pending)}</td>
                       <td className="px-2 py-1.5 text-right text-emerald-700">{fmtNumber(j.allocated)}</td>
                       <td className="px-2 py-1.5 text-right font-medium text-amber-700">{fmtNumber(Math.max(j.pending - j.allocated, 0))}</td>
                     </tr>
                   ))}
-                  {!jobGrid.length && <tr><td colSpan={9} className="px-4 py-6 text-center text-slate-400">{loading ? 'Loading…' : `No jobs pending for ${label.toLowerCase()}`}</td></tr>}
+                  {!jobGrid.length && <tr><td colSpan={9} className="px-4 py-6 text-center text-ink-muted">{loading ? 'Loading…' : `No jobs pending for ${label.toLowerCase()}`}</td></tr>}
                 </tbody>
               </table>
             </div>
           </Card>
 
           <Card title={`Unallocated Bundles (${PROC_SOURCE[proc]})`}
-            actions={<span className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            actions={<span className="flex flex-wrap items-center gap-3 text-xs text-ink-secondary">
               <SelectShown shown={filtered.map((b) => b.bundle_id)} selected={selBundles} onChange={setSelBundles} disabled={!editable} />
               <span>{filtered.length} bundle(s) · {fmtNumber(filtered.reduce((a, b) => a + b.free_qty, 0))} PCS</span></span>}>
-            <div className="border-b border-slate-100 p-2">
+            <div className="border-b border-surface-divider p-2">
               <SearchInput value={search} onChange={setSearch} placeholder="Search bundle, barcode, job, style, colour…" className="w-full" />
             </div>
             <div className="max-h-[48vh] overflow-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
+                <thead className="sticky top-0 z-10 bg-surface-muted text-ink-secondary">
                   <tr>
                     <th className="w-8 px-2 py-2">
                       <input type="checkbox" data-header-check title="Tick / untick every bundle shown (filtered)" checked={filtered.length > 0 && filtered.every((b) => selBundles.has(b.bundle_id))}
@@ -456,22 +456,22 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                         onCheck={() => setSelBundles((s) => { const x = new Set(s); ids.forEach((id) => (all ? x.delete(id) : x.add(id))); return x; })} />,
                       ...(open ? g.rows.map((b) => (
                         <tr key={b.bundle_id} onClick={() => setSelBundles((s) => { const x = new Set(s); x.has(b.bundle_id) ? x.delete(b.bundle_id) : x.add(b.bundle_id); return x; })}
-                          className={`cursor-pointer border-t border-slate-100 ${selBundles.has(b.bundle_id) ? 'bg-brand-50' : 'hover:bg-slate-50'}`}>
+                          className={`cursor-pointer border-t border-surface-divider ${selBundles.has(b.bundle_id) ? 'bg-brand-50' : 'hover:bg-surface-muted'}`}>
                           <td className="px-2 py-1 text-center"><input type="checkbox" checked={selBundles.has(b.bundle_id)} readOnly /></td>
-                          <td className="px-2 py-1 tabular-nums font-semibold text-slate-800">{b.bundle_no}</td>
+                          <td className="px-2 py-1 tabular-nums font-semibold text-ink">{b.bundle_no}</td>
                           <td className="px-2 py-1">{b.colour || '—'}</td>
                           <td className="px-2 py-1 font-semibold">{b.size || '—'}</td>
-                          <td className="px-2 py-1 text-slate-500">{[b.lay_no, b.cut_no].filter(Boolean).join(' / ') || '—'}</td>
+                          <td className="px-2 py-1 text-ink-secondary">{[b.lay_no, b.cut_no].filter(Boolean).join(' / ') || '—'}</td>
                           <td className="px-2 py-1 text-right font-medium">
-                            {fmtNumber(b.free_qty)}{b.free_qty !== b.bundle_qty && <span className="text-slate-400"> / {b.bundle_qty}</span>}
+                            {fmtNumber(b.free_qty)}{b.free_qty !== b.bundle_qty && <span className="text-ink-muted"> / {b.bundle_qty}</span>}
                           </td>
-                          <td className="px-2 py-1 text-right text-slate-500">{b.weight_kg ? Number(b.weight_kg).toFixed(2) : '—'}</td>
-                          <td className="px-2 py-1 text-slate-500">{b.inward_date ? fmtDate(b.inward_date) : '—'}</td>
+                          <td className="px-2 py-1 text-right text-ink-secondary">{b.weight_kg ? Number(b.weight_kg).toFixed(2) : '—'}</td>
+                          <td className="px-2 py-1 text-ink-secondary">{b.inward_date ? fmtDate(b.inward_date) : '—'}</td>
                         </tr>
                       )) : []),
                     ];
                   })}
-                  {!filtered.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">{loading ? 'Loading…' : 'No unallocated bundles'}</td></tr>}
+                  {!filtered.length && <tr><td colSpan={8} className="px-4 py-8 text-center text-ink-muted">{loading ? 'Loading…' : 'No unallocated bundles'}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -493,10 +493,10 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
 
         {/* RIGHT */}
         <div className="min-w-0 space-y-4">
-          <Card title={`${label} Lines`} actions={<span className="text-xs text-slate-500">Click a line to make it the allocation target</span>}>
+          <Card title={`${label} Lines`} actions={<span className="text-xs text-ink-secondary">Click a line to make it the allocation target</span>}>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500">
+                <thead className="bg-surface-muted text-ink-secondary">
                   <tr>
                     <th className="w-8 px-2 py-2" />
                     <th className="px-2 py-2 text-left">Line Code</th>
@@ -515,7 +515,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                     const s = lineStats(l);
                     return (
                       <tr key={l.id} onClick={() => setTargetLine(l.id)}
-                        className={`cursor-pointer border-t border-slate-100 ${targetLine === l.id ? 'bg-brand-50 ring-1 ring-brand-300' : 'hover:bg-slate-50'}`}>
+                        className={`cursor-pointer border-t border-surface-divider ${targetLine === l.id ? 'bg-brand-50 ring-1 ring-brand-300' : 'hover:bg-surface-muted'}`}>
                         <td className="px-2 py-1.5 text-center"><input type="radio" checked={targetLine === l.id} readOnly className="accent-brand-600" /></td>
                         <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{l.line_code}</td>
                         <td className="px-2 py-1.5 font-medium">{l.line_name}</td>
@@ -529,7 +529,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                       </tr>
                     );
                   })}
-                  {!lines.length && <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400">No active {label.toLowerCase()} lines — add them under Line Capacity Setup</td></tr>}
+                  {!lines.length && <tr><td colSpan={10} className="px-4 py-6 text-center text-ink-muted">No active {label.toLowerCase()} lines — add them under Line Capacity Setup</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -545,14 +545,14 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                   const open = openLines.has(line.id);
                   const groups = groupByJob(rows);
                   return (
-                    <div key={line.id} className="overflow-hidden rounded-xl border border-slate-200">
-                      <div className={`flex cursor-pointer flex-wrap items-center gap-3 border-b px-3 py-2 ${open ? 'bg-brand-50' : 'bg-slate-50'}`}
+                    <div key={line.id} className="overflow-hidden rounded-xl border border-surface-border">
+                      <div className={`flex cursor-pointer flex-wrap items-center gap-3 border-b px-3 py-2 ${open ? 'bg-brand-50' : 'bg-surface-muted'}`}
                         onClick={() => setOpenLines((o) => { const x = new Set(o); x.has(line.id) ? x.delete(line.id) : x.add(line.id); return x; })}>
                         {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        <span className="text-sm font-bold text-slate-800">{line.line_code} – {line.line_name}{line.supervisor_name ? ` (${line.supervisor_name})` : ''}</span>
+                        <span className="text-sm font-bold text-ink">{line.line_code} – {line.line_name}{line.supervisor_name ? ` (${line.supervisor_name})` : ''}</span>
                         <span className="ml-auto text-xs">
                           Target: <b>{fmtNumber(line.capacity_pcs)}</b> | Allocated: <b className="text-emerald-700">{fmtNumber(s.here)}</b>
-                          {line.allocated_other ? <span className="text-slate-500"> (+{fmtNumber(line.allocated_other)} other)</span> : null}
+                          {line.allocated_other ? <span className="text-ink-secondary"> (+{fmtNumber(line.allocated_other)} other)</span> : null}
                           {' '}| Balance: <b className={s.balance < 0 ? 'text-red-600' : ''}>{fmtNumber(s.balance)}</b>
                         </span>
                         {editable && (
@@ -564,7 +564,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                       </div>
                       {open && (rows.length ? (
                         <table className="w-full text-xs">
-                          <thead className="bg-white text-slate-500">
+                          <thead className="bg-white text-ink-secondary">
                             <tr>
                               <th className="w-8 px-2 py-1.5" />
                               <th className="px-2 py-1.5 text-left">Bundle ID</th>
@@ -580,7 +580,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                             {groups.map((g) => [
                               <JobHeaderRow key={g.key} group={g} colSpan={8} qty={g.rows.reduce((a, r) => a + r.allocated_qty, 0)} />,
                               ...g.rows.map((a) => (
-                                <tr key={`${a.bundle_id}-${a._i}`} className="border-t border-slate-100">
+                                <tr key={`${a.bundle_id}-${a._i}`} className="border-t border-surface-divider">
                                   <td className="px-2 py-1 text-center">
                                     <input type="checkbox" disabled={!editable} checked={selAlloc.has(a._i)}
                                       onChange={() => setSelAlloc((s2) => { const x = new Set(s2); x.has(a._i) ? x.delete(a._i) : x.add(a._i); return x; })} />
@@ -593,7 +593,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                                       ? <input type="number" min={1} max={a.available_qty} className="input h-6 w-20 text-right text-caption" value={a.allocated_qty} onChange={(e) => setQty(a._i, Number(e.target.value))} />
                                       : fmtNumber(a.allocated_qty)}
                                   </td>
-                                  <td className="px-2 py-1 text-right text-slate-500">{n(line.sam_per_pcs) ? n(line.sam_per_pcs).toFixed(2) : '—'}</td>
+                                  <td className="px-2 py-1 text-right text-ink-secondary">{n(line.sam_per_pcs) ? n(line.sam_per_pcs).toFixed(2) : '—'}</td>
                                   <td className="px-2 py-1">
                                     <input className="input h-6 w-32 text-caption" disabled={!editable} value={a.remarks} onChange={(e) => setRemark(a._i, e.target.value)} />
                                   </td>
@@ -605,7 +605,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                             ])}
                           </tbody>
                         </table>
-                      ) : <p className="py-5 text-center text-sm text-slate-400">No bundles yet — tick bundles on the left and click Allocate, or use Add Bundle.</p>)}
+                      ) : <p className="py-5 text-center text-sm text-ink-muted">No bundles yet — tick bundles on the left and click Allocate, or use Add Bundle.</p>)}
                     </div>
                   );
                 })}
@@ -638,7 +638,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                 <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> Override capacity ({overLines.map((l) => l.line_code).join(', ')})
               </label>
             )}
-            <Input className="w-56 !text-slate-800" placeholder="Remarks" value={remarks} disabled={!editable} onChange={(e) => setRemarks(e.target.value)} />
+            <Input className="w-56 !text-ink" placeholder="Remarks" value={remarks} disabled={!editable} onChange={(e) => setRemarks(e.target.value)} />
             {docId && docStatus !== 'CANCELLED' && (
               <Button variant="secondary" className="!border-white/20 !bg-white/10 !text-white" onClick={() => setCancelOpen(true)}>
                 <X size={14} className="mr-1" /> Cancel Allocation
@@ -676,7 +676,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
 
       <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title={`Cancel allocation ${docNo ?? ''}`} size="sm"
         footer={<><Button variant="secondary" onClick={() => setCancelOpen(false)}>Back</Button><Button variant="danger" onClick={cancelDoc} disabled={cancelReason.trim().length < 3}>Cancel allocation</Button></>}>
-        <p className="mb-2 text-sm text-slate-600">The bundles go back to unallocated stock. {docStatus === 'CONFIRMED' && <Badge tone="amber">Confirmed — needs approval right</Badge>}</p>
+        <p className="mb-2 text-sm text-ink-secondary">The bundles go back to unallocated stock. {docStatus === 'CONFIRMED' && <Badge tone="amber">Confirmed — needs approval right</Badge>}</p>
         <Input label="Reason *" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
       </Modal>
     </div>
@@ -706,7 +706,7 @@ function BundlePicker<T extends BundleInfo & { free_qty: number }>({ open, onClo
               <JobHeaderRow key={g.key} group={g} colSpan={5} qty={g.rows.reduce((a, r) => a + r.free_qty, 0)} checked={all}
                 onCheck={() => setSel((s) => { const x = new Set(s); ids.forEach((id) => (all ? x.delete(id) : x.add(id))); return x; })} />,
               ...g.rows.map((b) => (
-                <tr key={b.bundle_id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                <tr key={b.bundle_id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted"
                   onClick={() => setSel((s) => { const x = new Set(s); x.has(b.bundle_id) ? x.delete(b.bundle_id) : x.add(b.bundle_id); return x; })}>
                   <td className="w-8 px-2 py-1 text-center"><input type="checkbox" checked={sel.has(b.bundle_id)} readOnly /></td>
                   <td className="px-2 py-1 tabular-nums font-semibold">{b.bundle_no}</td>
@@ -717,7 +717,7 @@ function BundlePicker<T extends BundleInfo & { free_qty: number }>({ open, onClo
               )),
             ];
           })}
-          {!shown.length && <tr><td className="px-3 py-8 text-center text-slate-400">No unallocated bundles</td></tr>}
+          {!shown.length && <tr><td className="px-3 py-8 text-center text-ink-muted">No unallocated bundles</td></tr>}
         </tbody>
       </table>
     </Modal>

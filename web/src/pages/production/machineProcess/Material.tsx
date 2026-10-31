@@ -37,7 +37,7 @@ export function MaterialTab({ kind }: { kind: Kind }) {
           { key: 'txn_no', header: 'Doc no', render: (r: any) => <span className="tabular-nums">{r.txn_no}</span> },
           { key: 'txn_date', header: 'Date', render: (r: any) => fmtDate(r.txn_date) },
           { key: 'txn_type', header: 'Type', render: (r: any) => <Badge tone={r.txn_type === 'ISSUE' ? 'blue' : 'violet'}>{human(r.txn_type)}</Badge> },
-          { key: 'job_no', header: 'Job', render: (r: any) => <span>{r.job_no}{r.production_no ? <span className="text-slate-400"> · {r.production_no}</span> : null}</span> },
+          { key: 'job_no', header: 'Job', render: (r: any) => <span>{r.job_no}{r.production_no ? <span className="text-ink-muted"> · {r.production_no}</span> : null}</span> },
           { key: 'trim', header: 'Material', render: (r: any) => `${r.trim_code} · ${r.trim_name}` },
           { key: 'lot_no', header: 'Lot' },
           { key: 'qty', header: 'Qty', align: 'right' as const, render: (r: any) => `${qty(r.qty, 4)} ${r.uom_code ?? ''}` },
@@ -113,9 +113,9 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
               options={(jobs.data ?? []).filter((j: any) => ['PLANNED', 'RUNNING'].includes(j.status) || type === 'RETURN').map((j: any) => ({ value: j.id, label: `${j.job_no} · ${j.io_no ?? ''} ${j.style_code ?? ''} · ${human(j.status)}` }))} />}
         </FormSection>
         {job && <div className="overflow-x-auto">
-          <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">{type === 'ISSUE' ? 'Stock lots' : 'Lots held by the job'}</h3>
+          <h3 className="mb-2 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">{type === 'ISSUE' ? 'Stock lots' : 'Lots held by the job'}</h3>
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>
               <th className="px-2 py-1 text-left">Material</th><th className="px-2 py-1 text-left">Lot</th><th className="px-2 py-1 text-left">Store</th>
               <th className="px-2 py-1 text-right">{type === 'ISSUE' ? 'In stock' : 'Issued to job (net)'}</th>
               <th className="px-2 py-1 text-right">Job standard</th><th className="px-2 py-1 text-right">Issued so far</th><th className="px-2 py-1 text-right">Unconsumed</th>
@@ -124,8 +124,8 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
             <tbody>{shownLots.map((l) => {
               const n2 = needOf(Number(l.trim_id));
               return (
-                <tr key={l.trim_stock_id} className="border-t border-slate-100">
-                  <td className="px-2 py-1">{l.trim_code} · {l.trim_name}{l.stock_job ? <span className="text-slate-400"> · job {l.stock_job}</span> : null}</td>
+                <tr key={l.trim_stock_id} className="border-t border-surface-divider">
+                  <td className="px-2 py-1">{l.trim_code} · {l.trim_name}{l.stock_job ? <span className="text-ink-muted"> · job {l.stock_job}</span> : null}</td>
                   <td className="px-2 py-1 tabular-nums">{l.lot_no}</td><td className="px-2 py-1">{l.warehouse_name}</td>
                   <td className="px-2 py-1 text-right">{qty(l.available_qty, 4)} {l.uom_code}</td>
                   <td className="px-2 py-1 text-right">{n2.need != null ? qty(n2.need, 4) : '—'}</td>
@@ -138,9 +138,9 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
               );
             })}</tbody>
           </table>
-          {type === 'ISSUE' && recipeTrims.size > 0 && <label className="mt-2 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />Show materials outside the job's recipe too ({lots.length - shownLots.length} more lots)</label>}
-          {!lots.length && <p className="py-3 text-center text-xs text-slate-400">{type === 'ISSUE' ? 'No trims stock lots (general stock or this job\'s) — receive the material through a Trims GRN first' : 'Nothing issued to this job'}</p>}
-          <p className="mt-2 text-caption text-slate-500">"Job standard" is the recipe requirement for the planned qty in stock units. Another job's lot must be transferred to this job first (Job Transfer).</p>
+          {type === 'ISSUE' && recipeTrims.size > 0 && <label className="mt-2 flex items-center gap-2 text-xs text-ink-secondary"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />Show materials outside the job's recipe too ({lots.length - shownLots.length} more lots)</label>}
+          {!lots.length && <p className="py-3 text-center text-xs text-ink-muted">{type === 'ISSUE' ? 'No trims stock lots (general stock or this job\'s) — receive the material through a Trims GRN first' : 'Nothing issued to this job'}</p>}
+          <p className="mt-2 text-caption text-ink-secondary">"Job standard" is the recipe requirement for the planned qty in stock units. Another job's lot must be transferred to this job first (Job Transfer).</p>
         </div>}
         <FormSection cols={1}>
           <Input label="Remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} />

@@ -253,9 +253,9 @@ export function SizeGroupsPage() {
             sortable: true,
             render: (r: any) => (
               <div>
-                <div className="font-bold text-slate-900">{r.group_name}</div>
+                <div className="font-bold text-ink">{r.group_name}</div>
                 {r.description && (
-                  <div className="text-caption text-slate-500 font-medium truncate max-w-[280px]">
+                  <div className="text-caption text-ink-secondary font-medium truncate max-w-[280px]">
                     {r.description}
                   </div>
                 )}
@@ -266,7 +266,7 @@ export function SizeGroupsPage() {
             key: 'category',
             header: 'Category',
             render: (r: any) => (
-              <span className="inline-flex rounded px-2 py-0.5 text-caption font-bold bg-slate-100 text-slate-700">
+              <span className="inline-flex rounded px-2 py-0.5 text-caption font-bold bg-surface-header text-ink">
                 {r.category || 'ADULT'}
               </span>
             ),
@@ -275,7 +275,7 @@ export function SizeGroupsPage() {
             key: 'gender',
             header: 'Target / Gender',
             render: (r: any) => (
-              <span className="text-xs font-medium text-slate-600">
+              <span className="text-xs font-medium text-ink-secondary">
                 {r.gender || 'UNISEX'}
               </span>
             ),
@@ -285,12 +285,12 @@ export function SizeGroupsPage() {
             header: 'Ordered Size Scale (Sequence)',
             render: (r: any) => {
               const preview = r.size_scale_preview;
-              if (!preview) return <span className="text-xs text-slate-400 italic">No sizes defined</span>;
+              if (!preview) return <span className="text-xs text-ink-muted italic">No sizes defined</span>;
               const parts = String(preview).split(' ➔ ');
               return (
                 <div className="flex flex-wrap items-center gap-1">
                   {parts.map((sz, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1 tabular-nums font-bold text-xs bg-slate-100 text-slate-800 rounded px-1.5 py-0.5 border border-slate-200">
+                    <span key={idx} className="inline-flex items-center gap-1 tabular-nums font-bold text-xs bg-surface-header text-ink rounded px-1.5 py-0.5 border border-surface-border">
                       {sz}
                     </span>
                   ))}
@@ -614,23 +614,23 @@ export function SizeGroupDetailPage() {
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* SECTION 1: SIZE GROUP IDENTITY & ATTRIBUTES                                */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <div className="card p-5 border border-slate-200 shadow-sm bg-white">
+      <div className="card p-5 border border-surface-border shadow-sm bg-white">
         <div className="flex items-center justify-between border-b border-surface-border pb-3 mb-4">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
               <Layers size={16} />
             </span>
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-ink">
                 1. Size Group Identity &amp; Classification
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-ink-secondary">
                 Categorization and target department for this size scale
               </p>
             </div>
           </div>
           <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
-            head.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+            head.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-header text-ink-secondary'
           }`}>
             <span className={`h-2 w-2 rounded-full ${head.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
             {head.is_active ? 'Active Scale' : 'Draft Scale'}
@@ -666,7 +666,7 @@ export function SizeGroupDetailPage() {
               disabled={!editable}
               onChange={(e) => setHead({ ...head, group_name: e.target.value })}
               placeholder="e.g. Men's Alpha Standard (XS - 3XL)"
-              className="font-semibold text-slate-900"
+              className="font-semibold text-ink"
             />
           </div>
 
@@ -742,13 +742,13 @@ export function SizeGroupDetailPage() {
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* SECTION 2: ONE-CLICK PRESET BUTTONS                                       */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <div className="card p-4 border border-slate-200 bg-slate-50/70">
+      <div className="card p-4 border border-surface-border bg-surface-muted/70">
         <div className="flex items-center gap-2 mb-2.5">
           <Sparkles size={16} className="text-amber-500" />
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink">
             One-Click Industry Standard Scale Presets
           </h3>
-          <span className="text-caption text-slate-500 font-medium">
+          <span className="text-caption text-ink-secondary font-medium">
             (Click any preset to instantly auto-populate the ordered size scale)
           </span>
         </div>
@@ -760,7 +760,7 @@ export function SizeGroupDetailPage() {
               type="button"
               disabled={!editable}
               onClick={() => handleApplyPreset(p)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-800 border border-slate-300 shadow-sm hover:border-brand-500 hover:text-brand-700 hover:shadow transition-all"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-ink border border-surface-input shadow-sm hover:border-brand-500 hover:text-brand-700 hover:shadow transition-all"
             >
               <Tag size={12} className="text-brand-600" />
               <span>{p.name}</span>
@@ -772,17 +772,17 @@ export function SizeGroupDetailPage() {
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* SECTION 3: ORDERED SIZES TABLE & SEQUENCE BUILDER                         */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <div className="card p-5 border border-slate-200 shadow-sm bg-white">
+      <div className="card p-5 border border-surface-border shadow-sm bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3 mb-4">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <Ruler size={16} />
             </span>
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-ink">
                 2. Ordered Sizes Scale (Sequence 1 to {sizes.length})
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-ink-secondary">
                 The exact order here dictates how sizes appear across Styles, Cutting Lay Sheets, and Order Ratios
               </p>
             </div>
@@ -815,7 +815,7 @@ export function SizeGroupDetailPage() {
                   </span>
                   <span>{s.size_code || '—'}</span>
                   {s.body_measurement && (
-                    <span className="text-micro font-sans font-normal text-slate-400">
+                    <span className="text-micro font-sans font-normal text-ink-muted">
                       ({s.body_measurement})
                     </span>
                   )}
@@ -832,7 +832,7 @@ export function SizeGroupDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-surface-border bg-slate-100/60 text-caption font-bold uppercase text-slate-600">
+              <tr className="border-b border-surface-border bg-surface-header/60 text-caption font-bold uppercase text-ink-secondary">
                 <th className="py-2.5 px-3 w-16 text-center">Order #</th>
                 <th className="py-2.5 px-2 min-w-[140px]">Size Code *</th>
                 <th className="py-2.5 px-2 min-w-[200px]">Size Display Label *</th>
@@ -843,11 +843,11 @@ export function SizeGroupDetailPage() {
                 {editable && <th className="py-2.5 px-2 w-16 text-center">Actions</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-surface-divider">
               {sizes.map((s, idx) => (
-                <tr key={s._key} className="hover:bg-slate-50/70">
+                <tr key={s._key} className="hover:bg-surface-muted/70">
                   <td className="py-2 px-3 text-center">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 tabular-nums font-bold text-xs text-slate-700">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-surface-header tabular-nums font-bold text-xs text-ink">
                       {idx + 1}
                     </span>
                   </td>
@@ -868,7 +868,7 @@ export function SizeGroupDetailPage() {
                       value={s.size_label}
                       disabled={!editable}
                       onChange={(e) => handleUpdateSize(s._key, 'size_label', e.target.value)}
-                      className="input py-1 px-2 font-medium text-slate-800 text-xs w-full"
+                      className="input py-1 px-2 font-medium text-ink text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1">
@@ -878,7 +878,7 @@ export function SizeGroupDetailPage() {
                       value={s.body_measurement || ''}
                       disabled={!editable}
                       onChange={(e) => handleUpdateSize(s._key, 'body_measurement', e.target.value)}
-                      className="input py-1 px-2 text-xs text-slate-600 w-full"
+                      className="input py-1 px-2 text-xs text-ink-secondary w-full"
                     />
                   </td>
                   <td className="py-1 px-1">
@@ -897,7 +897,7 @@ export function SizeGroupDetailPage() {
                       disabled={!editable}
                       onClick={() => handleUpdateSize(s._key, 'is_active', s.is_active ? 0 : 1)}
                       className={`inline-flex rounded px-2 py-0.5 text-micro font-bold ${
-                        s.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                        s.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-border text-ink-secondary'
                       }`}
                     >
                       {s.is_active ? 'Active' : 'Draft'}
@@ -909,7 +909,7 @@ export function SizeGroupDetailPage() {
                         type="button"
                         disabled={!editable || idx === 0}
                         onClick={() => handleMoveUp(idx)}
-                        className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30"
+                        className="rounded p-1 text-ink-secondary hover:bg-surface-header hover:text-ink disabled:opacity-30"
                         title="Move Up"
                       >
                         <ArrowUp size={13} />
@@ -918,7 +918,7 @@ export function SizeGroupDetailPage() {
                         type="button"
                         disabled={!editable || idx === sizes.length - 1}
                         onClick={() => handleMoveDown(idx)}
-                        className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30"
+                        className="rounded p-1 text-ink-secondary hover:bg-surface-header hover:text-ink disabled:opacity-30"
                         title="Move Down"
                       >
                         <ArrowDown size={13} />
@@ -931,7 +931,7 @@ export function SizeGroupDetailPage() {
                         <button
                           type="button"
                           onClick={() => handleDuplicateSize(s._key)}
-                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          className="rounded p-1 text-ink-muted hover:bg-surface-header hover:text-ink"
                           title="Duplicate Size"
                         >
                           <Copy size={13} />
@@ -939,7 +939,7 @@ export function SizeGroupDetailPage() {
                         <button
                           type="button"
                           onClick={() => handleRemoveSize(s._key)}
-                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          className="rounded p-1 text-ink-muted hover:bg-rose-50 hover:text-rose-600"
                           title="Remove Size"
                         >
                           <Trash2 size={13} />
@@ -954,7 +954,7 @@ export function SizeGroupDetailPage() {
         </div>
 
         {/* Bottom KPI Metrics */}
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 pt-3 border-t border-slate-100">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 pt-3 border-t border-surface-divider">
           <div className="rounded-lg bg-blue-50/60 border border-blue-200 p-3 text-center">
             <span className="text-caption font-bold uppercase tracking-wider text-blue-700">Total Scale Sizes</span>
             <div className="text-xl font-bold text-blue-900 mt-0.5">{sizes.length}</div>

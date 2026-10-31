@@ -60,10 +60,10 @@ export function PackingReportsPage() {
               actions={<PkStatus value={t.carton.carton_status} posted={t.carton.is_posted} />}>
               <div className="grid gap-4 p-4 lg:grid-cols-2" id="trace-result">
                 <div><TableHead title="Contents" /><table className="w-full text-body"><tbody>{t.contents.map((c: any, i: number) => <tr key={i}><td className="td">{c.color_name}</td><td className="td">{c.size_code}</td><td className="td text-right">{c.qty} pcs</td></tr>)}</tbody></table></div>
-                <div><TableHead title="Bundles" />{!t.bundles.length ? <p className="text-small text-slate-400">Not posted yet — bundles link on posting.</p> :
+                <div><TableHead title="Bundles" />{!t.bundles.length ? <p className="text-small text-ink-muted">Not posted yet — bundles link on posting.</p> :
                   <table className="w-full text-body"><tbody>{t.bundles.map((b: any, i: number) => <tr key={i}><td className="td tabular-nums">{b.bundle_no}</td><td className="td">{b.cut_no}</td><td className="td">{b.color_name}/{b.size_code}</td><td className="td text-right">{b.qty}</td></tr>)}</tbody></table>}</div>
-                <div><TableHead title="History" /><ul className="text-small text-slate-600">{t.events.map((e: any, i: number) => <li key={i}>{fmtDateTime(e.created_at)} · {e.event_type}{e.reason ? ` — ${e.reason}` : ''}</li>)}</ul></div>
-                <div><TableHead title="Shipment" />{t.shipment.length ? t.shipment.map((s: any, i: number) => <div key={i} className="text-body">{s.shipment_no} · {s.status}</div>) : <p className="text-small text-slate-400">Not on a shipment.</p>}</div>
+                <div><TableHead title="History" /><ul className="text-small text-ink-secondary">{t.events.map((e: any, i: number) => <li key={i}>{fmtDateTime(e.created_at)} · {e.event_type}{e.reason ? ` — ${e.reason}` : ''}</li>)}</ul></div>
+                <div><TableHead title="Shipment" />{t.shipment.length ? t.shipment.map((s: any, i: number) => <div key={i} className="text-body">{s.shipment_no} · {s.status}</div>) : <p className="text-small text-ink-muted">Not on a shipment.</p>}</div>
               </div>
             </Card>
           )}

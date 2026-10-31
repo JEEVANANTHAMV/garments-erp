@@ -64,13 +64,13 @@ export function EwayBillButton({ sourceType, sourceId, compact }: {
 
   if (isLoading) {
     return compact
-      ? <span className="text-caption text-slate-400" data-ewb-source={sourceType}>…</span>
+      ? <span className="text-caption text-ink-muted" data-ewb-source={sourceType}>…</span>
       : null;
   }
 
   if (!ewb) {
     if (!can('EWAY.CREATE')) {
-      return compact ? <span className="text-caption text-slate-400" data-ewb-source={sourceType}>—</span> : null;
+      return compact ? <span className="text-caption text-ink-muted" data-ewb-source={sourceType}>—</span> : null;
     }
     const go = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -101,7 +101,7 @@ export function EwayBillButton({ sourceType, sourceId, compact }: {
     <Link to={`/logistics/eway-bills/${ewb.id}`} id={`ewb-btn-${sourceType.toLowerCase()}-${id}`} data-ewb-source={sourceType}
       data-ewb-status={ewb.view_status} onClick={stop} title={title}
       className={clsx('inline-flex items-center gap-1 whitespace-nowrap text-caption font-medium hover:underline',
-        expired ? 'text-red-600' : 'text-slate-700')}>
+        expired ? 'text-red-600' : 'text-ink')}>
       <Truck size={12} /> {ewb.ewb_no ?? ewb.doc_no}
       <Badge tone={v.tone} className="!px-1.5 !py-0 !text-micro">{v.label}</Badge>
     </Link>
@@ -109,11 +109,11 @@ export function EwayBillButton({ sourceType, sourceId, compact }: {
     <Link to={`/logistics/eway-bills/${ewb.id}`} id="ewb-btn" data-ewb-source={sourceType}
       data-ewb-status={ewb.view_status} onClick={stop} title="Open e-way bill"
       className={clsx('inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-        expired ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50')}>
+        expired ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100' : 'border-surface-input bg-white text-ink hover:bg-surface-muted')}>
       <Truck size={14} />
       <span>{label}</span>
       <Badge tone={v.tone}>{v.label}</Badge>
-      {validity && <span className={expired ? 'text-red-600' : 'text-slate-500'}>{validity}</span>}
+      {validity && <span className={expired ? 'text-red-600' : 'text-ink-secondary'}>{validity}</span>}
     </Link>
   );
 }

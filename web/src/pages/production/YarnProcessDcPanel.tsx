@@ -127,26 +127,26 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
   const pendingTotal = dcs.reduce((a, d) => a + Number(d.pending_kg || 0), 0);
 
   return (
-    <div className="rounded-lg border border-slate-200">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
-        <p className="text-small font-semibold text-slate-700">
-          Outward DC / Inward <span className="font-normal text-slate-500">— pending at processor: <b className="text-amber-700">{fmtDecimal(pendingTotal, 3)} KG</b></span>
+    <div className="rounded-lg border border-surface-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-divider bg-surface-muted px-3 py-2">
+        <p className="text-small font-semibold text-ink">
+          Outward DC / Inward <span className="font-normal text-ink-secondary">— pending at processor: <b className="text-amber-700">{fmtDecimal(pendingTotal, 3)} KG</b></span>
         </p>
         <Button size="sm" onClick={openOutward} disabled={['DRAFT', 'CANCELLED', 'COMPLETED'].includes(process.status)}>
           <Truck size={13} className="mr-1" /> Outward DC
         </Button>
       </div>
       <table className="w-full text-caption">
-        <thead className="text-slate-500">
+        <thead className="text-ink-secondary">
           <tr>{['DC No', 'Date', 'Supplier / Vendor', 'Jobs', 'Cones', 'Sent KG', 'Received KG', 'Output KG', 'Pending KG', 'Status', ''].map((h) => <th key={h} className="px-2 py-1.5 text-left">{h}</th>)}</tr>
         </thead>
         <tbody>
           {dcs.map((d) => (
-            <tr key={d.dc_no} className="border-t border-slate-100">
+            <tr key={d.dc_no} className="border-t border-surface-divider">
               <td className="px-2 py-1 tabular-nums font-semibold text-brand-700">{d.dc_no}</td>
               <td className="px-2 py-1">{fmtDate(d.dc_date)}</td>
               <td className="px-2 py-1">{d.vendor_name ?? '—'}</td>
-              <td className="px-2 py-1">{d.io_no || '—'}{Number(d.job_count) > 1 ? <span className="ml-1 text-slate-400">({d.job_count})</span> : null}</td>
+              <td className="px-2 py-1">{d.io_no || '—'}{Number(d.job_count) > 1 ? <span className="ml-1 text-ink-muted">({d.job_count})</span> : null}</td>
               <td className="px-2 py-1">{d.cones}</td>
               <td className="px-2 py-1">{fmtDecimal(d.issued_kg, 3)}</td>
               <td className="px-2 py-1">{fmtDecimal(d.received_kg, 3)}</td>
@@ -155,11 +155,11 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
               <td className="px-2 py-1"><Badge tone={d.status === 'RECEIVED' ? 'emerald' : d.status === 'PARTIAL_RECEIVED' ? 'amber' : 'blue'}>{d.status.replace(/_/g, ' ')}</Badge></td>
               <td className="px-2 py-1 text-right whitespace-nowrap">
                 {d.pending_kg > 0 && <Button size="sm" variant="secondary" onClick={() => openInward(d)}><PackageCheck size={12} className="mr-1" /> Inward</Button>}
-                <button className="ml-2 text-slate-500 hover:text-slate-800" title="Print DC" onClick={() => printDc(d.dc_no)}><Printer size={13} /></button>
+                <button className="ml-2 text-ink-secondary hover:text-ink" title="Print DC" onClick={() => printDc(d.dc_no)}><Printer size={13} /></button>
               </td>
             </tr>
           ))}
-          {!dcs.length && <tr><td colSpan={11} className="px-3 py-4 text-center text-slate-400">No outward DC yet</td></tr>}
+          {!dcs.length && <tr><td colSpan={11} className="px-3 py-4 text-center text-ink-muted">No outward DC yet</td></tr>}
         </tbody>
       </table>
 
@@ -174,25 +174,25 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
           <Select label="From store *" value={out.warehouse_id} onChange={(e) => setOut({ ...out, warehouse_id: e.target.value })} placeholder="Select" options={whOpts} />
           <Input label="Vehicle no" value={out.vehicle_no} onChange={(e) => setOut({ ...out, vehicle_no: e.target.value })} />
         </FormSection>
-        <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-          <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Jobs & yarn</h3>
+        <div className="mt-5 flex flex-wrap items-end gap-2 border-b border-surface-divider pb-1.5">
+          <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-ink-secondary">Jobs & yarn</h3>
           <Select label="Add another job (same process) to this DC" className="w-80" value={addId} placeholder="— Released job —" onChange={(e) => setAddId(e.target.value)}
             options={others.filter((p) => !jobs.some((j) => j.process_id === p.id)).map((p) => ({ value: p.id, label: `${p.process_no} · ${p.io_no ?? 'stock'}` }))} />
           <Button size="sm" disabled={!addId} onClick={addJob}><Plus size={12} className="mr-1" /> Add job</Button>
         </div>
         {jobs.map((j, ji) => (
-          <div key={j.process_id} className="mt-3 rounded border border-slate-200">
+          <div key={j.process_id} className="mt-3 rounded border border-surface-border">
             <div className="flex items-center justify-between bg-sky-50 px-2 py-1.5 text-small font-semibold text-sky-900">
               <span>Job {j.io_no ?? 'stock'} · {j.process_no}</span>
-              {ji > 0 && <button className="text-slate-500 hover:text-red-600" onClick={() => setJobs(jobs.filter((_, a) => a !== ji))}><Trash2 size={13} /></button>}
+              {ji > 0 && <button className="text-ink-secondary hover:text-red-600" onClick={() => setJobs(jobs.filter((_, a) => a !== ji))}><Trash2 size={13} /></button>}
             </div>
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1.5 text-left">Yarn</th><th className="px-2 py-1.5 text-left">Yarn lot (GRN / PO / supplier) — this job's yarn first</th><th className="px-2 py-1.5 text-right">Cones</th><th className="px-2 py-1.5 text-right">KG</th><th /></tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1.5 text-left">Yarn</th><th className="px-2 py-1.5 text-left">Yarn lot (GRN / PO / supplier) — this job's yarn first</th><th className="px-2 py-1.5 text-right">Cones</th><th className="px-2 py-1.5 text-right">KG</th><th /></tr></thead>
               <tbody>
                 {j.lines.map((l, li) => {
                   const opts = j.lots.filter((o: any) => !l.yarn_id || Number(o.yarn_id) === Number(l.yarn_id));
                   return (
-                    <tr key={li} className="border-t border-slate-100">
+                    <tr key={li} className="border-t border-surface-divider">
                       <td className="px-2 py-1"><select className="input h-8 w-full text-xs" value={l.yarn_id} onChange={(e) => setJobLine(ji, li, { yarn_id: e.target.value, grn_line_id: '' })}>
                         <option value="">Select yarn</option>{yarnOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></td>
                       <td className="px-2 py-1"><select className="input h-8 w-full min-w-[300px] text-xs" value={l.grn_line_id} onChange={(e) => setJobLine(ji, li, { grn_line_id: e.target.value })}>

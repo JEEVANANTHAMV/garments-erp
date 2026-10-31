@@ -67,11 +67,11 @@ export function ReportsTab({ kind }: { kind: Kind }) {
       </div>
       {rep.error && <p className="px-3 pb-3 text-sm text-red-600">{rep.error}</p>}
       <div className="overflow-x-auto px-3 pb-3">
-        {rep.loading ? <p className="text-sm text-slate-500">Loading…</p> : !rows.length ? <p className="py-6 text-center text-sm text-slate-400">No data for the filters</p> : (
+        {rep.loading ? <p className="text-sm text-ink-secondary">Loading…</p> : !rows.length ? <p className="py-6 text-center text-sm text-ink-muted">No data for the filters</p> : (
           <table className="w-full text-xs" id="mp-report-table">
-            <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((k) => <th key={k} className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">{label(k)}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{cols.map((k) => <th key={k} className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">{label(k)}</th>)}</tr></thead>
             <tbody>{rows.map((r, i) => (
-              <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
+              <tr key={i} className="border-t border-surface-divider hover:bg-surface-muted">
                 {cols.map((k) => <td key={k} className={`whitespace-nowrap px-2 py-1 ${typeof r[k] === 'number' || MONEY.has(k) || PCT.has(k) ? 'text-right tabular-nums' : ''} ${k === 'variance_pct' && num(r[k]) > 0 ? 'text-red-600' : ''}`}>{fmt(k, r[k])}</td>)}
               </tr>
             ))}</tbody>

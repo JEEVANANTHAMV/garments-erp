@@ -31,8 +31,8 @@ export function CuttingPlansPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Cutting Plans</h1>
-          <p className="text-sm text-slate-500">I/O → Style → Size-wise cutting plans</p>
+          <h1 className="text-2xl font-bold text-ink">Cutting Plans</h1>
+          <p className="text-sm text-ink-secondary">I/O → Style → Size-wise cutting plans</p>
         </div>
         <Button onClick={() => nav('/production/cutting-plans/new')}>+ New Cutting Plan</Button>
       </div>
@@ -55,7 +55,7 @@ export function CuttingPlansPage() {
             ) },
             { key: 'style_code', header: 'Style', render: (r: any) => (
               <div><p className="font-medium">{r.style_code}</p>
-                <p className="text-caption text-slate-500">{r.style_name}</p></div>
+                <p className="text-caption text-ink-secondary">{r.style_name}</p></div>
             ) },
             { key: 'part_name', header: 'Part', render: (r: any) => {
               const part = (r.part_name || 'TOP').toUpperCase();
@@ -325,10 +325,10 @@ export function CuttingPlanDetailPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
+          <h1 className="text-2xl font-bold text-ink">
             {isNew ? 'New Cutting Plan' : `Cutting Plan — ${header.plan_no}`}
           </h1>
-          <p className="text-sm text-slate-500">Pick the job — the style, buyer PO and the CAD cutting program load; choose the colour and fill the plan details.</p>
+          <p className="text-sm text-ink-secondary">Pick the job — the style, buyer PO and the CAD cutting program load; choose the colour and fill the plan details.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => nav('/production/cutting-plans')}>← Back</Button>
@@ -346,11 +346,11 @@ export function CuttingPlanDetailPage() {
             onChange={e => void onStylePick(e.target.value ? Number(e.target.value) : null)}
             options={[{ value: '', label: '— Select style —' }, ...((program?.styles?.length ? program.styles.map((s: any) => ({ value: s.style_id, label: `${s.style_code} · ${s.style_name}` }))
               : styles.map((s: any) => ({ value: s.id, label: s.label || s.code }))))]} />
-          <div><p className="label">Buyer</p><p className="input bg-slate-50" id="cp-buyer">{program?.job?.buyer_name || '—'}</p></div>
-          <div><p className="label">Buyer PO</p><p className="input bg-slate-50 tabular-nums" id="cp-buyer-po">{header.buyer_po_no || program?.job?.buyer_po_no || '—'}</p></div>
-          <div><p className="label">I/O no</p><p className="input bg-slate-50 tabular-nums" id="cp-io">{header.io_no || '—'}</p></div>
+          <div><p className="label">Buyer</p><p className="input bg-surface-muted" id="cp-buyer">{program?.job?.buyer_name || '—'}</p></div>
+          <div><p className="label">Buyer PO</p><p className="input bg-surface-muted tabular-nums" id="cp-buyer-po">{header.buyer_po_no || program?.job?.buyer_po_no || '—'}</p></div>
+          <div><p className="label">I/O no</p><p className="input bg-surface-muted tabular-nums" id="cp-io">{header.io_no || '—'}</p></div>
         </div>
-        {progLoading && <p className="px-4 pb-3 text-xs text-slate-500">Loading the cutting program…</p>}
+        {progLoading && <p className="px-4 pb-3 text-xs text-ink-secondary">Loading the cutting program…</p>}
         {program?.needs_style && <p className="px-4 pb-3 text-xs font-semibold text-amber-700">This job has more than one style — pick the style.</p>}
         {program && !program.needs_style && (
           <div className="space-y-3 border-t px-4 py-3">
@@ -358,14 +358,14 @@ export function CuttingPlanDetailPage() {
               {program.cad ? (
                 <span id="cp-cad" className="rounded bg-indigo-50 px-2 py-1 font-semibold text-indigo-800">CAD {program.cad.req_no} · {program.cad.status} · rejection {program.cad.rejection_pct}% · efficiency {program.cad.marker_efficiency}%</span>
               ) : <span className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-800">No CAD for this job + style — sales order quantities only</span>}
-              <span className="rounded bg-slate-100 px-2 py-1">Order {fmtNumber(program.style?.order_qty)} PCS</span>
+              <span className="rounded bg-surface-header px-2 py-1">Order {fmtNumber(program.style?.order_qty)} PCS</span>
               {fab && <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-800">Fabric {fab.fabric_name || fab.fabric_type}{fab.gsm ? ` · ${fab.gsm} GSM` : ''}</span>}
               {(program.warnings || []).map((w: string) => <span key={w} className="rounded bg-amber-50 px-2 py-1 text-amber-800">{w}</span>)}
             </div>
 
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-xs" id="cp-program">
-                <thead className="border-b bg-slate-50 text-slate-600">
+                <thead className="border-b bg-surface-muted text-ink-secondary">
                   <tr>
                     <th className="p-2 text-left">Colour</th>
                     <th className="p-2 text-left">Qty</th>
@@ -388,12 +388,12 @@ export function CuttingPlanDetailPage() {
                     ];
                     return rows.map(([k, label, f], ri) => (
                       <tr key={`${c.color_name}-${k}`} className={`${ri === rows.length - 1 ? 'border-b-2' : 'border-b'} ${active ? 'bg-indigo-50/60' : ''}`}>
-                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top font-semibold text-slate-800">{c.color_name}{!c.color_id && <span className="block text-micro font-normal text-amber-700">not in colour master</span>}</td>}
-                        <td className={`p-1.5 text-slate-500 ${k === 'todo' ? 'font-semibold text-indigo-700' : ''}`}>{label}</td>
+                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top font-semibold text-ink">{c.color_name}{!c.color_id && <span className="block text-micro font-normal text-amber-700">not in colour master</span>}</td>}
+                        <td className={`p-1.5 text-ink-secondary ${k === 'todo' ? 'font-semibold text-indigo-700' : ''}`}>{label}</td>
                         {sizeOrder.map((sz) => <td key={sz} className={`p-1.5 text-right tabular-nums ${k === 'todo' ? 'font-semibold text-indigo-700' : ''}`}>{fmtNumber(f(cell(sz)))}</td>)}
                         <td className={`p-1.5 text-right font-semibold tabular-nums ${k === 'todo' ? 'text-indigo-700' : ''}`}>{fmtNumber((c.sizes || []).reduce((a: number, x: any) => a + f(x), 0))}</td>
-                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">{(c.marker_plies || []).filter((m: any) => m.plies != null).map((m: any) => <div key={m.marker_ref}>{m.marker_ref}: <b>{m.plies}</b></div>)}{!(c.marker_plies || []).some((m: any) => m.plies != null) && <span className="text-slate-400">—</span>}</td>}
-                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">{(c.plans || []).map((p: any) => <div key={p.id}><button className="tabular-nums text-brand-700 hover:underline" onClick={() => nav(`/production/cutting-plans/${p.id}`)}>{p.plan_no}</button> <span className="text-slate-400">{p.status}</span></div>)}{!(c.plans || []).length && <span className="text-slate-400">none</span>}</td>}
+                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">{(c.marker_plies || []).filter((m: any) => m.plies != null).map((m: any) => <div key={m.marker_ref}>{m.marker_ref}: <b>{m.plies}</b></div>)}{!(c.marker_plies || []).some((m: any) => m.plies != null) && <span className="text-ink-muted">—</span>}</td>}
+                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">{(c.plans || []).map((p: any) => <div key={p.id}><button className="tabular-nums text-brand-700 hover:underline" onClick={() => nav(`/production/cutting-plans/${p.id}`)}>{p.plan_no}</button> <span className="text-ink-muted">{p.status}</span></div>)}{!(c.plans || []).length && <span className="text-ink-muted">none</span>}</td>}
                         {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">
                           {isNew || !sizesLocked
                             ? <Button size="sm" variant={active ? 'primary' : 'outline'} id={`cp-colour-${ci}`} disabled={readOnly} onClick={() => applyColour(c)}>{active ? 'Selected ✓' : 'Use this colour'}</Button>
@@ -424,18 +424,18 @@ export function CuttingPlanDetailPage() {
       {loaded && !isNew && (
         <Card title="Cutting progress & consumption">
           <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-6 text-sm">
-            <div><p className="text-xs text-slate-500">Status</p><Badge color={statusColorOf(loaded.status)}>{loaded.status}</Badge></div>
-            <div><p className="text-xs text-slate-500">Order qty</p><p className="font-semibold">{fmtNumber(loaded.order_qty)} PCS</p></div>
-            <div><p className="text-xs text-slate-500">Actual cut</p><p className="font-semibold text-emerald-700">{fmtNumber(loaded.actual_cut_qty)} PCS</p></div>
-            <div><p className="text-xs text-slate-500">Balance</p><p className="font-semibold">{fmtNumber(loaded.balance_qty)} PCS</p></div>
-            <div><p className="text-xs text-slate-500">Max without override</p><p className="font-semibold">{loaded.max_cut_qty != null ? `${fmtNumber(loaded.max_cut_qty)} PCS` : '—'}</p></div>
-            <div><p className="text-xs text-slate-500">Unaccounted fabric</p><p className="font-semibold">{fmtNumber(loaded.reconciliation?.unaccounted_kg, 3)} KG</p></div>
-            <div><p className="text-xs text-slate-500">Planned (BOM)</p><p className="font-semibold">{loaded.consumption?.planned?.kg_per_pc ?? '—'} KG/PC</p></div>
-            <div><p className="text-xs text-slate-500">Marker (CAD)</p><p className="font-semibold">{loaded.consumption?.marker?.kg_per_pc ?? '—'} KG/PC</p></div>
-            <div><p className="text-xs text-slate-500">Cutting actual</p><p className="font-semibold">{loaded.consumption?.cutting_actual?.kg_per_pc ?? '—'} KG/PC</p></div>
-            <div><p className="text-xs text-slate-500">Actual − Planned</p><p className="font-semibold">{loaded.consumption?.variances?.actual_vs_planned?.variance_pct != null ? `${loaded.consumption.variances.actual_vs_planned.variance_pct} %` : '—'}</p></div>
-            <div><p className="text-xs text-slate-500">Lays</p><p className="font-semibold">{loaded.lays?.length ?? 0}</p></div>
-            <div><p className="text-xs text-slate-500">Fabric DCs</p><p className="font-semibold">{loaded.fabric_issues?.length ?? 0} · {fmtNumber(loaded.reconciliation?.net_issued_kg, 3)} KG net</p></div>
+            <div><p className="text-xs text-ink-secondary">Status</p><Badge color={statusColorOf(loaded.status)}>{loaded.status}</Badge></div>
+            <div><p className="text-xs text-ink-secondary">Order qty</p><p className="font-semibold">{fmtNumber(loaded.order_qty)} PCS</p></div>
+            <div><p className="text-xs text-ink-secondary">Actual cut</p><p className="font-semibold text-emerald-700">{fmtNumber(loaded.actual_cut_qty)} PCS</p></div>
+            <div><p className="text-xs text-ink-secondary">Balance</p><p className="font-semibold">{fmtNumber(loaded.balance_qty)} PCS</p></div>
+            <div><p className="text-xs text-ink-secondary">Max without override</p><p className="font-semibold">{loaded.max_cut_qty != null ? `${fmtNumber(loaded.max_cut_qty)} PCS` : '—'}</p></div>
+            <div><p className="text-xs text-ink-secondary">Unaccounted fabric</p><p className="font-semibold">{fmtNumber(loaded.reconciliation?.unaccounted_kg, 3)} KG</p></div>
+            <div><p className="text-xs text-ink-secondary">Planned (BOM)</p><p className="font-semibold">{loaded.consumption?.planned?.kg_per_pc ?? '—'} KG/PC</p></div>
+            <div><p className="text-xs text-ink-secondary">Marker (CAD)</p><p className="font-semibold">{loaded.consumption?.marker?.kg_per_pc ?? '—'} KG/PC</p></div>
+            <div><p className="text-xs text-ink-secondary">Cutting actual</p><p className="font-semibold">{loaded.consumption?.cutting_actual?.kg_per_pc ?? '—'} KG/PC</p></div>
+            <div><p className="text-xs text-ink-secondary">Actual − Planned</p><p className="font-semibold">{loaded.consumption?.variances?.actual_vs_planned?.variance_pct != null ? `${loaded.consumption.variances.actual_vs_planned.variance_pct} %` : '—'}</p></div>
+            <div><p className="text-xs text-ink-secondary">Lays</p><p className="font-semibold">{loaded.lays?.length ?? 0}</p></div>
+            <div><p className="text-xs text-ink-secondary">Fabric DCs</p><p className="font-semibold">{loaded.fabric_issues?.length ?? 0} · {fmtNumber(loaded.reconciliation?.net_issued_kg, 3)} KG net</p></div>
           </div>
         </Card>
       )}
@@ -445,7 +445,7 @@ export function CuttingPlanDetailPage() {
         <div className="p-4">
           <table className="w-full text-sm" id="cp-sizes">
             <thead>
-              <tr className="border-b text-left text-slate-500">
+              <tr className="border-b text-left text-ink-secondary">
                 <th className="pb-2 pr-3">Size</th>
                 <th className="pb-2 pr-3 text-right">Order Qty (PCS)</th>
                 <th className="pb-2 pr-3 text-right">Planned Qty (PCS)</th>
@@ -454,9 +454,9 @@ export function CuttingPlanDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {sizes.length === 0 && <tr><td colSpan={5} className="py-3 text-center text-xs text-slate-400">Pick the job and a colour from the cutting program above.</td></tr>}
+              {sizes.length === 0 && <tr><td colSpan={5} className="py-3 text-center text-xs text-ink-muted">Pick the job and a colour from the cutting program above.</td></tr>}
               {sizes.map((sz, idx) => (
-                <tr key={idx} className="border-b border-slate-100">
+                <tr key={idx} className="border-b border-surface-divider">
                   <td className="py-2 pr-3">
                     <Select value={sz.size_id || ''} disabled={sizesLocked || readOnly}
                       onChange={e => updateSize(idx, 'size_id', e.target.value ? Number(e.target.value) : null)}
@@ -480,7 +480,7 @@ export function CuttingPlanDetailPage() {
             <tfoot>
               <tr>
                 <td colSpan={5} className="pt-3">
-                  {sizesLocked ? <span className="text-xs text-slate-400">Size breakdown is locked once the cut order is released.</span>
+                  {sizesLocked ? <span className="text-xs text-ink-muted">Size breakdown is locked once the cut order is released.</span>
                     : !readOnly && <Button variant="ghost" size="sm" onClick={addSizeLine}>+ Add Size</Button>}
                 </td>
               </tr>
@@ -547,7 +547,7 @@ export function CuttingPlanDetailPage() {
         <div className="px-4 pb-4">
           <Textarea label="Remarks" value={header.remarks} rows={2} onChange={e => setField('remarks', e.target.value)} />
         </div>
-        {readOnly && <p className="px-4 pb-3 text-xs font-semibold text-slate-500">This cut order is {savedStatus} and read-only{savedStatus === 'CLOSED' ? ' — reopen it from Cutting Reconciliation to change it' : ''}.</p>}
+        {readOnly && <p className="px-4 pb-3 text-xs font-semibold text-ink-secondary">This cut order is {savedStatus} and read-only{savedStatus === 'CLOSED' ? ' — reopen it from Cutting Reconciliation to change it' : ''}.</p>}
         {!readOnly && (
           <div className="flex justify-end gap-2 border-t px-4 py-3">
             {!isNew && <Button variant="outline" onClick={() => nav(`/production/lay-spreading?plan=${id}`)}>Plan lays →</Button>}

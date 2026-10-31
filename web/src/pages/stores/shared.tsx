@@ -90,16 +90,16 @@ export function SimpleTable({ cols, rows, loading, onRow, empty = 'Nothing here 
   return (
     <div className="card overflow-x-auto">
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500">
+        <thead className="bg-surface-muted text-ink-secondary">
           <tr>{cols.map((c) => <th key={c.key} className={`whitespace-nowrap px-3 py-2 ${c.kind === 'qty' || c.kind === 'money' ? 'text-right' : 'text-left'}`}>{c.label}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={r.id ?? i} onClick={onRow ? () => onRow(r) : undefined} className={`border-t border-slate-100 ${onRow ? 'cursor-pointer hover:bg-slate-50' : ''}`}>
+            <tr key={r.id ?? i} onClick={onRow ? () => onRow(r) : undefined} className={`border-t border-surface-divider ${onRow ? 'cursor-pointer hover:bg-surface-muted' : ''}`}>
               {cols.map((c) => <td key={c.key} className={`whitespace-nowrap px-3 py-1.5 ${c.kind === 'qty' || c.kind === 'money' ? 'text-right tabular-nums' : ''}`}>{cell(c, r)}</td>)}
             </tr>
           ))}
-          {!rows.length && <tr><td colSpan={cols.length} className="px-3 py-10 text-center text-slate-400">{empty}</td></tr>}
+          {!rows.length && <tr><td colSpan={cols.length} className="px-3 py-10 text-center text-ink-muted">{empty}</td></tr>}
         </tbody>
         {footer}
       </table>
@@ -166,15 +166,15 @@ export function StockPicker({ material, warehouseId, onClose, onPick, exclude = 
         <SearchInput value={search} onChange={setSearch} placeholder="Search item, lot, roll, colour…" />
       </FormSection>
       {list.isLoading ? <LoadingBlock /> : (
-        <div className="max-h-[55vh] overflow-auto rounded-lg border border-slate-200">
+        <div className="max-h-[55vh] overflow-auto rounded-lg border border-surface-border">
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-slate-50 text-slate-500"><tr>
+            <thead className="sticky top-0 bg-surface-muted text-ink-secondary"><tr>
               <th className="w-8 px-2 py-2" /><th className="px-2 py-2 text-left">Item</th><th className="px-2 py-2 text-left">Lot / roll</th><th className="px-2 py-2 text-left">Colour</th>
               <th className="px-2 py-2 text-left">GRN</th><th className="px-2 py-2 text-left">Job</th><th className="px-2 py-2 text-right">Stock</th><th className="px-2 py-2 text-left">UOM</th><th className="px-2 py-2 text-right">Rate</th>
             </tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.source_ref} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50 stock-pick-row"
+                <tr key={r.source_ref} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted stock-pick-row"
                   onClick={() => setSel((s) => { const n = { ...s }; if (n[r.source_ref]) delete n[r.source_ref]; else n[r.source_ref] = r; return n; })}>
                   <td className="px-2 py-1.5"><input type="checkbox" readOnly checked={!!sel[r.source_ref]} className="h-4 w-4" /></td>
                   <td className="px-2 py-1.5 font-medium">{r.item_name}</td><td className="px-2 py-1.5">{r.lot_no || '—'}</td><td className="px-2 py-1.5">{r.color_name || '—'}</td>
@@ -182,7 +182,7 @@ export function StockPicker({ material, warehouseId, onClose, onPick, exclude = 
                   <td className="px-2 py-1.5 text-right tabular-nums">{qtyFmt(r.stock_qty)}</td><td className="px-2 py-1.5">{r.uom_code}</td><td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(r.rate, 2)}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">No stock of this kind at this location</td></tr>}
+              {!rows.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-ink-muted">No stock of this kind at this location</td></tr>}
             </tbody>
           </table>
         </div>
@@ -195,11 +195,11 @@ export function StockPicker({ material, warehouseId, onClose, onPick, exclude = 
 export function InfoGrid({ items }: { items: [string, ReactNode][] }) {
   return (
     <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-body sm:grid-cols-4">
-      {items.map(([k, v]) => <div key={k}><dt className="text-caption uppercase tracking-wider text-slate-400">{k}</dt><dd className="font-medium text-slate-800">{v ?? '—'}</dd></div>)}
+      {items.map(([k, v]) => <div key={k}><dt className="text-caption uppercase tracking-wider text-ink-muted">{k}</dt><dd className="font-medium text-ink">{v ?? '—'}</dd></div>)}
     </dl>
   );
 }
 
 export const TH = 'whitespace-nowrap px-2 py-2';
 export const TD = 'px-2 py-1';
-export const tableHead = 'text-small font-semibold uppercase tracking-wider text-slate-500';
+export const tableHead = 'text-small font-semibold uppercase tracking-wider text-ink-secondary';

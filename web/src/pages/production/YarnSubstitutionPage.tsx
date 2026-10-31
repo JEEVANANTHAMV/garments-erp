@@ -21,19 +21,19 @@ const kg = (v: unknown) => fmtDecimal(n(v), 3);
 const STATUS: Record<string, [string, string]> = {
   PENDING_APPROVAL: ['Waiting for approval', 'bg-amber-100 text-amber-800'], APPROVED: ['Approved', 'bg-sky-100 text-sky-800'],
   POSTED: ['Approved & posted', 'bg-emerald-100 text-emerald-800'], SEND_BACK: ['Sent back', 'bg-orange-100 text-orange-800'],
-  REJECTED: ['Rejected', 'bg-rose-100 text-rose-700'], CANCELLED: ['Cancelled', 'bg-slate-200 text-slate-600'],
+  REJECTED: ['Rejected', 'bg-rose-100 text-rose-700'], CANCELLED: ['Cancelled', 'bg-surface-border text-ink-secondary'],
 };
-const Chip = ({ s }: { s: string }) => <span className={`rounded px-1.5 py-0.5 text-caption font-bold ${STATUS[s]?.[1] ?? 'bg-slate-100'}`}>{STATUS[s]?.[0] ?? s}</span>;
+const Chip = ({ s }: { s: string }) => <span className={`rounded px-1.5 py-0.5 text-caption font-bold ${STATUS[s]?.[1] ?? 'bg-surface-header'}`}>{STATUS[s]?.[0] ?? s}</span>;
 
 export default function YarnSubstitutionPage() {
   const [tab, setTab] = useState<'requests' | 'new' | 'rules' | 'ledger'>('requests');
   const T = (k: typeof tab, label: string) => (
-    <button key={k} id={`ys-tab-${k}`} onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === k ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>
+    <button key={k} id={`ys-tab-${k}`} onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === k ? 'bg-brand-600 text-white' : 'text-ink-secondary hover:bg-surface-header'}`}>{label}</button>
   );
   return (
     <>
       <PageHeader breadcrumb={['Production', 'Yarn Substitution']} title="Yarn Substitution" subtitle="Required count not in stock — use an approved substitute (e.g. 24s → 25s) with Production Manager approval" />
-      <div className="mb-3 flex flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-white p-1.5">
+      <div className="mb-3 flex flex-wrap gap-1.5 rounded-xl border border-surface-border bg-white p-1.5">
         {T('requests', 'Requests & approvals')}{T('new', 'New request')}{T('rules', 'Substitution rules')}{T('ledger', 'Job yarn ledger')}
       </div>
       {tab === 'requests' && <RequestList />}
@@ -69,17 +69,17 @@ function RequestList() {
       </div>
       {list.isLoading ? <LoadingBlock /> : (
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Request', 'Date', 'Job', 'Program', 'Required yarn', 'Substitute', 'Lot / GRN', 'From', 'Qty KG', '= Req. KG', 'Reason', 'By', 'Status', ''].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['Request', 'Date', 'Job', 'Program', 'Required yarn', 'Substitute', 'Lot / GRN', 'From', 'Qty KG', '= Req. KG', 'Reason', 'By', 'Status', ''].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>
             {(list.data ?? []).map((r) => (
-              <tr key={r.id} className="border-t border-slate-100">
+              <tr key={r.id} className="border-t border-surface-divider">
                 <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{r.request_no}</td><td className="px-2 py-1.5">{fmtDate(r.request_date)}</td>
                 <td className="px-2 py-1.5 font-semibold">{r.io_no}</td><td className="px-2 py-1.5">{r.program_no}</td>
                 <td className="px-2 py-1.5">{r.required_yarn}</td><td className="px-2 py-1.5 font-semibold text-purple-700">{r.substitute_yarn}</td>
-                <td className="px-2 py-1.5">{r.lot_no || '—'} <span className="text-slate-400">{r.grn_no}</span></td><td className="px-2 py-1.5">{r.from_job}{r.transfer_no ? <span className="block text-micro text-slate-400">{r.transfer_no}</span> : null}</td>
+                <td className="px-2 py-1.5">{r.lot_no || '—'} <span className="text-ink-muted">{r.grn_no}</span></td><td className="px-2 py-1.5">{r.from_job}{r.transfer_no ? <span className="block text-micro text-ink-muted">{r.transfer_no}</span> : null}</td>
                 <td className="px-2 py-1.5 text-right">{kg(r.qty_kg)}</td><td className="px-2 py-1.5 text-right">{kg(r.equivalent_kg)}</td>
-                <td className="px-2 py-1.5">{r.reason}{r.decision_remarks ? <span className="block text-caption text-slate-500">↳ {r.decision_remarks}</span> : null}</td>
-                <td className="px-2 py-1.5">{r.requested_by}{r.approved_by_name ? <span className="block text-micro text-slate-400">appr. {r.approved_by_name}</span> : null}</td>
+                <td className="px-2 py-1.5">{r.reason}{r.decision_remarks ? <span className="block text-caption text-ink-secondary">↳ {r.decision_remarks}</span> : null}</td>
+                <td className="px-2 py-1.5">{r.requested_by}{r.approved_by_name ? <span className="block text-micro text-ink-muted">appr. {r.approved_by_name}</span> : null}</td>
                 <td className="px-2 py-1.5"><Chip s={r.status} /></td>
                 <td className="whitespace-nowrap px-2 py-1.5">
                   {r.status === 'PENDING_APPROVAL' && canApprove && <>
@@ -87,11 +87,11 @@ function RequestList() {
                     <button className="mr-1 rounded border border-amber-400 px-2 py-0.5 text-caption text-amber-800" onClick={() => act(r, 'send-back')}>Send back</button>
                     <button className="mr-1 rounded border border-rose-400 px-2 py-0.5 text-caption text-rose-700" onClick={() => act(r, 'reject')} id={`ys-reject-${r.id}`}>Reject</button>
                   </>}
-                  {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-slate-300 px-2 py-0.5 text-caption text-slate-600" onClick={() => act(r, 'cancel')}>Cancel</button>}
+                  {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-surface-input px-2 py-0.5 text-caption text-ink-secondary" onClick={() => act(r, 'cancel')}>Cancel</button>}
                 </td>
               </tr>
             ))}
-            {!(list.data ?? []).length && <tr><td colSpan={14} className="px-3 py-10 text-center text-slate-400">No substitution requests</td></tr>}
+            {!(list.data ?? []).length && <tr><td colSpan={14} className="px-3 py-10 text-center text-ink-muted">No substitution requests</td></tr>}
           </tbody>
         </table>
       )}
@@ -151,19 +151,19 @@ function NewRequest({ onDone }: { onDone: () => void }) {
             <p className="text-amber-700">No active substitution rule allows a substitute for {o.line.yarn_name}. Add the rule in "Substitution rules" (Production Manager).</p>
           ) : (
             <>
-              <p className="mb-1.5 font-semibold text-slate-700">Substitute lots in stock (allowed by the rules)</p>
+              <p className="mb-1.5 font-semibold text-ink">Substitute lots in stock (allowed by the rules)</p>
               <table className="w-full">
-                <thead className="bg-slate-50 text-slate-500"><tr>{['', 'Substitute yarn', 'Lot', 'GRN', 'Supplier', 'Held by', 'Available KG', 'Ratio', 'Max %'].map((h, i) => <th key={i} className={`px-2 py-1.5 ${/KG|Ratio|Max/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>{['', 'Substitute yarn', 'Lot', 'GRN', 'Supplier', 'Held by', 'Available KG', 'Ratio', 'Max %'].map((h, i) => <th key={i} className={`px-2 py-1.5 ${/KG|Ratio|Max/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
                 <tbody>
                   {o.lots.map((l: any) => { const k = `${l.rule_id}|${l.grn_line_id}|${l.holder_so_id ?? 0}`; return (
-                    <tr key={k} className={`border-t border-slate-100 ${lotKey === k ? 'bg-brand-50' : ''}`}>
+                    <tr key={k} className={`border-t border-surface-divider ${lotKey === k ? 'bg-brand-50' : ''}`}>
                       <td className="px-2 py-1"><input type="radio" name="ys-lot" checked={lotKey === k} onChange={() => setLotKey(k)} id={`ys-lot-${l.grn_line_id}`} /></td>
                       <td className="px-2 py-1 font-semibold text-purple-700">{l.yarn_name}</td><td className="px-2 py-1">{l.lot_no || '—'}</td><td className="px-2 py-1">{l.grn_no}</td><td className="px-2 py-1">{l.supplier_name}</td>
                       <td className="px-2 py-1">{l.own ? <b>This job</b> : l.holder_job}{!l.own && <span className="block text-micro text-amber-700">moves to this job on approval</span>}</td>
                       <td className="px-2 py-1 text-right">{kg(l.available_kg)}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.conversion_ratio, 3)}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.max_pct, 2)}%</td>
                     </tr>
                   ); })}
-                  {!o.lots.length && <tr><td colSpan={9} className="px-2 py-6 text-center text-slate-400">No stock of the allowed substitute yarns</td></tr>}
+                  {!o.lots.length && <tr><td colSpan={9} className="px-2 py-6 text-center text-ink-muted">No stock of the allowed substitute yarns</td></tr>}
                 </tbody>
               </table>
             </>
@@ -173,7 +173,7 @@ function NewRequest({ onDone }: { onDone: () => void }) {
       {lot && (
         <div className="card grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
           <Input label={`Substitute KG * (max ${kg(Math.min(maxKg, n(lot.available_kg)))})`} type="number" value={qty} id="ys-qty" onChange={(e) => setQty(e.target.value)} />
-          <div className="text-xs"><div className="text-slate-500">Covers required</div><div className="text-base font-semibold">{kg(n(qty) * n(lot.conversion_ratio))} KG</div></div>
+          <div className="text-xs"><div className="text-ink-secondary">Covers required</div><div className="text-base font-semibold">{kg(n(qty) * n(lot.conversion_ratio))} KG</div></div>
           <Input label="Reason *" className="col-span-2" value={reason} id="ys-reason" placeholder="e.g. 24s not available, 25s in stock — delivery urgent" onChange={(e) => setReason(e.target.value)} />
           <div className="col-span-full flex justify-end"><Button loading={busy} onClick={save} id="btn-ys-save">Send for approval</Button></div>
         </div>
@@ -226,10 +226,10 @@ function Rules() {
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Required', 'Substitute', 'Max %', 'Ratio', 'Fabric', 'Buyer', 'Style', 'GSM', 'Effective', 'Active', ''].map((h) => <th key={h} className="px-2 py-2 text-left">{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Required', 'Substitute', 'Max %', 'Ratio', 'Fabric', 'Buyer', 'Style', 'GSM', 'Effective', 'Active', ''].map((h) => <th key={h} className="px-2 py-2 text-left">{h}</th>)}</tr></thead>
             <tbody>
               {(list.data ?? []).map((r) => (
-                <tr key={r.id} className="border-t border-slate-100">
+                <tr key={r.id} className="border-t border-surface-divider">
                   <td className="px-2 py-1.5 font-semibold">{r.required_yarn}</td><td className="px-2 py-1.5 font-semibold text-purple-700">{r.substitute_yarn}</td>
                   <td className="px-2 py-1.5">{fmtDecimal(r.max_pct, 2)}%</td><td className="px-2 py-1.5">{fmtDecimal(r.conversion_ratio, 3)}</td>
                   <td className="px-2 py-1.5">{r.fabric_name || 'Any'}</td><td className="px-2 py-1.5">{r.buyer_name || 'Any'}</td><td className="px-2 py-1.5">{r.style_code || 'Any'}</td>
@@ -240,7 +240,7 @@ function Rules() {
                     required_yarn_id: String(r.required_yarn_id), substitute_yarn_id: String(r.substitute_yarn_id), fabric_id: s(r.fabric_id), buyer_id: s(r.buyer_id), style_id: s(r.style_id), effective_from: s(r.effective_from), effective_to: s(r.effective_to) })}>Edit</button>}</td>
                 </tr>
               ))}
-              {!(list.data ?? []).length && <tr><td colSpan={11} className="px-3 py-10 text-center text-slate-400">No substitution rules — the Production Manager adds which yarn may replace which (e.g. 24s → 25s, max 10%)</td></tr>}
+              {!(list.data ?? []).length && <tr><td colSpan={11} className="px-3 py-10 text-center text-ink-muted">No substitution rules — the Production Manager adds which yarn may replace which (e.g. 24s → 25s, max 10%)</td></tr>}
             </tbody>
           </table>
         )}
@@ -268,10 +268,10 @@ function JobLedger() {
         <div className="card overflow-x-auto">
           {led.isLoading ? <LoadingBlock /> : (
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['Date', 'Type', 'Ref', 'Yarn', 'Lot', 'In KG', 'Out KG', 'Balance', 'Rate', 'Value'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Balance|Rate|Value/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{['Date', 'Type', 'Ref', 'Yarn', 'Lot', 'In KG', 'Out KG', 'Balance', 'Rate', 'Value'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Balance|Rate|Value/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
               <tbody>
                 {withBal.map((r, i) => (
-                  <tr key={i} className={`border-t border-slate-100 ${r.type === 'REQUIREMENT' ? 'bg-slate-50 text-slate-500' : ''}`}>
+                  <tr key={i} className={`border-t border-surface-divider ${r.type === 'REQUIREMENT' ? 'bg-surface-muted text-ink-secondary' : ''}`}>
                     <td className="px-2 py-1">{fmtDate(r.dt)}</td><td className="px-2 py-1 font-semibold">{r.type}</td><td className="px-2 py-1 tabular-nums">{r.ref}</td>
                     <td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.lot_no || '—'}</td>
                     <td className="px-2 py-1 text-right text-emerald-700">{n(r.in_kg) ? kg(r.in_kg) : ''}</td><td className="px-2 py-1 text-right text-rose-700">{n(r.out_kg) ? kg(r.out_kg) : ''}</td>
@@ -279,7 +279,7 @@ function JobLedger() {
                     <td className="px-2 py-1 text-right">{n(r.amount) ? `₹${fmtDecimal(r.amount, 2)}` : ''}</td>
                   </tr>
                 ))}
-                {!rows.length && <tr><td colSpan={10} className="px-3 py-10 text-center text-slate-400">No yarn movement for this job</td></tr>}
+                {!rows.length && <tr><td colSpan={10} className="px-3 py-10 text-center text-ink-muted">No yarn movement for this job</td></tr>}
               </tbody>
             </table>
           )}

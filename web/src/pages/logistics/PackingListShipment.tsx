@@ -103,8 +103,8 @@ export function ShipmentPlanPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Shipment Planning</h1>
-          <p className="text-sm text-slate-500">Plan and reserve confirmed packages for domestic and export shipping</p>
+          <h1 className="text-2xl font-bold text-ink">Shipment Planning</h1>
+          <p className="text-sm text-ink-secondary">Plan and reserve confirmed packages for domestic and export shipping</p>
         </div>
         <Button onClick={() => setShowModal(true)}>+ New Shipment Plan</Button>
       </div>
@@ -172,21 +172,21 @@ export function ShipmentPlanPage() {
           )}
           <div className="border rounded-lg max-h-48 overflow-y-auto p-2 divide-y">
             {availablePkgs.map(p => (
-              <label key={p.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer text-xs">
+              <label key={p.id} className="flex items-center gap-3 p-2 hover:bg-surface-muted cursor-pointer text-xs">
                 <input
                   type="checkbox"
                   checked={selectedPkgs.includes(p.id)}
                   onChange={e => setSelectedPkgs(prev => e.target.checked ? [...prev, p.id] : prev.filter(i => i !== p.id))}
                 />
                 <span className="tabular-nums font-semibold">{p.carton_no}</span>
-                <span className="text-slate-500">Pack: {p.pack_no}</span>
+                <span className="text-ink-secondary">Pack: {p.pack_no}</span>
                 <span className="text-blue-700 font-bold">{p.content_qty} PCS</span>
-                <span className="text-slate-400">{p.gross_weight_kg} KG</span>
-                {p.pl_no && <span className="text-slate-400">PL {p.pl_no}</span>}
+                <span className="text-ink-muted">{p.gross_weight_kg} KG</span>
+                {p.pl_no && <span className="text-ink-muted">PL {p.pl_no}</span>}
                 {Number(p.is_partial) === 1 && <Badge color="amber">partial</Badge>}
               </label>
             ))}
-            {!availablePkgs.length && <p className="p-2 text-xs italic text-slate-400">No ready cartons</p>}
+            {!availablePkgs.length && <p className="p-2 text-xs italic text-ink-muted">No ready cartons</p>}
           </div>
         </FormSection>
 
@@ -214,8 +214,8 @@ export function ShipmentListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Shipments</h1>
-          <p className="text-sm text-slate-500">Domestic & export shipment lifecycle management</p>
+          <h1 className="text-2xl font-bold text-ink">Shipments</h1>
+          <p className="text-sm text-ink-secondary">Domestic & export shipment lifecycle management</p>
         </div>
         <Button onClick={() => nav('/logistics/shipments/new')}>+ New Shipment</Button>
       </div>
@@ -430,10 +430,10 @@ export function ShipmentDetailPage() {
     <div className="space-y-6 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
+          <h1 className="text-2xl font-bold text-ink">
             {isNew ? 'New Shipment' : `Shipment — ${header.shipment_no}`}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-ink-secondary">
             {isExport ? 'Export shipment with container allocation & customs documents' : 'Domestic road transport with LR & e-way bill'}
           </p>
         </div>
@@ -529,7 +529,7 @@ export function ShipmentDetailPage() {
             {containers.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-slate-500">
+                  <tr className="border-b text-left text-ink-secondary">
                     <th className="pb-2">Container No</th>
                     <th className="pb-2">Type</th>
                     <th className="pb-2">Seal No</th>
@@ -541,7 +541,7 @@ export function ShipmentDetailPage() {
                 </thead>
                 <tbody>
                   {containers.map(c => (
-                    <tr key={c.id} className="border-b border-slate-50">
+                    <tr key={c.id} className="border-b border-surface-divider">
                       <td className="py-2 tabular-nums font-bold">{c.container_no}</td>
                       <td className="py-2">{c.container_type}</td>
                       <td className="py-2 tabular-nums text-xs">{c.seal_no || '—'}</td>
@@ -553,7 +553,7 @@ export function ShipmentDetailPage() {
                   ))}
                 </tbody>
               </table>
-            ) : <p className="text-xs text-slate-400 italic">No containers assigned yet</p>}
+            ) : <p className="text-xs text-ink-muted italic">No containers assigned yet</p>}
           </div>
         </Card>
       )}
@@ -574,7 +574,7 @@ export function ShipmentDetailPage() {
             {availablePackages.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-slate-500">
+                  <tr className="border-b text-left text-ink-secondary">
                     <th className="pb-2 w-8"></th>
                     <th className="pb-2">Carton No</th>
                     <th className="pb-2">Packing Ref</th>
@@ -586,7 +586,7 @@ export function ShipmentDetailPage() {
                 </thead>
                 <tbody>
                   {availablePackages.map(p => (
-                    <tr key={p.id} className="border-b border-slate-50">
+                    <tr key={p.id} className="border-b border-surface-divider">
                       <td className="py-1.5">
                         <input
                           type="checkbox"
@@ -596,7 +596,7 @@ export function ShipmentDetailPage() {
                       </td>
                       <td className="py-1.5 tabular-nums text-xs font-semibold">{p.carton_no}</td>
                       <td className="py-1.5">{p.pack_no}</td>
-                      <td className="py-1.5 text-xs text-slate-500">{p.sku_summary}</td>
+                      <td className="py-1.5 text-xs text-ink-secondary">{p.sku_summary}</td>
                       <td className="py-1.5 text-right font-bold">{fmtNumber(p.content_qty)}</td>
                       <td className="py-1.5 text-right">{fmtDecimal(p.gross_weight_kg)}</td>
                       <td className="py-1.5 text-right">{fmtDecimal(p.cbm, 3)}</td>
@@ -604,7 +604,7 @@ export function ShipmentDetailPage() {
                   ))}
                 </tbody>
               </table>
-            ) : <p className="text-xs text-slate-400 italic">No ready cartons (posted, verified / sealed) found</p>}
+            ) : <p className="text-xs text-ink-muted italic">No ready cartons (posted, verified / sealed) found</p>}
           </div>
         </Card>
       )}
@@ -617,7 +617,7 @@ export function ShipmentDetailPage() {
           <div className="p-4">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-slate-500">
+                <tr className="border-b text-left text-ink-secondary">
                   <th className="pb-2">Carton No</th>
                   <th className="pb-2 text-right">Allocated Qty</th>
                   <th className="pb-2 text-right">Gross Wt</th>
@@ -628,13 +628,13 @@ export function ShipmentDetailPage() {
               </thead>
               <tbody>
                 {packages.map(p => (
-                  <tr key={p.id} className="border-b border-slate-50">
+                  <tr key={p.id} className="border-b border-surface-divider">
                     <td className="py-1.5 tabular-nums text-xs font-semibold">{p.carton_no}</td>
                     <td className="py-1.5 text-right font-bold text-blue-700">{fmtNumber(p.allocated_qty)}</td>
                     <td className="py-1.5 text-right">{fmtDecimal(p.carton_gross)}</td>
                     <td className="py-1.5 text-right">{fmtDecimal(p.carton_cbm, 3)}</td>
                     <td className="py-1.5"><Badge color={p.status === 'DELIVERED' ? 'emerald' : p.status === 'DISPATCHED' ? 'amber' : 'blue'}>{p.status}</Badge></td>
-                    <td className="py-1.5 text-xs text-slate-500">{p.carton_status || '—'}</td>
+                    <td className="py-1.5 text-xs text-ink-secondary">{p.carton_status || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -649,7 +649,7 @@ export function ShipmentDetailPage() {
           <div className="p-4">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-slate-500">
+                <tr className="border-b text-left text-ink-secondary">
                   <th className="pb-2">Style</th>
                   <th className="pb-2">Color</th>
                   <th className="pb-2">Size</th>
@@ -658,7 +658,7 @@ export function ShipmentDetailPage() {
               </thead>
               <tbody>
                 {itemSummary.map((item: any, idx: number) => (
-                  <tr key={idx} className="border-b border-slate-50">
+                  <tr key={idx} className="border-b border-surface-divider">
                     <td className="py-1.5 font-medium">{item.style_code || '-'}</td>
                     <td className="py-1.5">{item.color_name || '-'}</td>
                     <td className="py-1.5">{item.size_code || '-'}</td>
@@ -677,7 +677,7 @@ export function ShipmentDetailPage() {
           <div className="p-4">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-slate-500">
+                <tr className="border-b text-left text-ink-secondary">
                   <th className="pb-2">Document Type</th>
                   <th className="pb-2">Document No</th>
                   <th className="pb-2">Status</th>
@@ -685,7 +685,7 @@ export function ShipmentDetailPage() {
               </thead>
               <tbody>
                 {documents.map((doc: any) => (
-                  <tr key={doc.id} className="border-b border-slate-50">
+                  <tr key={doc.id} className="border-b border-surface-divider">
                     <td className="py-1.5 font-medium">{doc.doc_name}</td>
                     <td className="py-1.5">{doc.document_no || '-'}</td>
                     <td className="py-1.5"><Badge color={doc.status === 'COMPLETED' ? 'emerald' : 'amber'}>{doc.status || 'PENDING'}</Badge></td>
@@ -787,9 +787,9 @@ export function ShipmentDetailPage() {
         </>}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {packages.map((pkg, idx) => (
-            <div key={idx} className="border-2 border-dashed border-slate-300 rounded-lg p-4 bg-white space-y-2">
+            <div key={idx} className="border-2 border-dashed border-surface-input rounded-lg p-4 bg-white space-y-2">
               <div className="flex justify-between border-b pb-1">
-                <span className="text-xs font-bold text-slate-800">TEXTILE EXPORTS</span>
+                <span className="text-xs font-bold text-ink">TEXTILE EXPORTS</span>
                 <span className="tabular-nums text-xs font-bold text-indigo-700">{pkg.carton_no}</span>
               </div>
               <div className="text-caption space-y-0.5">
@@ -799,10 +799,10 @@ export function ShipmentDetailPage() {
                 <p><strong>Gross Wt:</strong> {pkg.carton_gross || pkg.gross_weight_kg} KG</p>
               </div>
               <div className="pt-2 text-center border-t">
-                <div className="tabular-nums text-lg font-bold tracking-widest bg-slate-100 py-1 rounded">
+                <div className="tabular-nums text-lg font-bold tracking-widest bg-surface-header py-1 rounded">
                   ||| | |||| | |||||
                 </div>
-                <span className="tabular-nums text-micro text-slate-500">{pkg.carton_no}</span>
+                <span className="tabular-nums text-micro text-ink-secondary">{pkg.carton_no}</span>
               </div>
             </div>
           ))}
@@ -828,8 +828,8 @@ export function DispatchListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Dispatches</h1>
-          <p className="text-sm text-slate-500">Vehicle, LR, E-Way Bill and dispatch tracking</p>
+          <h1 className="text-2xl font-bold text-ink">Dispatches</h1>
+          <p className="text-sm text-ink-secondary">Vehicle, LR, E-Way Bill and dispatch tracking</p>
         </div>
         <Button onClick={() => nav('/logistics/dispatches/new')}>+ New Dispatch</Button>
       </div>
@@ -943,10 +943,10 @@ export function DispatchDetailPage() {
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
+          <h1 className="text-2xl font-bold text-ink">
             {isNew ? 'New Dispatch' : `Dispatch — ${header.dispatch_no}`}
           </h1>
-          <p className="text-sm text-slate-500">Transport, LR & E-Way Bill details</p>
+          <p className="text-sm text-ink-secondary">Transport, LR & E-Way Bill details</p>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => nav('/logistics/dispatches')}>← Back</Button>

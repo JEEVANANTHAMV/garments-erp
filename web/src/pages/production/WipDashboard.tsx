@@ -33,8 +33,8 @@ export function WipDashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">WIP Dashboard</h1>
-        <p className="text-sm text-slate-500 mt-1">Real-time work-in-progress across all production stages</p>
+        <h1 className="text-2xl font-bold text-ink">WIP Dashboard</h1>
+        <p className="text-sm text-ink-secondary mt-1">Real-time work-in-progress across all production stages</p>
       </div>
 
       {/* Daily KPI banner */}
@@ -47,8 +47,8 @@ export function WipDashboardPage() {
             { label: 'Rework', value: fmtNumber(dailyKpi.total_rework), tone: 'amber' },
             { label: 'Achievement', value: `${achPct}%`, tone: achColor },
           ].map(kpi => (
-            <div key={kpi.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{kpi.label}</p>
+            <div key={kpi.label} className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
+              <p className="text-xs font-medium text-ink-secondary uppercase tracking-wide">{kpi.label}</p>
               <p className={`mt-1 text-2xl font-bold text-${kpi.tone}-700`}>{kpi.value}</p>
             </div>
           ))}
@@ -56,15 +56,15 @@ export function WipDashboardPage() {
       )}
 
       {/* Total WIP */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-800">Stage-wise WIP</h2>
+          <h2 className="text-lg font-semibold text-ink">Stage-wise WIP</h2>
           <Badge tone="violet">{fmtNumber(totalWip)} pcs total WIP</Badge>
         </div>
         {loading ? (
-          <div className="flex items-center justify-center py-12 text-slate-400">Loading…</div>
+          <div className="flex items-center justify-center py-12 text-ink-muted">Loading…</div>
         ) : wipStages.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-slate-400">No WIP data — create process transactions</div>
+          <div className="flex items-center justify-center py-12 text-ink-muted">No WIP data — create process transactions</div>
         ) : (
           <div className="space-y-3">
             {wipStages.map(stage => {
@@ -72,9 +72,9 @@ export function WipDashboardPage() {
               const pct = (wip / maxWip) * 100;
               return (
                 <div key={stage.stage_code} className="flex items-center gap-4">
-                  <div className="w-32 text-sm font-medium text-slate-700 truncate">{stage.stage_name}</div>
+                  <div className="w-32 text-sm font-medium text-ink truncate">{stage.stage_name}</div>
                   <div className="flex-1">
-                    <div className="h-8 rounded-lg bg-slate-50 overflow-hidden relative">
+                    <div className="h-8 rounded-lg bg-surface-muted overflow-hidden relative">
                       <div
                         className="h-full rounded-lg bg-gradient-to-r from-brand-400 to-brand-600 transition-all duration-700"
                         style={{ width: `${Math.max(0, pct)}%` }}
@@ -87,7 +87,7 @@ export function WipDashboardPage() {
                     </div>
                   </div>
                   <div className="flex gap-3 text-xs tabular-nums">
-                    <span className="text-slate-500">In: {fmtNumber(stage.input_qty)}</span>
+                    <span className="text-ink-secondary">In: {fmtNumber(stage.input_qty)}</span>
                     <span className="text-emerald-600">Out: {fmtNumber(stage.output_qty)}</span>
                     {Number(stage.rejected_qty) > 0 && <span className="text-red-500">Rej: {fmtNumber(stage.rejected_qty)}</span>}
                     {Number(stage.rework_qty) > 0 && <span className="text-amber-500">Rwk: {fmtNumber(stage.rework_qty)}</span>}
@@ -100,8 +100,8 @@ export function WipDashboardPage() {
       </div>
 
       {/* Pipeline flow */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800 mb-4">Production Pipeline Flow</h2>
+      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-ink mb-4">Production Pipeline Flow</h2>
         <div className="flex items-center gap-0 overflow-x-auto pb-2">
           {wipStages.map((stage, idx) => (
             <div key={stage.stage_code} className="flex items-center">
@@ -109,15 +109,15 @@ export function WipDashboardPage() {
                 <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center text-sm font-bold shadow
                   ${Number(stage.wip_qty) > 0
                     ? 'bg-gradient-to-br from-brand-500 to-brand-700 text-white'
-                    : 'bg-slate-100 text-slate-400'}`}>
+                    : 'bg-surface-header text-ink-muted'}`}>
                   {fmtNumber(stage.wip_qty)}
                 </div>
-                <p className="mt-1 text-caption font-medium text-slate-600 truncate">{stage.stage_name}</p>
+                <p className="mt-1 text-caption font-medium text-ink-secondary truncate">{stage.stage_name}</p>
               </div>
               {idx < wipStages.length - 1 && (
                 <div className="flex items-center -mx-1">
                   <div className="w-8 h-0.5 bg-slate-300" />
-                  <svg className="w-3 h-3 text-slate-400 -ml-0.5" viewBox="0 0 12 12" fill="currentColor">
+                  <svg className="w-3 h-3 text-ink-muted -ml-0.5" viewBox="0 0 12 12" fill="currentColor">
                     <path d="M2 1l8 5-8 5V1z"/>
                   </svg>
                 </div>

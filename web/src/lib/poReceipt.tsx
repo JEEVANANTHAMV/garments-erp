@@ -7,10 +7,10 @@ import { fmtDecimal } from './format';
  */
 export type ReceiptType = 'PARTIAL' | 'FINAL';
 export const RECEIPT_LABEL: Record<string, [string, string]> = {
-  PENDING: ['Pending', 'bg-slate-100 text-slate-600'],
+  PENDING: ['Pending', 'bg-surface-header text-ink-secondary'],
   PARTIALLY_RECEIVED: ['Partially received', 'bg-amber-100 text-amber-800'],
   FULLY_RECEIVED: ['Fully received', 'bg-emerald-100 text-emerald-800'],
-  SHORT_CLOSED: ['Short closed', 'bg-slate-200 text-slate-700'],
+  SHORT_CLOSED: ['Short closed', 'bg-surface-border text-ink'],
 };
 export function ReceiptStatusBadge({ value }: { value?: string | null }) {
   const [l, c] = RECEIPT_LABEL[String(value ?? 'PENDING')] ?? RECEIPT_LABEL.PENDING;
@@ -36,8 +36,8 @@ export function LineReceiptChip({ ordered, prev, accepted, type }: { ordered?: n
 /** Partial / Final chooser for the GRN header. */
 export function ReceiptTypeChooser({ value, onChange, disabled, id = 'grn-receipt' }: { value: ReceiptType; onChange: (v: ReceiptType) => void; disabled?: boolean; id?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-small" id={id}>
-      <span className="font-semibold text-slate-700">This delivery is:</span>
+    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-surface-border bg-surface-muted px-3 py-2 text-small" id={id}>
+      <span className="font-semibold text-ink">This delivery is:</span>
       <label className="flex items-center gap-1.5"><input type="radio" disabled={disabled} checked={value === 'PARTIAL'} onChange={() => onChange('PARTIAL')} id={`${id}-partial`} /> Partial — more to come on the PO</label>
       <label className="flex items-center gap-1.5"><input type="radio" disabled={disabled} checked={value === 'FINAL'} onChange={() => onChange('FINAL')} id={`${id}-final`} /> Final — last delivery; close what is still pending</label>
     </div>
@@ -51,10 +51,10 @@ export function ReceiptTypeChooser({ value, onChange, disabled, id = 'grn-receip
 export function LineReceiptSelect({ value, onChange, disabled, id }: { value?: ReceiptType | null; onChange: (v: ReceiptType) => void; disabled?: boolean; id?: string }) {
   const v = value === 'FINAL' ? 'FINAL' : 'PARTIAL';
   return (
-    <div className="mt-1 inline-flex overflow-hidden rounded border border-slate-300 text-micro font-semibold" id={id} title="Partial = more to come on this PO line · Final = last delivery, close what is still pending">
+    <div className="mt-1 inline-flex overflow-hidden rounded border border-surface-input text-micro font-semibold" id={id} title="Partial = more to come on this PO line · Final = last delivery, close what is still pending">
       {(['PARTIAL', 'FINAL'] as ReceiptType[]).map((t) => (
         <button key={t} type="button" disabled={disabled} id={id ? `${id}-${t.toLowerCase()}` : undefined} onClick={() => onChange(t)}
-          className={`px-1.5 py-0.5 ${v === t ? (t === 'FINAL' ? 'bg-slate-700 text-white' : 'bg-amber-500 text-white') : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+          className={`px-1.5 py-0.5 ${v === t ? (t === 'FINAL' ? 'bg-slate-700 text-white' : 'bg-amber-500 text-white') : 'bg-white text-ink-secondary hover:bg-surface-muted'}`}>
           {t === 'FINAL' ? 'Final' : 'Partial'}
         </button>
       ))}
@@ -65,18 +65,18 @@ export function LineReceiptSelect({ value, onChange, disabled, id }: { value?: R
 /** Badge for a saved GRN line. */
 export function LineReceiptBadge({ value }: { value?: string | null }) {
   if (value !== 'FINAL' && value !== 'PARTIAL') return null;
-  return <span className={`ml-1 inline-block rounded px-1.5 py-0.5 text-micro font-bold ${value === 'FINAL' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}`}>{value === 'FINAL' ? 'Final' : 'Partial'}</span>;
+  return <span className={`ml-1 inline-block rounded px-1.5 py-0.5 text-micro font-bold ${value === 'FINAL' ? 'bg-surface-border text-ink' : 'bg-amber-100 text-amber-800'}`}>{value === 'FINAL' ? 'Final' : 'Partial'}</span>;
 }
 
 /** Header strip: the choice is per line; quick buttons set every PO line at once. */
 export function ReceiptAllLines({ onSet, finals, total, id = 'grn-receipt' }: { onSet: (v: ReceiptType) => void; finals: number; total: number; id?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-small" id={id}>
-      <span className="font-semibold text-slate-700">Partial / Final is set on each line below</span>
-      <span className="text-slate-500">({finals} of {total} line{total === 1 ? '' : 's'} final)</span>
-      <span className="ml-auto text-slate-500">Set all:</span>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-surface-border bg-surface-muted px-3 py-2 text-small" id={id}>
+      <span className="font-semibold text-ink">Partial / Final is set on each line below</span>
+      <span className="text-ink-secondary">({finals} of {total} line{total === 1 ? '' : 's'} final)</span>
+      <span className="ml-auto text-ink-secondary">Set all:</span>
       <button type="button" id={`${id}-partial`} className="rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-800 hover:bg-amber-50" onClick={() => onSet('PARTIAL')}>Partial</button>
-      <button type="button" id={`${id}-final`} className="rounded border border-slate-400 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-100" onClick={() => onSet('FINAL')}>Final</button>
+      <button type="button" id={`${id}-final`} className="rounded border border-slate-400 bg-white px-2 py-0.5 font-semibold text-ink hover:bg-surface-header" onClick={() => onSet('FINAL')}>Final</button>
     </div>
   );
 }

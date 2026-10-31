@@ -35,8 +35,8 @@ export function FabricIssuePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Fabric DC — Issue to Cutting</h1>
-          <p className="text-sm text-slate-500">Roll-wise issue from fabric roll stock. Issued KG is not consumption — actual consumption is recorded at lay execution.</p>
+          <h1 className="text-2xl font-bold text-ink">Fabric DC — Issue to Cutting</h1>
+          <p className="text-sm text-ink-secondary">Roll-wise issue from fabric roll stock. Issued KG is not consumption — actual consumption is recorded at lay execution.</p>
         </div>
         <Button onClick={() => setShowNew(true)}>+ New Fabric DC</Button>
       </div>
@@ -64,7 +64,7 @@ export function FabricIssuePage() {
               <Button size="sm" variant="outline" id={`dc-receive-${r.issue_no}`} onClick={async () => {
                 try { await api.post(`/fabric-issues/${r.id}/receive`, {}); toast(`DC ${r.issue_no} received at cutting`); fetchIssues(); }
                 catch (e) { toast(errMsg(e), 'error'); }
-              }}>Receive</Button>) : r.status === 'RECEIVED' ? <span className="text-caption text-slate-500">at cutting</span> : null },
+              }}>Receive</Button>) : r.status === 'RECEIVED' ? <span className="text-caption text-ink-secondary">at cutting</span> : null },
           ]}
         />
       </Card>
@@ -165,7 +165,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
           </div>
         )}
 
-        <h3 className="border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Rolls</h3>
+        <h3 className="border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Rolls</h3>
         {header.cutting_plan_id && (
           <div className="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2">
             <SearchSelect label={`Pick roll from stock (${stock.length} issuable)`} value=""
@@ -177,7 +177,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
 
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-xs">
-            <thead className="border-b bg-slate-50 text-left text-slate-600">
+            <thead className="border-b bg-surface-muted text-left text-ink-secondary">
               <tr>
                 <th className="p-2">Roll No</th><th className="p-2">Lot</th><th className="p-2">Shade</th>
                 <th className="p-2">GSM</th><th className="p-2">Dia</th><th className="p-2">GRN</th>
@@ -187,7 +187,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
             </thead>
             <tbody>
               {lines.length === 0 && (
-                <tr><td colSpan={10} className="p-4 text-center text-slate-400">No rolls added — pick from stock or scan a roll barcode.</td></tr>
+                <tr><td colSpan={10} className="p-4 text-center text-ink-muted">No rolls added — pick from stock or scan a roll barcode.</td></tr>
               )}
               {lines.map((l, i) => {
                 const bad = Number(l.issue_kg) > Number(l.roll.available_kg) + 0.0005 || !(Number(l.issue_kg) > 0);
@@ -251,15 +251,15 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
       </>}>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-5">
-          <div><p className="text-slate-400">Cut Order</p><p className="tabular-nums font-semibold">{dc.plan_no}</p><StatusChip status={dc.plan_status} /></div>
-          <div><p className="text-slate-400">I/O · Style</p><p className="font-semibold">{dc.io_no} · {dc.style_code}</p></div>
-          <div><p className="text-slate-400">Fabric</p><p className="font-semibold">{dc.fabric_name}</p></div>
-          <div><p className="text-slate-400">From → To</p><p className="font-semibold">{dc.from_location || '—'} → {dc.to_location || '—'}</p></div>
-          <div><p className="text-slate-400">Date</p><p className="font-semibold">{fmtDate(dc.issue_date)}</p></div>
+          <div><p className="text-ink-muted">Cut Order</p><p className="tabular-nums font-semibold">{dc.plan_no}</p><StatusChip status={dc.plan_status} /></div>
+          <div><p className="text-ink-muted">I/O · Style</p><p className="font-semibold">{dc.io_no} · {dc.style_code}</p></div>
+          <div><p className="text-ink-muted">Fabric</p><p className="font-semibold">{dc.fabric_name}</p></div>
+          <div><p className="text-ink-muted">From → To</p><p className="font-semibold">{dc.from_location || '—'} → {dc.to_location || '—'}</p></div>
+          <div><p className="text-ink-muted">Date</p><p className="font-semibold">{fmtDate(dc.issue_date)}</p></div>
         </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-xs">
-            <thead className="border-b bg-slate-50 text-left text-slate-600">
+            <thead className="border-b bg-surface-muted text-left text-ink-secondary">
               <tr>
                 <th className="p-2">Roll</th><th className="p-2">Lot / Shade</th><th className="p-2">GRN</th>
                 <th className="p-2 text-right">Issued</th><th className="p-2 text-right">Consumed</th>
@@ -272,7 +272,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
                 <tr key={r.id} className="border-b">
                   <td className="p-2 tabular-nums font-semibold">{r.roll_no}{r.is_legacy ? <span className="ml-1 text-micro text-amber-600">(free-text)</span> : null}</td>
                   <td className="p-2">{r.lot_no} / {r.shade}
-                    <span className={`ml-1 rounded px-1 py-0.5 text-micro font-bold ${!r.process_state || r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>
+                    <span className={`ml-1 rounded px-1 py-0.5 text-micro font-bold ${!r.process_state || r.process_state === 'GREY' ? 'bg-surface-header text-ink-secondary' : 'bg-purple-100 text-purple-800'}`}>
                       {stateLabel(r.process_state || 'GREY')}{r.color_name ? ` · ${r.color_name}` : ''}
                     </span>
                   </td>
@@ -291,7 +291,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
                           <input className="input" placeholder="Reason" value={ret[r.id]?.reason ?? ''}
                             onChange={e => setRet(s => ({ ...s, [r.id]: { kg: s[r.id]?.kg ?? '', reason: e.target.value } }))} />
                         </div>
-                      ) : <span className="text-slate-400">—</span>}
+                      ) : <span className="text-ink-muted">—</span>}
                     </td>
                   )}
                 </tr>
@@ -301,8 +301,8 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
         </div>
         {dc.returns?.length > 0 && (
           <div>
-            <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">Returns</h3>
-            <ul className="space-y-0.5 text-xs text-slate-600">
+            <h3 className="mb-2 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Returns</h3>
+            <ul className="space-y-0.5 text-xs text-ink-secondary">
               {dc.returns.map((r: any) => (
                 <li key={r.id}><span className="tabular-nums">{r.return_no}</span> · {fmtDate(r.return_date)} · <Qty v={r.return_kg} uom="KG" dp={3} /> · {r.reason || '—'} · {r.created_by_name}</li>
               ))}

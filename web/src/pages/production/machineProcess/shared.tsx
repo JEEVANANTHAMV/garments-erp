@@ -61,9 +61,9 @@ export function useGet<T = any>(path: string | null, params?: Record<string, unk
 
 export function Section({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-slate-200">
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">{title}</h4>
+    <div className="rounded-lg border border-surface-border">
+      <div className="flex items-center justify-between border-b border-surface-divider bg-surface-muted px-3 py-2">
+        <h4 className="text-xs font-bold uppercase tracking-wide text-ink-secondary">{title}</h4>
         {actions}
       </div>
       <div className="p-3">{children}</div>
@@ -74,8 +74,8 @@ export function Section({ title, children, actions }: { title: string; children:
 export function Kv({ label, value, strong }: { label: string; value: ReactNode; strong?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-0.5 text-xs">
-      <span className="text-slate-500">{label}</span>
-      <span className={strong ? 'font-bold text-slate-900' : 'font-medium text-slate-800'}>{value ?? '—'}</span>
+      <span className="text-ink-secondary">{label}</span>
+      <span className={strong ? 'font-bold text-ink' : 'font-medium text-ink'}>{value ?? '—'}</span>
     </div>
   );
 }
@@ -84,13 +84,13 @@ export function Kv({ label, value, strong }: { label: string; value: ReactNode; 
 export function MiniTable({ cols, rows, empty = 'Nothing yet' }: {
   cols: { h: string; r: (row: any) => ReactNode; right?: boolean }[]; rows: any[]; empty?: string;
 }) {
-  if (!rows.length) return <p className="py-2 text-xs text-slate-400">{empty}</p>;
+  if (!rows.length) return <p className="py-2 text-xs text-ink-muted">{empty}</p>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((c) => <th key={c.h} className={`px-2 py-1 font-semibold ${c.right ? 'text-right' : 'text-left'}`}>{c.h}</th>)}</tr></thead>
+        <thead className="bg-surface-muted text-ink-secondary"><tr>{cols.map((c) => <th key={c.h} className={`px-2 py-1 font-semibold ${c.right ? 'text-right' : 'text-left'}`}>{c.h}</th>)}</tr></thead>
         <tbody>{rows.map((row, i) => (
-          <tr key={row.id ?? i} className="border-t border-slate-100">{cols.map((c) => <td key={c.h} className={`px-2 py-1 ${c.right ? 'text-right tabular-nums' : ''}`}>{c.r(row)}</td>)}</tr>
+          <tr key={row.id ?? i} className="border-t border-surface-divider">{cols.map((c) => <td key={c.h} className={`px-2 py-1 ${c.right ? 'text-right tabular-nums' : ''}`}>{c.r(row)}</td>)}</tr>
         ))}</tbody>
       </table>
     </div>

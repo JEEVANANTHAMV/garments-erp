@@ -6,7 +6,7 @@ export default {
     extend: {
       colors: {
         brand,
-        ink: { DEFAULT: colors.text, heading: colors.navy, secondary: colors.secondary },
+        ink: { DEFAULT: colors.text, heading: colors.navy, secondary: colors.secondary, muted: colors.muted, disabled: colors.disabled },
         status: statusColors,
         surface: {
           DEFAULT: colors.surface, canvas: colors.canvas, muted: colors.content,

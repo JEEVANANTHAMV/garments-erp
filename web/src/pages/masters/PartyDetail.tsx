@@ -748,7 +748,7 @@ export function PartyDetailPage() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-slate-900">
+              <h1 className="text-lg font-bold text-ink">
                 {isNew ? 'Create Business Partner' : form.party_name || 'Business Partner'}
               </h1>
               <span className="tabular-nums text-xs font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
@@ -759,12 +759,12 @@ export function PartyDetailPage() {
                   Draft
                 </span>
               ) : (
-                <span className={`badge ${form.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                <span className={`badge ${form.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-header text-ink-secondary'}`}>
                   {form.is_active ? 'Active' : 'Inactive'}
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-secondary">
               Manage multi-role partner profiles, addresses, contacts, tax compliance and banking.
             </p>
           </div>
@@ -816,14 +816,14 @@ export function PartyDetailPage() {
               className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
                 isActive
                   ? 'bg-brand-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  : 'text-ink-secondary hover:bg-surface-header hover:text-ink'
               }`}
             >
               <Icon size={14} />
               <span>{t.label}</span>
               {t.count !== undefined && t.count > 0 && (
                 <span className={`px-1.5 py-0.2 rounded-full text-micro ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                  isActive ? 'bg-white/20 text-white' : 'bg-surface-border text-ink'
                 }`}>
                   {t.count}
                 </span>
@@ -846,8 +846,8 @@ export function PartyDetailPage() {
                     <Sparkles size={16} />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900 tracking-tight">GSTIN Quick Lookup & Auto-Fill</h4>
-                    <p className="text-caption text-slate-500">
+                    <h4 className="text-xs font-bold text-ink tracking-tight">GSTIN Quick Lookup & Auto-Fill</h4>
+                    <p className="text-caption text-ink-secondary">
                       Enter a 15-digit GSTIN to auto-fetch Legal Name, Trade Name, PAN, and Registered Business Address.
                     </p>
                   </div>
@@ -870,7 +870,7 @@ export function PartyDetailPage() {
                     placeholder="Enter 15-digit GSTIN (e.g. 33AALCD8217G1ZO)"
                     className="input tabular-nums font-bold tracking-wider uppercase text-brand-900 text-xs pl-8 placeholder:font-normal placeholder:tracking-normal"
                   />
-                  <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" size={14} />
                 </div>
                 <button
                   type="button"
@@ -912,7 +912,7 @@ export function PartyDetailPage() {
               )}
             </div>
 
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2 pt-1">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2 pt-1">
               Basic Information
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -987,7 +987,7 @@ export function PartyDetailPage() {
                     onChange={(e) => handleField('short_code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3))}
                     placeholder="Short code, e.g. ACT"
                   />
-                  <div className="text-small text-slate-500">
+                  <div className="text-small text-ink-secondary">
                     Prefix used when auto-generating Sales Internal Orders (e.g. <span className="tabular-nums font-bold text-brand-700">{form.io_prefix || 'PREFIX'}-IO-2026-001</span>);
                     the 3-letter short code is the buyer block of the SO number (<span className="tabular-nums font-bold text-brand-700">G01E26{form.short_code || 'ACT'}0001</span>).
                   </div>
@@ -998,7 +998,7 @@ export function PartyDetailPage() {
             {/* BP Roles Checklist */}
             <div className="pt-2">
               <label className="label">Business Partner Roles *</label>
-              <div className="flex flex-wrap gap-3 p-3 bg-slate-50 border border-surface-border rounded-lg">
+              <div className="flex flex-wrap gap-3 p-3 bg-surface-muted border border-surface-border rounded-lg">
                 {[
                   { key: 'is_buyer', label: 'Buyer', color: 'blue' },
                   { key: 'is_customer', label: 'Customer', color: 'indigo' },
@@ -1009,10 +1009,10 @@ export function PartyDetailPage() {
                   { key: 'is_agent', label: 'Buying Agent', color: 'amber' },
                   { key: 'is_merchandiser', label: 'Merchandiser', color: 'sky' },
                 ].map((r) => (
-                  <label key={r.key} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                  <label key={r.key} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                       checked={!!form[r.key]}
                       onChange={(e) => {
                         const checked = e.target.checked ? 1 : 0;
@@ -1043,7 +1043,7 @@ export function PartyDetailPage() {
                 ))}
               </div>
               {hasAnyRole ? (
-                <p className="mt-2 flex items-center gap-1.5 text-caption text-slate-500">
+                <p className="mt-2 flex items-center gap-1.5 text-caption text-ink-secondary">
                   <AlertCircle size={12} className="shrink-0 text-brand-500" />
                   Detail tabs shown for the selected role(s):
                   <span className="font-semibold text-brand-700">
@@ -1065,7 +1065,7 @@ export function PartyDetailPage() {
             </div>
 
             {/* Classification */}
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pt-4 pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pt-4 pb-2">
               Trading & Classification
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1154,51 +1154,51 @@ export function PartyDetailPage() {
           {/* Quick Summary Card */}
           <div className="space-y-4">
             <div className="card p-5 space-y-4">
-              <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+              <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
                 Status & Overview
               </h3>
               <div className="space-y-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Active Status</span>
+                  <span className="text-ink-secondary">Active Status</span>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={!!form.is_active}
                       onChange={(e) => handleField('is_active', e.target.checked ? 1 : 0)}
-                      className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                     />
-                    <span className="font-semibold text-slate-700">{form.is_active ? 'Active' : 'Inactive'}</span>
+                    <span className="font-semibold text-ink">{form.is_active ? 'Active' : 'Inactive'}</span>
                   </label>
                 </div>
                 {!isMerchandiserOnly ? (
                   <>
-                    <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                      <span className="text-slate-500">Credit Days</span>
-                      <span className="font-bold text-slate-800">{form.credit_days || 0} Days</span>
+                    <div className="flex items-center justify-between border-t border-surface-divider pt-2">
+                      <span className="text-ink-secondary">Credit Days</span>
+                      <span className="font-bold text-ink">{form.credit_days || 0} Days</span>
                     </div>
-                    <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                      <span className="text-slate-500">Default Terms</span>
+                    <div className="flex items-center justify-between border-t border-surface-divider pt-2">
+                      <span className="text-ink-secondary">Default Terms</span>
                       <span className="font-semibold text-brand-700">{form.payment_terms || '—'}</span>
                     </div>
                   </>
                 ) : (
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                    <span className="text-slate-500">Merchandiser Type</span>
+                  <div className="flex items-center justify-between border-t border-surface-divider pt-2">
+                    <span className="text-ink-secondary">Merchandiser Type</span>
                     <span className="font-semibold text-sky-700">{form.merchandiser_type || 'PRODUCTION'}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                  <span className="text-slate-500">Total Addresses</span>
-                  <span className="font-bold text-slate-800">{form.addresses.length}</span>
+                <div className="flex items-center justify-between border-t border-surface-divider pt-2">
+                  <span className="text-ink-secondary">Total Addresses</span>
+                  <span className="font-bold text-ink">{form.addresses.length}</span>
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                  <span className="text-slate-500">Contact Persons</span>
-                  <span className="font-bold text-slate-800">{form.contacts.length}</span>
+                <div className="flex items-center justify-between border-t border-surface-divider pt-2">
+                  <span className="text-ink-secondary">Contact Persons</span>
+                  <span className="font-bold text-ink">{form.contacts.length}</span>
                 </div>
                 {!isMerchandiserOnly && (
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                    <span className="text-slate-500">Bank Accounts</span>
-                    <span className="font-bold text-slate-800">{form.banks.length}</span>
+                  <div className="flex items-center justify-between border-t border-surface-divider pt-2">
+                    <span className="text-ink-secondary">Bank Accounts</span>
+                    <span className="font-bold text-ink">{form.banks.length}</span>
                   </div>
                 )}
               </div>
@@ -1213,13 +1213,13 @@ export function PartyDetailPage() {
           {/* Left list of address types */}
           <div className="card p-3 space-y-2">
             <div className="flex items-center justify-between pb-2 border-b border-surface-border">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Addresses</span>
+              <span className="text-xs font-bold text-ink uppercase tracking-wide">Addresses</span>
               <button onClick={addAddress} className="btn-primary btn-sm py-1 px-2 text-caption flex items-center gap-1">
                 <Plus size={12} /> Add
               </button>
             </div>
             {form.addresses.length === 0 ? (
-              <div className="p-4 text-center text-xs text-slate-400">
+              <div className="p-4 text-center text-xs text-ink-muted">
                 No addresses added yet. Click "+ Add" to add registered, billing or shipping address.
               </div>
             ) : (
@@ -1231,15 +1231,15 @@ export function PartyDetailPage() {
                     className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-colors text-xs ${
                       selectedAddressIdx === i
                         ? 'bg-brand-50 border border-brand-200 text-brand-900 font-semibold'
-                        : 'hover:bg-slate-50 text-slate-700 border border-transparent'
+                        : 'hover:bg-surface-muted text-ink border border-transparent'
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <MapPin size={14} className={selectedAddressIdx === i ? 'text-brand-600' : 'text-slate-400'} />
+                      <MapPin size={14} className={selectedAddressIdx === i ? 'text-brand-600' : 'text-ink-muted'} />
                       <div className="min-w-0">
                         <div className="truncate">{addr.address_name || `${addr.address_type} Address`}</div>
                         {(addr.city || addr.country_id) ? (
-                          <div className="truncate text-micro font-normal text-slate-500">
+                          <div className="truncate text-micro font-normal text-ink-secondary">
                             {[addr.city, countryLabel(addr.country_id)].filter(Boolean).join(', ')}
                           </div>
                         ) : null}
@@ -1260,7 +1260,7 @@ export function PartyDetailPage() {
               <>
                 <div className="flex items-center justify-between border-b border-surface-border pb-3">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-800">
+                    <h3 className="text-sm font-bold text-ink">
                       {currentAddress.address_name || 'Address Details'}
                     </h3>
                     {currentAddress.is_default ? (
@@ -1300,12 +1300,12 @@ export function PartyDetailPage() {
                     </select>
                   </div>
                   <div className="flex items-center pt-6">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                       <input
                         type="checkbox"
                         checked={!!currentAddress.is_default}
                         onChange={(e) => updateAddress('is_default', e.target.checked ? 1 : 0)}
-                        className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                        className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                       />
                       <span>Set as Primary Address</span>
                     </label>
@@ -1431,8 +1431,8 @@ export function PartyDetailPage() {
                 </div>
               </>
             ) : (
-              <div className="p-12 text-center text-slate-400">
-                <MapPin size={32} className="mx-auto mb-2 text-slate-300" />
+              <div className="p-12 text-center text-ink-muted">
+                <MapPin size={32} className="mx-auto mb-2 text-ink-disabled" />
                 <p className="text-sm font-semibold">No address selected</p>
                 <button onClick={addAddress} className="btn-primary btn-sm mt-3">
                   + Add First Address
@@ -1447,10 +1447,10 @@ export function PartyDetailPage() {
       {tab === 'contacts' && (
         <div className="space-y-4">
           <div className="card overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-surface-border bg-slate-50/50">
+            <div className="flex items-center justify-between p-4 border-b border-surface-border bg-surface-muted/50">
               <div>
-                <h3 className="text-sm font-bold text-slate-800">Contact Persons</h3>
-                <p className="text-xs text-slate-500">Key contacts for merchandising, accounts, purchase & logistics</p>
+                <h3 className="text-sm font-bold text-ink">Contact Persons</h3>
+                <p className="text-xs text-ink-secondary">Key contacts for merchandising, accounts, purchase & logistics</p>
               </div>
               <button onClick={addContact} className="btn-primary btn-sm flex items-center gap-1">
                 <Plus size={14} /> Add Contact
@@ -1459,7 +1459,7 @@ export function PartyDetailPage() {
 
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-surface-border bg-slate-50 text-slate-500 font-bold uppercase text-caption">
+                <tr className="border-b border-surface-border bg-surface-muted text-ink-secondary font-bold uppercase text-caption">
                   <th className="p-3 text-left">#</th>
                   <th className="p-3 text-left">Name</th>
                   <th className="p-3 text-left">Designation</th>
@@ -1472,20 +1472,20 @@ export function PartyDetailPage() {
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {form.contacts.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-8 text-center text-slate-400">
+                    <td colSpan={10} className="p-8 text-center text-ink-muted">
                       No contacts added yet. Click "+ Add Contact" to add merchandisers or managers.
                     </td>
                   </tr>
                 ) : (
                   form.contacts.map((c: ContactItem, i: number) => (
-                    <tr key={i} className={selectedContactIdx === i ? 'bg-brand-50/60' : 'hover:bg-slate-50'}>
-                      <td className="p-3 text-slate-400">{i + 1}</td>
-                      <td className="p-3 font-semibold text-slate-800">{c.contact_name || '—'}</td>
-                      <td className="p-3 text-slate-600">{c.designation || '—'}</td>
-                      <td className="p-3 text-slate-600">{c.department || '—'}</td>
+                    <tr key={i} className={selectedContactIdx === i ? 'bg-brand-50/60' : 'hover:bg-surface-muted'}>
+                      <td className="p-3 text-ink-muted">{i + 1}</td>
+                      <td className="p-3 font-semibold text-ink">{c.contact_name || '—'}</td>
+                      <td className="p-3 text-ink-secondary">{c.designation || '—'}</td>
+                      <td className="p-3 text-ink-secondary">{c.department || '—'}</td>
                       <td className="p-3 tabular-nums">{c.mobile || c.whatsapp_no || '—'}</td>
                       <td className="p-3 text-brand-600">{c.email || '—'}</td>
                       <td className="p-3 text-center">
@@ -1521,7 +1521,7 @@ export function PartyDetailPage() {
           {/* Contact Edit Drawer / Box */}
           {currentContact && (
             <div className="card p-5 space-y-4">
-              <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+              <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
                 Edit Contact Details (#{selectedContactIdx + 1})
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -1600,40 +1600,40 @@ export function PartyDetailPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-4 pt-2 p-3 bg-slate-50 rounded-lg border border-surface-border">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+              <div className="flex flex-wrap gap-4 pt-2 p-3 bg-surface-muted rounded-lg border border-surface-border">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                   <input
                     type="checkbox"
                     checked={!!currentContact.is_primary}
                     onChange={(e) => updateContact('is_primary', e.target.checked ? 1 : 0)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                   />
                   <span>Primary Contact</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                   <input
                     type="checkbox"
                     checked={!!currentContact.is_merchandising_contact}
                     onChange={(e) => updateContact('is_merchandising_contact', e.target.checked ? 1 : 0)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                   />
                   <span>Merchandising Contact</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                   <input
                     type="checkbox"
                     checked={!!currentContact.is_accounts_contact}
                     onChange={(e) => updateContact('is_accounts_contact', e.target.checked ? 1 : 0)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                   />
                   <span>Accounts / Billing Contact</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                   <input
                     type="checkbox"
                     checked={!!currentContact.is_purchase_contact}
                     onChange={(e) => updateContact('is_purchase_contact', e.target.checked ? 1 : 0)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                   />
                   <span>Purchase / Sourcing Contact</span>
                 </label>
@@ -1661,7 +1661,7 @@ export function PartyDetailPage() {
                   placeholder="HDFC0001234" />
                 {ifscInvalid
                   ? <p className="mt-1 text-small text-red-600" id="party-ifsc-error">11 characters: 4 letters, 0, then 6 letters / digits</p>
-                  : <p className="mt-1 text-caption text-slate-400">e.g. HDFC0001234</p>}
+                  : <p className="mt-1 text-caption text-ink-muted">e.g. HDFC0001234</p>}
               </div>
               <div>
                 <label className="label">Account Number</label>
@@ -1715,7 +1715,7 @@ export function PartyDetailPage() {
                   </div>
                 </>
               ) : (
-                <p className="self-end pb-2 text-small text-slate-400 sm:col-span-1 lg:col-span-3">Not an MSME — category, number and valid-from are not needed.</p>
+                <p className="self-end pb-2 text-small text-ink-muted sm:col-span-1 lg:col-span-3">Not an MSME — category, number and valid-from are not needed.</p>
               )}
 
               <div>
@@ -1726,14 +1726,14 @@ export function PartyDetailPage() {
                   {TDS_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
-              <div className="sm:col-span-1 lg:col-span-3 self-end pb-2 text-small text-slate-500">
+              <div className="sm:col-span-1 lg:col-span-3 self-end pb-2 text-small text-ink-secondary">
                 GSTIN / PAN are under <strong>GST &amp; Direct Tax</strong>; TDS section and rate under <strong>TDS &amp; TCS Applicability</strong> below.
               </div>
             </FormSection>
           </div>
 
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               GST & Direct Tax Details (Domestic & Overseas)
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
@@ -1780,7 +1780,7 @@ export function PartyDetailPage() {
           </div>
 
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               Export & Company Registration
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
@@ -1806,16 +1806,16 @@ export function PartyDetailPage() {
           </div>
 
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               TDS & TCS Applicability
             </h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-3">
               {/* TDS Configuration Card */}
-              <div className="p-4 rounded-lg border border-surface-border bg-slate-50/50 space-y-3">
-                <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+              <div className="p-4 rounded-lg border border-surface-border bg-surface-muted/50 space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-surface-border/60">
                   <div>
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Tax Deducted at Source (TDS)</h4>
-                    <p className="text-caption text-slate-500">Applicable on payments made to suppliers, CMT job workers & contractors</p>
+                    <h4 className="text-xs font-bold text-ink uppercase tracking-wider">Tax Deducted at Source (TDS)</h4>
+                    <p className="text-caption text-ink-secondary">Applicable on payments made to suppliers, CMT job workers & contractors</p>
                   </div>
                   <select
                     className="input py-1 text-xs font-bold w-24 bg-white"
@@ -1844,7 +1844,7 @@ export function PartyDetailPage() {
                     <div className="sm:col-span-2">
                       <label className="label text-xs">TDS Section *</label>
                       <select
-                        className="input font-medium text-slate-800 text-xs bg-white"
+                        className="input font-medium text-ink text-xs bg-white"
                         value={form.tds_section || '194C'}
                         onChange={(e) => {
                           const secVal = e.target.value;
@@ -1876,21 +1876,21 @@ export function PartyDetailPage() {
                           onChange={(e) => handleField('tds_rate', parseFloat(e.target.value) || 0)}
                           placeholder="2.0"
                         />
-                        <span className="absolute right-2.5 top-2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                        <span className="absolute right-2.5 top-2 text-xs font-bold text-ink-muted pointer-events-none">%</span>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 italic py-1">TDS is not applicable for this business partner.</p>
+                  <p className="text-xs text-ink-muted italic py-1">TDS is not applicable for this business partner.</p>
                 )}
               </div>
 
               {/* TCS Configuration Card */}
-              <div className="p-4 rounded-lg border border-surface-border bg-slate-50/50 space-y-3">
-                <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+              <div className="p-4 rounded-lg border border-surface-border bg-surface-muted/50 space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-surface-border/60">
                   <div>
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Tax Collected at Source (TCS)</h4>
-                    <p className="text-caption text-slate-500">Applicable on domestic sales & scrap sales under Income Tax</p>
+                    <h4 className="text-xs font-bold text-ink uppercase tracking-wider">Tax Collected at Source (TCS)</h4>
+                    <p className="text-caption text-ink-secondary">Applicable on domestic sales & scrap sales under Income Tax</p>
                   </div>
                   <select
                     className="input py-1 text-xs font-bold w-24 bg-white"
@@ -1919,7 +1919,7 @@ export function PartyDetailPage() {
                     <div className="sm:col-span-2">
                       <label className="label text-xs">TCS Section *</label>
                       <select
-                        className="input font-medium text-slate-800 text-xs bg-white"
+                        className="input font-medium text-ink text-xs bg-white"
                         value={form.tcs_section || '206C(1H)'}
                         onChange={(e) => {
                           const secVal = e.target.value;
@@ -1951,12 +1951,12 @@ export function PartyDetailPage() {
                           onChange={(e) => handleField('tcs_rate', parseFloat(e.target.value) || 0)}
                           placeholder="0.1"
                         />
-                        <span className="absolute right-2.5 top-2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                        <span className="absolute right-2.5 top-2 text-xs font-bold text-ink-muted pointer-events-none">%</span>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 italic py-1">TCS is not applicable for this business partner.</p>
+                  <p className="text-xs text-ink-muted italic py-1">TCS is not applicable for this business partner.</p>
                 )}
               </div>
             </div>
@@ -1968,10 +1968,10 @@ export function PartyDetailPage() {
       {tab === 'bank' && (
         <div className="space-y-4">
           <div className="card overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-surface-border bg-slate-50/50">
+            <div className="flex items-center justify-between p-4 border-b border-surface-border bg-surface-muted/50">
               <div>
-                <h3 className="text-sm font-bold text-slate-800">Bank Accounts</h3>
-                <p className="text-xs text-slate-500">Accounts for wire transfers, LC remittances, and vendor payments</p>
+                <h3 className="text-sm font-bold text-ink">Bank Accounts</h3>
+                <p className="text-xs text-ink-secondary">Accounts for wire transfers, LC remittances, and vendor payments</p>
               </div>
               <button onClick={addBank} className="btn-primary btn-sm flex items-center gap-1">
                 <Plus size={14} /> Add Bank Account
@@ -1980,7 +1980,7 @@ export function PartyDetailPage() {
 
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-surface-border bg-slate-50 text-slate-500 font-bold uppercase text-caption">
+                <tr className="border-b border-surface-border bg-surface-muted text-ink-secondary font-bold uppercase text-caption">
                   <th className="p-3 text-left">#</th>
                   <th className="p-3 text-left">Bank Name</th>
                   <th className="p-3 text-left">Branch</th>
@@ -1993,24 +1993,24 @@ export function PartyDetailPage() {
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {form.banks.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-8 text-center text-slate-400">
+                    <td colSpan={10} className="p-8 text-center text-ink-muted">
                       No bank accounts added yet. Click "+ Add Bank Account" to add settlement accounts.
                     </td>
                   </tr>
                 ) : (
                   form.banks.map((b: BankItem, i: number) => (
-                    <tr key={i} className={selectedBankIdx === i ? 'bg-brand-50/60' : 'hover:bg-slate-50'}>
-                      <td className="p-3 text-slate-400">{i + 1}</td>
-                      <td className="p-3 font-semibold text-slate-800">{b.bank_name}</td>
-                      <td className="p-3 text-slate-600">{b.branch_name || '—'}</td>
-                      <td className="p-3 text-slate-600">{b.account_name || '—'}</td>
+                    <tr key={i} className={selectedBankIdx === i ? 'bg-brand-50/60' : 'hover:bg-surface-muted'}>
+                      <td className="p-3 text-ink-muted">{i + 1}</td>
+                      <td className="p-3 font-semibold text-ink">{b.bank_name}</td>
+                      <td className="p-3 text-ink-secondary">{b.branch_name || '—'}</td>
+                      <td className="p-3 text-ink-secondary">{b.account_name || '—'}</td>
                       <td className="p-3 tabular-nums font-medium">{b.account_no || '—'}</td>
-                      <td className="p-3 tabular-nums text-slate-600">{b.ifsc_code || '—'}</td>
-                      <td className="p-3 tabular-nums text-slate-600">{b.swift_code || '—'}</td>
-                      <td className="p-3 text-slate-600">{b.account_type || 'CURRENT'}</td>
+                      <td className="p-3 tabular-nums text-ink-secondary">{b.ifsc_code || '—'}</td>
+                      <td className="p-3 tabular-nums text-ink-secondary">{b.swift_code || '—'}</td>
+                      <td className="p-3 text-ink-secondary">{b.account_type || 'CURRENT'}</td>
                       <td className="p-3 text-center">
                         {b.is_default ? <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">Yes</span> : '—'}
                       </td>
@@ -2038,7 +2038,7 @@ export function PartyDetailPage() {
           {/* Bank Editor */}
           {currentBank && (
             <div className="card p-5 space-y-4">
-              <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+              <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
                 Edit Bank Account (#{selectedBankIdx + 1})
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -2124,12 +2124,12 @@ export function PartyDetailPage() {
               </div>
 
               <div className="flex items-center gap-2 pt-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                   <input
                     type="checkbox"
                     checked={!!currentBank.is_default}
                     onChange={(e) => updateBank('is_default', e.target.checked ? 1 : 0)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                   />
                   <span>Primary Bank Account for Payments / Remittances</span>
                 </label>
@@ -2143,7 +2143,7 @@ export function PartyDetailPage() {
       {tab === 'buyer' && (
         <div className="card p-5 space-y-6">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               Buyer Commercial & Shipping Defaults
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
@@ -2237,7 +2237,7 @@ export function PartyDetailPage() {
           </div>
 
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               Quality, Compliance & Packaging Requirements
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
@@ -2260,12 +2260,12 @@ export function PartyDetailPage() {
                 />
               </div>
               <div className="flex items-center pt-6">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                   <input
                     type="checkbox"
                     checked={!!form.lab_testing_required}
                     onChange={(e) => handleField('lab_testing_required', e.target.checked ? 1 : 0)}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                   />
                   <span>Mandatory Lab Testing (Color Fastness, Shrinkage, GSM)</span>
                 </label>
@@ -2300,7 +2300,7 @@ export function PartyDetailPage() {
       {tab === 'supplier' && (
         <div className="card p-5 space-y-6">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               Supply Terms & Performance
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
@@ -2329,7 +2329,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('lead_time_days', e.target.value)}
                   placeholder="e.g. 21"
                 />
-                <p className="mt-1 text-caption text-slate-400">Used when planning purchase order delivery dates.</p>
+                <p className="mt-1 text-caption text-ink-muted">Used when planning purchase order delivery dates.</p>
               </div>
               <div>
                 <label className="label">Minimum Order Qty</label>
@@ -2339,7 +2339,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('min_order_qty', e.target.value)}
                   placeholder="e.g. 500"
                 />
-                <p className="mt-1 text-caption text-slate-400">In the supplier&rsquo;s base unit of measure.</p>
+                <p className="mt-1 text-caption text-ink-muted">In the supplier&rsquo;s base unit of measure.</p>
               </div>
               <div>
                 <label className="label">Supplier Rating</label>
@@ -2368,10 +2368,10 @@ export function PartyDetailPage() {
                 />
               </div>
               <div className="flex items-end pb-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink">
                   <input
                     type="checkbox"
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
                     checked={!!form.quality_agreement}
                     onChange={(e) => handleField('quality_agreement', e.target.checked ? 1 : 0)}
                   />
@@ -2397,7 +2397,7 @@ export function PartyDetailPage() {
       {tab === 'jobwork' && (
         <div className="card p-5 space-y-6">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               Job Work Capability &amp; Rates
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
@@ -2409,7 +2409,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('jobwork_process', e.target.value)}
                   placeholder="e.g. Stitching, Printing, Embroidery, Washing"
                 />
-                <p className="mt-1 text-caption text-slate-400">Comma-separate where the vendor handles more than one stage.</p>
+                <p className="mt-1 text-caption text-ink-muted">Comma-separate where the vendor handles more than one stage.</p>
               </div>
               <div>
                 <label className="label">Capacity / Day (pcs)</label>
@@ -2445,7 +2445,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('jobwork_rate', e.target.value)}
                   placeholder="e.g. 18.50"
                 />
-                <p className="mt-1 text-caption text-slate-400">Default rate applied to job-work purchase orders.</p>
+                <p className="mt-1 text-caption text-ink-muted">Default rate applied to job-work purchase orders.</p>
               </div>
               <div className="sm:col-span-2">
                 <label className="label">Gate / Documentation Terms</label>
@@ -2475,7 +2475,7 @@ export function PartyDetailPage() {
       {tab === 'agent' && (
         <div className="card p-5 space-y-6">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               Commission Structure
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
@@ -2540,7 +2540,7 @@ export function PartyDetailPage() {
       {tab === 'merchandiser' && (
         <div className="card p-5 space-y-6">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 border-b border-surface-border pb-2">
+            <h3 className="text-sm font-bold text-ink border-b border-surface-border pb-2">
               Merchandiser Role &amp; Operations
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-3">
@@ -2553,7 +2553,7 @@ export function PartyDetailPage() {
                   onChange={(e) => handleField('group_code', e.target.value.toUpperCase())}
                   placeholder="e.g. G11"
                 />
-                <p className="text-caption text-slate-400 mt-1">
+                <p className="text-caption text-ink-muted mt-1">
                   G + 2 digits. Starts the SO number (e.g. <span className="tabular-nums font-bold text-brand-700">{form.group_code || 'G11'}E26CAPE0001</span>).
                 </p>
               </div>

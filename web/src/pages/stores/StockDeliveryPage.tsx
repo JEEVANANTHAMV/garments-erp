@@ -137,7 +137,7 @@ function DeliveryEditor({ kind, doc, onClose, onSaved }: { kind: Kind; doc: any 
         <Input label="Vehicle no" value={h.vehicle_no} hint="Given → gate pass made at approval" onChange={(e) => setH({ ...h, vehicle_no: e.target.value })} />
         <Input label="Remarks" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
       </FormSection>
-      <div className="mb-2 flex items-end justify-between border-b border-slate-100 pb-1.5">
+      <div className="mb-2 flex items-end justify-between border-b border-surface-divider pb-1.5">
         <h3 className={tableHead}>Items</h3>
         <div className="flex gap-2">
           {kind === 'GENERAL' && <Button size="sm" variant="secondary" id="delivery-free-line" onClick={() => setLines((ls) => [...ls, { source_ref: null, material_type: 'GENERAL', item_name: '', item_description: '', color_name: '', sizes: '', uom_id: null, stock_qty: 0, qty: '', rate: '', remarks: '' }])}>
@@ -147,13 +147,13 @@ function DeliveryEditor({ kind, doc, onClose, onSaved }: { kind: Kind; doc: any 
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>
             {['Item', 'Description', 'Colour', 'Sizes', 'UOM', 'Stock', 'Qty', 'Rate', 'Value', 'Remarks', ''].map((t) => <th key={t} className={`${TH} ${/Stock|Qty|Rate|Value/.test(t) ? 'text-right' : 'text-left'}`}>{t}</th>)}
           </tr></thead>
           <tbody>
             {lines.map((l, i) => (
-              <tr key={l.source_ref ?? `free${i}`} className="border-t border-slate-100 delivery-line">
-                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-caption text-slate-400">{l.material_type.toLowerCase()}</span></> : <span className="text-slate-400">Not from stock</span>}</td>
+              <tr key={l.source_ref ?? `free${i}`} className="border-t border-surface-divider delivery-line">
+                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-caption text-ink-muted">{l.material_type.toLowerCase()}</span></> : <span className="text-ink-muted">Not from stock</span>}</td>
                 <td className={TD}><input className="input w-48 line-desc" value={l.item_description} placeholder={l.source_ref ? '' : 'Item / description'} onChange={(e) => set(i, { item_description: e.target.value })} /></td>
                 <td className={TD}><input className="input w-24" value={l.color_name} onChange={(e) => set(i, { color_name: e.target.value })} /></td>
                 <td className={TD}><input className="input w-16" value={l.sizes} onChange={(e) => set(i, { sizes: e.target.value })} /></td>
@@ -163,10 +163,10 @@ function DeliveryEditor({ kind, doc, onClose, onSaved }: { kind: Kind; doc: any 
                 <td className={TD}><input className="input w-24 text-right" type="number" min="0" step="any" value={l.rate} onChange={(e) => set(i, { rate: e.target.value })} /></td>
                 <td className={`${TD} text-right tabular-nums`}>{fmtDecimal(num(l.qty) * num(l.rate), 2)}</td>
                 <td className={TD}><input className="input w-32" value={l.remarks} onChange={(e) => set(i, { remarks: e.target.value })} /></td>
-                <td className={TD}><button className="rounded p-1 text-slate-400 hover:text-red-600" aria-label="Remove item" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button></td>
+                <td className={TD}><button className="rounded p-1 text-ink-muted hover:text-red-600" aria-label="Remove item" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button></td>
               </tr>
             ))}
-            {!lines.length && <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-400">Choose the location, then pick items from stock{kind === 'GENERAL' ? ' or add items not held in stock' : ''}</td></tr>}
+            {!lines.length && <tr><td colSpan={11} className="px-3 py-8 text-center text-ink-muted">Choose the location, then pick items from stock{kind === 'GENERAL' ? ' or add items not held in stock' : ''}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -209,7 +209,7 @@ function DeliveryView({ id, onClose, onEdit }: { id: number; onClose: () => void
             { key: 'balance_qty', label: 'Balance', kind: 'qty' }, { key: 'amount', label: 'Value', kind: 'money' },
           ]} />
           {doc.returns?.length > 0 && <>
-            <h3 className={`${tableHead} mb-2 mt-4 border-b border-slate-100 pb-1.5`}>Returns</h3>
+            <h3 className={`${tableHead} mb-2 mt-4 border-b border-surface-divider pb-1.5`}>Returns</h3>
             <SimpleTable rows={doc.returns} cols={[{ key: 'return_no', label: 'Return no' }, { key: 'return_date', label: 'Date', kind: 'date' }, { key: 'party_dc_no', label: 'Party DC no' },
               { key: 'qty', label: 'Qty', kind: 'qty' }, { key: 'prepared_by', label: 'Entered by' }, { key: 'remarks', label: 'Remarks' }]} />
           </>}
@@ -243,11 +243,11 @@ function ReturnEntry({ doc, onClose }: { doc: any; onClose: () => void }) {
         <Input label="Remarks" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
       </FormSection>
       <table className="w-full text-xs">
-        <thead className="bg-slate-50 text-slate-500"><tr>{['Item', 'UOM', 'Delivered', 'Returned', 'Outstanding', 'Return now'].map((t) => <th key={t} className={`${TH} ${t === 'Item' || t === 'UOM' ? 'text-left' : 'text-right'}`}>{t}</th>)}</tr></thead>
+        <thead className="bg-surface-muted text-ink-secondary"><tr>{['Item', 'UOM', 'Delivered', 'Returned', 'Outstanding', 'Return now'].map((t) => <th key={t} className={`${TH} ${t === 'Item' || t === 'UOM' ? 'text-left' : 'text-right'}`}>{t}</th>)}</tr></thead>
         <tbody>
           {open.map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-100">
-              <td className={TD}>{l.item_name}{l.item_description && l.item_description !== l.item_name ? <span className="text-slate-400"> · {l.item_description}</span> : null}</td><td className={TD}>{l.uom_code}</td>
+            <tr key={l.id} className="border-t border-surface-divider">
+              <td className={TD}>{l.item_name}{l.item_description && l.item_description !== l.item_name ? <span className="text-ink-muted"> · {l.item_description}</span> : null}</td><td className={TD}>{l.uom_code}</td>
               <td className={`${TD} text-right tabular-nums`}>{qtyFmt(l.qty)}</td><td className={`${TD} text-right tabular-nums`}>{qtyFmt(l.returned_qty)}</td><td className={`${TD} text-right tabular-nums`}>{qtyFmt(l.balance_qty)}</td>
               <td className={`${TD} text-right`}><input className="input w-24 text-right return-qty" type="number" min="0" max={num(l.balance_qty)} step="any" value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} /></td>
             </tr>

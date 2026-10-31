@@ -20,12 +20,12 @@ function MachineProcessPage({ kind }: { kind: Kind }) {
   const [prod, setProd] = useState<{ id?: number; jobId?: number } | null>(null);
   const [prodKey, setProdKey] = useState(0);
   const openProd = (o: { id?: number; jobId?: number }) => { setProd(o); setProdKey((k) => k + 1); };
-  if (!p.view) return <p className="p-6 text-sm text-slate-500">You do not have access to {LABEL[kind].toLowerCase()} — ask for the {kind}.VIEW permission.</p>;
+  if (!p.view) return <p className="p-6 text-sm text-ink-secondary">You do not have access to {LABEL[kind].toLowerCase()} — ask for the {kind}.VIEW permission.</p>;
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">{LABEL[kind]} — machine output & costing</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-2xl font-bold text-ink">{LABEL[kind]} — machine output & costing</h1>
+        <p className="text-sm text-ink-secondary">
           {kind === 'EMBROIDERY'
             ? 'Machines, designs, thread recipes, jobs, store issue, daily machine output (heads, stitches, downtime, reject / rework) and cost per good piece / per 1,000 stitches'
             : 'Machines, artwork, dyes & chemical recipes, jobs, store issue, daily machine output (downtime, reject / rework) and cost per good piece / per KG'}

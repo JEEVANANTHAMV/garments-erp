@@ -52,8 +52,8 @@ export function PlanningReportsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Production Planning Reports</h1>
-        <p className="text-sm text-slate-500">Plan vs actual, line utilization and allocation for sewing, checking, ironing and packing</p>
+        <h1 className="text-2xl font-bold text-ink">Production Planning Reports</h1>
+        <p className="text-sm text-ink-secondary">Plan vs actual, line utilization and allocation for sewing, checking, ironing and packing</p>
       </div>
 
       <Card className="!p-3">
@@ -85,12 +85,12 @@ export function PlanningReportsPage() {
         {tab === 'pva' && pva && (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500">
+              <thead className="bg-surface-muted text-ink-secondary">
                 <tr>{['Date', 'Line', 'Planned', 'Good', 'Rework', 'Reject', 'Balance', 'Achievement', 'Rework %', 'Reject %'].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
               </thead>
               <tbody>
                 {pva.rows.map((r: any) => (
-                  <tr key={`${r.date}-${r.line_id}`} className="border-t border-slate-100">
+                  <tr key={`${r.date}-${r.line_id}`} className="border-t border-surface-divider">
                     <td className="px-3 py-1.5">{fmtDate(r.date)}</td>
                     <td className="px-3 py-1.5 tabular-nums text-brand-700">{r.line_code}</td>
                     <td className="px-3 py-1.5">{fmtNumber(r.planned)}</td>
@@ -103,10 +103,10 @@ export function PlanningReportsPage() {
                     <td className="px-3 py-1.5">{r.reject_pct}%</td>
                   </tr>
                 ))}
-                {!pva.rows.length && <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-400">No plans in this period</td></tr>}
+                {!pva.rows.length && <tr><td colSpan={10} className="px-3 py-8 text-center text-ink-muted">No plans in this period</td></tr>}
               </tbody>
               {pva.rows.length > 0 && (
-                <tfoot className="border-t bg-slate-50 font-semibold">
+                <tfoot className="border-t bg-surface-muted font-semibold">
                   <tr>
                     <td className="px-3 py-1.5" colSpan={2}>Total</td>
                     <td className="px-3 py-1.5">{fmtNumber(pva.totals.planned)}</td><td className="px-3 py-1.5">{fmtNumber(pva.totals.good)}</td>
@@ -121,12 +121,12 @@ export function PlanningReportsPage() {
         )}
         {tab === 'util' && (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-surface-muted text-ink-secondary">
               <tr>{['Line', 'Supervisor', 'Capacity', 'Allocated', 'Planned', 'Actual', 'Allocation %', 'Plan %', 'Achievement'].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
             </thead>
             <tbody>
               {util.map((r) => (
-                <tr key={r.line_id} className="border-t border-slate-100">
+                <tr key={r.line_id} className="border-t border-surface-divider">
                   <td className="px-3 py-1.5 tabular-nums text-brand-700">{r.line_code}</td><td className="px-3 py-1.5">{r.supervisor_name || '—'}</td>
                   <td className="px-3 py-1.5">{fmtNumber(r.capacity)}</td><td className="px-3 py-1.5">{fmtNumber(r.allocated)}</td>
                   <td className="px-3 py-1.5">{fmtNumber(r.planned)}</td><td className="px-3 py-1.5 font-medium text-emerald-700">{fmtNumber(r.actual)}</td>
@@ -135,7 +135,7 @@ export function PlanningReportsPage() {
                   <td className="px-3 py-1.5"><UtilBar value={r.achievement_pct} width="w-14" /></td>
                 </tr>
               ))}
-              {!util.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">No active lines</td></tr>}
+              {!util.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-ink-muted">No active lines</td></tr>}
             </tbody>
           </table>
         )}
@@ -146,18 +146,18 @@ export function PlanningReportsPage() {
                 options={[['job', 'Job'], ['style', 'Style'], ['colour', 'Colour'], ['size', 'Size'], ['line', 'Line']].map(([v, l]) => ({ value: v, label: l }))} />
             </div>
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500">
+              <thead className="bg-surface-muted text-ink-secondary">
                 <tr>{['Group', 'Bundles', 'Lines', 'Allocated', 'Completed', 'Open'].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
               </thead>
               <tbody>
                 {alloc.map((r) => (
-                  <tr key={String(r.group_key)} className="border-t border-slate-100">
+                  <tr key={String(r.group_key)} className="border-t border-surface-divider">
                     <td className="px-3 py-1.5 font-medium">{r.group_key ?? '—'}</td><td className="px-3 py-1.5">{r.bundles}</td><td className="px-3 py-1.5">{r.lines}</td>
                     <td className="px-3 py-1.5">{fmtNumber(r.allocated)}</td><td className="px-3 py-1.5 text-emerald-700">{fmtNumber(r.completed)}</td>
                     <td className="px-3 py-1.5 text-amber-700">{fmtNumber(r.open_qty)}</td>
                   </tr>
                 ))}
-                {!alloc.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">No allocations in this period</td></tr>}
+                {!alloc.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-ink-muted">No allocations in this period</td></tr>}
               </tbody>
             </table>
           </div>
@@ -171,9 +171,9 @@ function Kpis({ items }: { items: [string, unknown][] }) {
   return (
     <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 lg:grid-cols-7">
       {items.map(([k, v]) => (
-        <div key={k} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-          <p className="text-micro text-slate-500">{k}</p>
-          <p className="text-lg font-bold text-slate-800">{typeof v === 'number' ? fmtNumber(v) : String(v)}</p>
+        <div key={k} className="rounded-lg border border-surface-border bg-surface-muted px-3 py-2">
+          <p className="text-micro text-ink-secondary">{k}</p>
+          <p className="text-lg font-bold text-ink">{typeof v === 'number' ? fmtNumber(v) : String(v)}</p>
         </div>
       ))}
     </div>

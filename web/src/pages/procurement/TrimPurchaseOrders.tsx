@@ -45,15 +45,15 @@ export default function TrimPurchaseOrdersPage() {
   return (
     <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
               <Scissors size={20} />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Trim Purchase Orders</h1>
-              <p className="text-xs text-slate-500">
+              <h1 className="text-xl font-bold text-ink tracking-tight">Trim Purchase Orders</h1>
+              <p className="text-xs text-ink-secondary">
                 Manage accessories, buttons, zippers, labels, and thread procurement orders
               </p>
             </div>
@@ -84,8 +84,8 @@ export default function TrimPurchaseOrdersPage() {
             <Scissors size={20} />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500">Total Trim POs</p>
-            <p className="text-xl font-bold text-slate-900">{kpis.totalOrders}</p>
+            <p className="text-xs font-medium text-ink-secondary">Total Trim POs</p>
+            <p className="text-xl font-bold text-ink">{kpis.totalOrders}</p>
           </div>
         </div>
         <div className="card p-4 flex items-center gap-4 bg-gradient-to-br from-white to-slate-50/50">
@@ -93,8 +93,8 @@ export default function TrimPurchaseOrdersPage() {
             <PackageCheck size={20} />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500">Active / Approved POs</p>
-            <p className="text-xl font-bold text-slate-900">{kpis.approvedOrders}</p>
+            <p className="text-xs font-medium text-ink-secondary">Active / Approved POs</p>
+            <p className="text-xl font-bold text-ink">{kpis.approvedOrders}</p>
           </div>
         </div>
         <div className="card p-4 flex items-center gap-4 bg-gradient-to-br from-white to-slate-50/50">
@@ -102,8 +102,8 @@ export default function TrimPurchaseOrdersPage() {
             <span className="font-bold text-sm">₹</span>
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500">Total Purchase Value</p>
-            <p className="text-xl font-bold text-slate-900">₹{fmtDecimal(kpis.totalVal)}</p>
+            <p className="text-xs font-medium text-ink-secondary">Total Purchase Value</p>
+            <p className="text-xl font-bold text-ink">₹{fmtDecimal(kpis.totalVal)}</p>
           </div>
         </div>
       </div>
@@ -112,7 +112,7 @@ export default function TrimPurchaseOrdersPage() {
       <div className="card p-4 space-y-3">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" size={16} />
             <input
               type="text"
               placeholder="Search by PO No, IO No, Style, Supplier..."
@@ -122,7 +122,7 @@ export default function TrimPurchaseOrdersPage() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Filter size={15} className="text-slate-400" />
+            <Filter size={15} className="text-ink-muted" />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -143,7 +143,7 @@ export default function TrimPurchaseOrdersPage() {
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table w-full text-xs">
-            <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-semibold">
+            <thead className="bg-surface-muted text-ink-secondary border-b border-surface-border uppercase font-semibold">
               <tr>
                 <th className="py-3 px-4 text-left">PO No</th>
                 <th className="py-3 px-4 text-left">Date</th>
@@ -159,36 +159,36 @@ export default function TrimPurchaseOrdersPage() {
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-slate-400">Loading trim purchase orders...</td>
+                  <td colSpan={12} className="py-8 text-center text-ink-muted">Loading trim purchase orders...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-slate-400">No trim purchase orders found</td>
+                  <td colSpan={12} className="py-8 text-center text-ink-muted">No trim purchase orders found</td>
                 </tr>
               ) : (
                 filtered.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/70 transition">
+                  <tr key={p.id} className="hover:bg-surface-muted/70 transition">
                     <td className="py-3 px-4 font-semibold text-emerald-700">{p.po_no}</td>
-                    <td className="py-3 px-4 text-slate-500">{fmtDate(p.po_date)}</td>
-                    <td className="py-3 px-4 font-semibold text-slate-900">{p.io_no}</td>
+                    <td className="py-3 px-4 text-ink-secondary">{fmtDate(p.po_date)}</td>
+                    <td className="py-3 px-4 font-semibold text-ink">{p.io_no}</td>
                     <td className="py-3 px-4">
                       {p.style_code ? (
                         <div>
-                          <span className="font-semibold text-slate-900">{p.style_code}</span>
-                          <span className="text-micro text-slate-400 block">{p.style_name}</span>
+                          <span className="font-semibold text-ink">{p.style_code}</span>
+                          <span className="text-micro text-ink-muted block">{p.style_name}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-ink-muted">-</span>
                       )}
                     </td>
-                    <td className="py-3 px-4 font-medium text-slate-800">{p.supplier_name}</td>
+                    <td className="py-3 px-4 font-medium text-ink">{p.supplier_name}</td>
                     <td className="py-3 px-4 text-right">{p.total_items}</td>
-                    <td className="py-3 px-4 text-right font-medium text-slate-900">{fmtDecimal(p.total_order_qty)}</td>
+                    <td className="py-3 px-4 text-right font-medium text-ink">{fmtDecimal(p.total_order_qty)}</td>
                     <td className="py-3 px-4 text-right font-medium text-indigo-600">{fmtDecimal(p.total_received_qty)}</td>
-                    <td className="py-3 px-4 text-right font-bold text-slate-900">₹{fmtDecimal(p.grand_total)}</td>
+                    <td className="py-3 px-4 text-right font-bold text-ink">₹{fmtDecimal(p.grand_total)}</td>
                     <td className="py-3 px-3 text-center"><ReceiptStatusBadge value={p.receipt_status} /></td>
                     <td className="py-3 px-4 text-center">
                       <Badge variant={p.status === 'CLOSED' ? 'success' : p.status === 'APPROVED' ? 'info' : p.status === 'PARTIAL' ? 'warning' : 'neutral'}>

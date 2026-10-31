@@ -2,13 +2,13 @@ import { useState, type ReactNode } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
-import { ShoppingCart, Factory, Truck, ClipboardList, Layers, Package, CalendarDays, ArrowLeft, ArrowRight, type LucideIcon } from 'lucide-react';
+import { ShoppingCart, Factory, Truck, ClipboardList, Layers, Package, CalendarDays, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Users, HardHat, type LucideIcon } from 'lucide-react';
 import { api, http, type ListResponse } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtNumber, fmtCompact, fmtDate, humanize } from '../lib/format';
 import { LoadingBlock, ErrorState, StatusBadge } from '../components/ui';
 import { colors, chartColors, statusColors } from '../theme/designTokens.js';
-import { aggregateOutput, aggregateStock, businessDate, monthRange, type OutputRow, type StockRow } from './dashboard/model';
+import { aggregateOutput, aggregateStock, businessDate, monthRange, samePeriodLastMonth, trendPct, type OutputRow, type StockRow } from './dashboard/model';
 
 interface Summary {
   orders: Record<string, number | string>; production: Record<string, number | string>;
@@ -21,24 +21,23 @@ interface Summary {
   lowStockAlerts: { material_type: string; item_name: string; item_code: string; balance: string }[];
   stockValue: { stock_value: string }; pendingApprovals: { pending: number };
 }
-interface Job { id: number; po_prod_no: string; style_code: string; so_no: string; order_qty: number; produced_qty: number; approval_state: string }
+interface Job { id: number; po_prod_no: string; style_code: string; so_no: string; buyer_name: string | null; order_qty: number; produced_qty: number; approval_state: string }
 interface Purchase { id: number; po_no: string; supplier_name: string; po_type: string; currency_code: string; total_amount: string; approval_state: string }
 interface Task { id: number; milestone: string; so_no: string; planned_date: string; status: string }
 
-// Read every page in the selected month so charts never silently total just the first page.
-async function loadOutput(params: Record<string, unknown>, signal: AbortSignal) {
-  const rows: OutputRow[] = [];
-  let page = 1;
-  let totalPages = 1;
-  do {
-    const response = await api.get<ListResponse<OutputRow>>('/daily-outputs', {
-      params: { ...params, page, pageSize: 200, sort: 'id', dir: 'asc' }, signal,
-    });
-    rows.push(...(response.data.data ?? []));
-    totalPages = response.data.pagination?.totalPages ?? 1;
-    page++;
-  } while (page <= totalPages);
-  return rows;
+// Good pieces per day / stage / style from the real floor screens (cutting, sewing, finishing, packing).
+async function loadOutput(range: { dateFrom: string; dateTo: string }, signal: AbortSignal) {
+  return (await api.get<{ data: OutputRow[] }>('/dashboard/output', { params: range, signal })).data.data ?? [];
+}
+
+// Dispatches come back as one unpaged list: count all, and this month-to-date vs the same days last month.
+async function loadDispatches(now: { dateFrom: string; dateTo: string }, prev: { dateFrom: string; dateTo: string }) {
+  const rows = (await http.get<{ data: { dispatch_date: string }[] }>('/dispatches')).data ?? [];
+  const within = (r: { dispatch_date: string }, p: { dateFrom: string; dateTo: string }) => {
+    const d = String(r.dispatch_date ?? '').slice(0, 10);
+    return d >= p.dateFrom && d <= p.dateTo;
+  };
+  return { total: rows.length, now: rows.filter((r) => within(r, now)).length, prev: rows.filter((r) => within(r, prev)).length };
 }
 
 interface DashboardList<T> { rows: T[]; total: number }
@@ -69,15 +68,33 @@ export default function Dashboard() {
   });
   const outputs = useQuery({
     queryKey: ['dashboard-output', company?.id, range], enabled: can('PRODUCTION.VIEW'), staleTime: 60_000,
-    queryFn: ({ signal }) => loadOutput({ ...range, dateField: 'output_date' }, signal),
+    queryFn: ({ signal }) => loadOutput(range, signal),
   });
-  const todayOutput = useQuery({
+  // Trends: this month to date against the same days of last month; today's output against yesterday.
+  const mtd = monthRange(date);
+  const lastMtd = samePeriodLastMonth(date);
+  const yesterday = businessDate(new Date(Date.now() - 86_400_000));
+  const recentOutput = useQuery({
     queryKey: ['dashboard-today-output', company?.id, date], enabled: can('PRODUCTION.VIEW'), staleTime: 60_000,
-    queryFn: ({ signal }) => loadOutput({ dateFrom: date, dateTo: date, dateField: 'output_date' }, signal),
+    queryFn: ({ signal }) => loadOutput({ dateFrom: yesterday, dateTo: date }, signal),
   });
+  // "Today output" = pieces sewn (each garment once), matching the reference's Pcs (All Lines).
+  const sewnOn = (day: string) => (recentOutput.data ?? []).filter((r) => r.stage === 'SEWING' && r.output_date === day).reduce((sum, r) => sum + Number(r.qty), 0);
   const jobs = useDashboardList<Job>('production-orders', 'PRODUCTION.VIEW');
   const purchases = useDashboardList<Purchase>('purchase-orders', 'PURCHASE.VIEW');
-  const dispatches = useDashboardList<never>('dispatches', 'DISPATCH.VIEW', { pageSize: 1 });
+  const dispatches = useQuery({
+    queryKey: ['dashboard-dispatches', company?.id, date], enabled: can('DISPATCH.VIEW'), staleTime: 60_000,
+    queryFn: () => loadDispatches(mtd, lastMtd),
+  });
+  const ordersNow = useDashboardList<never>('sales-orders', 'SALES_ORDER.VIEW', { ...mtd, pageSize: 1 });
+  const ordersPrev = useDashboardList<never>('sales-orders', 'SALES_ORDER.VIEW', { ...lastMtd, pageSize: 1 });
+  const posNow = useDashboardList<never>('purchase-orders', 'PURCHASE.VIEW', { dateField: 'po_date', ...mtd, pageSize: 1 });
+  const posPrev = useDashboardList<never>('purchase-orders', 'PURCHASE.VIEW', { dateField: 'po_date', ...lastMtd, pageSize: 1 });
+  const jobsNow = useDashboardList<never>('production-orders', 'PRODUCTION.VIEW', { dateField: 'prod_date', ...mtd, pageSize: 1 });
+  const jobsPrev = useDashboardList<never>('production-orders', 'PRODUCTION.VIEW', { dateField: 'prod_date', ...lastMtd, pageSize: 1 });
+  const visitors = useDashboardList<never>('gate-visitors', 'GATE_INWARD.VIEW', { dateField: 'visit_date', dateFrom: date, dateTo: date, visitor_type: 'VISITOR', pageSize: 1 });
+  const contractors = useDashboardList<never>('gate-visitors', 'GATE_INWARD.VIEW', { dateField: 'visit_date', dateFrom: date, dateTo: date, visitor_type: 'CONTRACTOR', pageSize: 1 });
+  const trend = (now?: { total: number }, prev?: { total: number }) => now && prev ? trendPct(now.total, prev.total) : null;
   const inwards = useDashboardList<never>('gate-inwards', 'GATE_INWARD.VIEW', { dateField: 'entry_date', dateFrom: date, dateTo: date, pageSize: 1 });
   const outwards = useDashboardList<never>('gate-outwards', 'GATE_OUTWARD.VIEW', { dateField: 'pass_date', dateFrom: date, dateTo: date, pageSize: 1 });
   const stock = useQuery({
@@ -120,16 +137,16 @@ export default function Dashboard() {
       </div>
       {summary.isLoading ? <div className="card"><LoadingBlock rows={6} /></div> : summary.error ? <div className="card"><ErrorState error={summary.error} onRetry={() => void summary.refetch()} /></div> : data && <>
         <div className="dashboard-grid dashboard-kpis">
-          <Kpi icon={ClipboardList} color={chartColors.cutting} label="Total Orders" value={fmtNumber(data.orders.total_orders)} caption="All sales orders" />
-          {can('PURCHASE.VIEW') && <Kpi icon={ShoppingCart} color={chartColors.sewing} label="Purchase Orders" value={fmtNumber(purchases.data?.total)} caption="All purchase orders" query={purchases} />}
-          {can('PRODUCTION.VIEW') && <Kpi icon={Package} color={chartColors.packing} label="Production Jobs" value={fmtNumber(data.production.total_prod_orders)} caption={`${fmtNumber(data.production.in_progress)} in progress`} />}
-          {can('PRODUCTION.VIEW') && <Kpi icon={Factory} color={chartColors.finishing} label="Today Output" value={todayOutput.data ? fmtNumber(todayOutput.data.reduce((sum, r) => sum + Number(r.actual_good), 0)) : '—'} caption="Good pcs · all stages" query={todayOutput} />}
-          {can('DISPATCH.VIEW') && <Kpi icon={Truck} color={chartColors.dispatch} label="Dispatches" value={fmtNumber(dispatches.data?.total)} caption="All dispatches" query={dispatches} />}
+          <Kpi icon={ClipboardList} color={chartColors.cutting} label="Total Orders" value={fmtNumber(data.orders.total_orders)} caption="All sales orders" trend={trend(ordersNow.data, ordersPrev.data)} />
+          {can('PURCHASE.VIEW') && <Kpi icon={ShoppingCart} color={chartColors.sewing} label="Purchase Orders" value={fmtNumber(purchases.data?.total)} caption="All purchase orders" query={purchases} trend={trend(posNow.data, posPrev.data)} />}
+          {can('PRODUCTION.VIEW') && <Kpi icon={Package} color={chartColors.packing} label="Production Jobs" value={fmtNumber(data.production.total_prod_orders)} caption={`${fmtNumber(data.production.in_progress)} in progress`} trend={trend(jobsNow.data, jobsPrev.data)} />}
+          {can('PRODUCTION.VIEW') && <Kpi icon={Factory} color={chartColors.finishing} label="Today Output" value={recentOutput.data ? fmtNumber(sewnOn(date)) : '—'} unit="Pcs" caption="Sewn today · all lines" query={recentOutput} trend={recentOutput.data ? trendPct(sewnOn(date), sewnOn(yesterday)) : null} trendLabel="vs yesterday" />}
+          {can('DISPATCH.VIEW') && <Kpi icon={Truck} color={chartColors.dispatch} label="Dispatches" value={fmtNumber(dispatches.data?.total)} caption={`${fmtNumber(dispatches.data?.now ?? 0)} this month`} query={dispatches} trend={dispatches.data ? trendPct(dispatches.data.now, dispatches.data.prev) : null} />}
           {can('INVENTORY.VIEW') && <Kpi icon={Layers} color={chartColors.inventory} label="Fabric Stock" value={stock.data ? (fabric.totals.length ? fabric.totals.map((t) => `${fmtNumber(t.value, 2)} ${t.unit}`).join(' / ') : '0') : '—'} caption="Current balance by unit" query={stock} />}
         </div>
         <div className="dashboard-grid dashboard-charts">
           {can('PRODUCTION.VIEW') && <Panel title="Production Progress" action={<Period value={period} onChange={setPeriod} />}>
-            <QueryContent query={outputs} empty={!production.days.length}>
+            <QueryContent query={outputs} empty={!production.days.length} emptyText="No cutting, sewing, finishing or packing output recorded in this period">
               <p className="px-3 text-xs text-ink-secondary">Recorded good output by stage (pcs)</p>
               <div className="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2 text-xs text-ink-secondary">{production.stages.map((s) => <span key={s.key} className="flex items-center gap-1"><Dot color={s.color} />{s.name}</span>)}</div>
               <div className="px-2 pb-2">
@@ -146,8 +163,8 @@ export default function Dashboard() {
             </QueryContent>
           </Panel>}
           {can('PRODUCTION.VIEW') && <Panel title="Style Wise Production" action={<Period value={period} onChange={setPeriod} />}>
-            <QueryContent query={outputs} empty={!production.styles.length}>
-              <p className="px-3 text-xs text-ink-secondary">Recorded good output · all stages</p>
+            <QueryContent query={outputs} empty={!production.styles.length} emptyText="No sewing output recorded in this period">
+              <p className="px-3 text-xs text-ink-secondary">Pieces sewn, by style</p>
               <Donut data={production.styles} unit="Pcs" percentages />
             </QueryContent>
           </Panel>}
@@ -161,8 +178,8 @@ export default function Dashboard() {
         <div className="dashboard-grid dashboard-tables">
           {can('PRODUCTION.VIEW') && <Panel title="Recent Production Jobs" to="/production/orders">
             <QueryContent query={jobs} empty={!jobs.data?.rows.length}>
-              <Table headers={['Job No', 'Style', 'Sales Order', 'Order Qty', 'Produced', 'Balance', 'Status']} numeric={[3, 4, 5]}>
-                {jobs.data?.rows.map((j) => <tr key={j.id} className="row-hover"><td className="td">{j.po_prod_no}</td><td className="td">{j.style_code || '—'}</td><td className="td">{j.so_no || '—'}</td><td className="td text-right">{fmtNumber(j.order_qty)}</td><td className="td text-right">{fmtNumber(j.produced_qty)}</td><td className="td text-right">{fmtNumber(Number(j.order_qty) - Number(j.produced_qty))}</td><td className="td"><StatusBadge value={j.approval_state} /></td></tr>)}
+              <Table headers={['Job No', 'Style', 'Buyer', 'Order Qty', 'Produced', 'Balance', 'Status']} numeric={[3, 4, 5]}>
+                {jobs.data?.rows.map((j) => <tr key={j.id} className="row-hover"><td className="td">{j.po_prod_no}</td><td className="td">{j.style_code || '—'}</td><td className="td" title={j.so_no ? `Sales order ${j.so_no}` : undefined}>{j.buyer_name || j.so_no || '—'}</td><td className="td text-right">{fmtNumber(j.order_qty)}</td><td className="td text-right">{fmtNumber(j.produced_qty)}</td><td className="td text-right">{fmtNumber(Number(j.order_qty) - Number(j.produced_qty))}</td><td className="td"><StatusBadge value={j.approval_state} /></td></tr>)}
               </Table>
             </QueryContent>
           </Panel>}
@@ -193,6 +210,8 @@ export default function Dashboard() {
             <Table headers={['Type', 'Count']} numeric={[1]}>
               {can('GATE_INWARD.VIEW') && <tr><td className="td"><Link className="flex items-center gap-2 text-brand-700 hover:underline" to="/gate/inwards"><ArrowLeft size={16} />Inward (Material)</Link></td><td className="td text-right"><Count query={inwards} /></td></tr>}
               {can('GATE_OUTWARD.VIEW') && <tr><td className="td"><Link className="flex items-center gap-2 text-brand-700 hover:underline" to="/gate/outwards"><ArrowRight size={16} />Outward (Passes)</Link></td><td className="td text-right"><Count query={outwards} /></td></tr>}
+              {can('GATE_INWARD.VIEW') && <tr><td className="td"><Link className="flex items-center gap-2 text-brand-700 hover:underline" to="/gate/visitors"><Users size={16} />Visitors</Link></td><td className="td text-right"><Count query={visitors} /></td></tr>}
+              {can('GATE_INWARD.VIEW') && <tr><td className="td"><Link className="flex items-center gap-2 text-brand-700 hover:underline" to="/gate/visitors"><HardHat size={16} />Contractors</Link></td><td className="td text-right"><Count query={contractors} /></td></tr>}
             </Table>
           </Panel>}
         </div>
@@ -234,8 +253,25 @@ function QueryContent({ query, empty, emptyText, children }: { query: UseQueryRe
 function Count({ query }: { query: UseQueryResult<DashboardList<unknown>> }) {
   return query.isLoading ? <span aria-label="Loading count">…</span> : query.error ? <button className="text-brand-700 underline" onClick={() => void query.refetch()}>Retry</button> : fmtNumber(query.data?.total);
 }
-function Kpi({ icon: Icon, color, label, value, caption, query }: { icon: LucideIcon; color: string; label: string; value: string; caption: string; query?: UseQueryResult<unknown> }) {
-  return <section className="card min-w-0 p-3"><div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-2.5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-white" style={{ backgroundColor: color }}><Icon size={21} /></div><h2 className="text-body text-ink">{label}</h2><div className="col-span-2 mt-2 min-w-0">{query?.isLoading ? <div className="skeleton my-1 h-7 w-20" aria-label={`Loading ${label}`} /> : query?.error ? <button className="py-1 text-xs text-brand-700 underline" onClick={() => void query.refetch()}>Unable to load · Retry</button> : <p tabIndex={0} className="dashboard-kpi-value font-bold leading-tight text-ink-heading">{value}</p>}<p className="mt-1 text-caption text-ink-secondary">{caption}</p></div></div></section>;
+function Kpi({ icon: Icon, color, label, value, unit, caption, query, trend, trendLabel = 'vs same days last month' }: {
+  icon: LucideIcon; color: string; label: string; value: string; unit?: string; caption: string;
+  query?: UseQueryResult<unknown>; trend?: number | null; trendLabel?: string;
+}) {
+  const up = (trend ?? 0) >= 0;
+  return <section className="card min-w-0 p-3"><div className="grid grid-cols-[44px_minmax(0,1fr)] items-start gap-x-3">
+    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-white" style={{ backgroundColor: color }}><Icon size={22} /></div>
+    <div className="min-w-0">
+      <h2 className="text-body text-ink">{label}</h2>
+      {query?.isLoading ? <div className="skeleton my-1 h-7 w-20" aria-label={`Loading ${label}`} />
+        : query?.error ? <button className="py-1 text-xs text-brand-700 underline" onClick={() => void query.refetch()}>Unable to load · Retry</button>
+        : <div className="flex flex-wrap items-baseline gap-x-2">
+            <p tabIndex={0} className="dashboard-kpi-value font-bold leading-tight text-ink-heading">{value}{unit && <span className="ml-1 text-small font-normal text-ink-secondary">{unit}</span>}</p>
+            {trend != null && <span title={trendLabel} className={`inline-flex items-center gap-0.5 text-small font-semibold ${up ? 'text-status-success-text' : 'text-status-error-text'}`}>
+              {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{up ? '+' : ''}{trend}%<span className="sr-only"> {trendLabel}</span></span>}
+          </div>}
+      <p className="mt-0.5 text-caption text-ink-secondary">{caption}</p>
+    </div>
+  </div></section>;
 }
 function Dot({ color }: { color: string }) { return <span aria-hidden="true" className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />; }
 function Donut({ data, unit, percentages }: { data: { name: string; value: number; color: string }[]; unit: string; percentages?: boolean }) {

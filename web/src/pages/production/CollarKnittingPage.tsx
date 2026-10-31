@@ -265,9 +265,9 @@ export default function CollarKnittingPage() {
           message="Create a program to plan collars size-wise in pieces." />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-surface-border bg-white">
             <table className="w-full text-small">
-              <thead className="bg-slate-50">
+              <thead className="bg-surface-muted">
                 <tr>
                   <th className="th text-left">Program No</th>
                   <th className="th text-left">Date</th>
@@ -283,9 +283,9 @@ export default function CollarKnittingPage() {
               </thead>
               <tbody>
                 {rows.map((r: any) => (
-                  <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                  <tr key={r.id} className="border-t border-surface-divider hover:bg-surface-muted/60">
                     <td className="td tabular-nums font-semibold text-brand-700">{r.program_no}</td>
-                    <td className="td text-slate-500">{fmtDate(r.program_date)}</td>
+                    <td className="td text-ink-secondary">{fmtDate(r.program_date)}</td>
                     <td className="td">{r.style_code ?? '—'}</td>
                     <td className="td">{r.yarn_code ?? '—'}</td>
                     <td className="td text-right tabular-nums">{fmtNumber(r.expected_pcs)}</td>
@@ -430,8 +430,8 @@ export default function CollarKnittingPage() {
 
           {/* Size-wise planning grid */}
           <div>
-            <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
-              <h4 className="text-small font-semibold uppercase tracking-wider text-slate-500">
+            <div className="mb-2 flex items-center justify-between border-b border-surface-divider pb-1.5">
+              <h4 className="text-small font-semibold uppercase tracking-wider text-ink-secondary">
                 Size-wise Planning (PCS → KG)
               </h4>
               <button className="btn-secondary btn-sm"
@@ -440,9 +440,9 @@ export default function CollarKnittingPage() {
               </button>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="overflow-x-auto rounded-lg border border-surface-border">
               <table className="w-full text-small">
-                <thead className="bg-slate-50">
+                <thead className="bg-surface-muted">
                   <tr>
                     <th className="th text-left">Size</th>
                     <th className="th text-left">Measurement</th>
@@ -456,7 +456,7 @@ export default function CollarKnittingPage() {
                   {form.sizes.map((z, i) => {
                     const kg = ((Number(z.planned_pcs) || 0) * (Number(z.std_weight_gm) || 0)) / 1000;
                     return (
-                      <tr key={z._key} className="border-t border-slate-100">
+                      <tr key={z._key} className="border-t border-surface-divider">
                         <td className="td p-1">
                           <select className="input text-small" value={z.size_id}
                             onChange={(e) => {
@@ -503,9 +503,9 @@ export default function CollarKnittingPage() {
                     );
                   })}
                 </tbody>
-                <tfoot className="bg-slate-50">
+                <tfoot className="bg-surface-muted">
                   <tr>
-                    <td className="td font-bold text-slate-700">Total</td>
+                    <td className="td font-bold text-ink">Total</td>
                     <td />
                     <td />
                     <td className="td text-right font-bold tabular-nums">{fmtNumber(totals.pcs)} pcs</td>
@@ -517,7 +517,7 @@ export default function CollarKnittingPage() {
                 </tfoot>
               </table>
             </div>
-            <p className="mt-1 text-micro text-slate-500">
+            <p className="mt-1 text-micro text-ink-secondary">
               These are planning figures. Actual consumption is recorded per production entry,
               and the actual weight per piece is derived from actual KG ÷ actual PCS.
             </p>
@@ -623,7 +623,7 @@ export default function CollarKnittingPage() {
                             void qc.invalidateQueries({ queryKey: ['collar-programs'] });
                           } catch (e) { toast(e instanceof ApiError ? e.message : 'Could not post stock', 'error'); }
                         }}>Post stock</button>
-                    ) : <span className="text-slate-400" title="QC this receipt on Collar – Yarn Issue / QC">No · QC pending</span>,
+                    ) : <span className="text-ink-muted" title="QC this receipt on Collar – Yarn Issue / QC">No · QC pending</span>,
                   ])} />
               )}
             </Section>
@@ -845,14 +845,14 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
             {['PENDING', 'PASSED', 'HOLD', 'REJECTED'].map((q) => <option key={q} value={q}>{q}</option>)}
           </Select>
           <div className="flex items-end pb-2">
-            <label className="flex items-center gap-2 text-small text-slate-700">
+            <label className="flex items-center gap-2 text-small text-ink">
               <input type="checkbox" checked={f.post_stock}
                 disabled={f.qc_status !== 'PASSED'}
                 onChange={(e) => setF((s) => ({ ...s, post_stock: e.target.checked }))}
                 id="cr-post" />
               Post to stock now
               {f.qc_status !== 'PASSED' && (
-                <span className="text-micro text-slate-400">(needs QC passed)</span>
+                <span className="text-micro text-ink-muted">(needs QC passed)</span>
               )}
             </label>
           </div>
@@ -868,32 +868,32 @@ function ReceiptModal({ program, sizes, warehouses, onClose, onSaved }: {
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-micro font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 text-small text-slate-800">{value}</p>
+      <p className="text-micro font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
+      <p className="mt-0.5 text-small text-ink">{value}</p>
     </div>
   );
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
+      <h4 className="mb-2 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">{title}</h4>
       {children}
     </div>
   );
 }
 function Muted({ children }: { children: React.ReactNode }) {
-  return <p className="py-3 text-center text-small text-slate-400">{children}</p>;
+  return <p className="py-3 text-center text-small text-ink-muted">{children}</p>;
 }
 function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   return (
-    <div className="overflow-x-auto rounded border border-slate-200">
+    <div className="overflow-x-auto rounded border border-surface-border">
       <table className="w-full text-caption">
-        <thead className="bg-slate-50">
+        <thead className="bg-surface-muted">
           <tr>{head.map((h) => <th key={h} className="th text-left">{h}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="border-t border-slate-100">
+            <tr key={i} className="border-t border-surface-divider">
               {r.map((c, j) => <td key={j} className="td">{c}</td>)}
             </tr>
           ))}

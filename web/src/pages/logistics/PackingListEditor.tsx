@@ -45,8 +45,8 @@ export function PackingListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Packing Lists</h1>
-          <p className="text-sm text-slate-500">Assorted / solid / mixed carton lists with weights, CBM and Order vs Shipped</p>
+          <h1 className="text-2xl font-bold text-ink">Packing Lists</h1>
+          <p className="text-sm text-ink-secondary">Assorted / solid / mixed carton lists with weights, CBM and Order vs Shipped</p>
         </div>
         <Button onClick={() => nav('/logistics/packing-lists/new')}>+ New Packing List</Button>
       </div>
@@ -68,7 +68,7 @@ export function PackingListPage() {
             { key: 'buyer_order_no', header: 'Buyer PO', render: (r: any) => r.buyer_order_no || '—' },
             { key: 'so_no', header: 'Sales Order', render: (r: any) => r.so_no || '—' },
             { key: 'buyer_name', header: 'Buyer', render: (r: any) => r.buyer_name || '—' },
-            { key: 'style_summary', header: 'Styles', render: (r: any) => <span className="text-xs text-slate-600">{r.style_summary || '—'}</span> },
+            { key: 'style_summary', header: 'Styles', render: (r: any) => <span className="text-xs text-ink-secondary">{r.style_summary || '—'}</span> },
             { key: 'total_cartons', header: 'Cartons (CTNS)', align: 'right' as const, render: (r: any) => fmtNumber(r.total_cartons) },
             { key: 'total_qty', header: 'Qty (PCS)', align: 'right' as const, render: (r: any) => fmtNumber(r.total_qty) },
             { key: 'gross_weight_kg', header: 'Gross (KG)', align: 'right' as const, render: (r: any) => fmtDecimal(r.gross_weight_kg) },
@@ -526,8 +526,8 @@ export function PackingListDetailPage() {
       {/* ---------- title bar */}
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{isNew ? 'New Packing List' : `Packing List — ${header.pl_no}`}</h1>
-          <p className="text-sm text-slate-500">{TYPE_HELP[header.pl_type]}</p>
+          <h1 className="text-2xl font-bold text-ink">{isNew ? 'New Packing List' : `Packing List — ${header.pl_no}`}</h1>
+          <p className="text-sm text-ink-secondary">{TYPE_HELP[header.pl_type]}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" onClick={() => nav('/logistics/packing-lists')}>← Back</Button>
@@ -552,7 +552,7 @@ export function PackingListDetailPage() {
           {saved?.follow_of_no && <span className="text-xs text-blue-700" data-testid="pl-follow-of">Shortage to follow from <button className="font-semibold hover:underline" onClick={() => nav(`/logistics/packing-lists/${saved.follow_of_id}`)}>{saved.follow_of_no}</button></span>}
           {saved?.short_action && saved.short_action !== 'NONE' && <span className="text-xs text-red-700" data-testid="pl-short-note">Short {fmtNumber(saved.short_qty)} PCS — {saved.short_action === 'TO_FOLLOW' ? 'to follow' : 'debited by the buyer'}{saved.short_reason ? `: ${saved.short_reason}` : ''}</span>}
           {header.shipment_type === 'EXPORT' && <Badge color="blue" size="lg">EXPORT</Badge>}
-          {saved?.confirmed_at && <span className="text-xs text-slate-500">Confirmed {fmtDate(saved.confirmed_at)} by {saved.confirmed_by_name || '—'}</span>}
+          {saved?.confirmed_at && <span className="text-xs text-ink-secondary">Confirmed {fmtDate(saved.confirmed_at)} by {saved.confirmed_by_name || '—'}</span>}
           {saved?.reopen_reason && header.status === 'DRAFT' && <span className="text-xs text-amber-700">Revision {saved.revision_no} opened: {saved.reopen_reason}</span>}
           {saved?.over_ship_note && <span className="text-xs text-red-700">Over-shipment approved: {saved.over_ship_note}</span>}
           {dirty && <span className="text-xs font-medium text-amber-700">Unsaved changes</span>}
@@ -594,26 +594,26 @@ export function PackingListDetailPage() {
             <Stat label="Packed (posted)" value={`${fmtNumber(ps.ready_cartons)} / ${fmtNumber(ps.ready_qty)}`} tone="text-emerald-700" />
             <Stat label="Packing (not posted)" value={`${fmtNumber(ps.in_progress_cartons)} / ${fmtNumber(ps.in_progress_qty)}`} tone="text-amber-700" />
             <Stat label="Not packed (cartons)" value={fmtNumber(ps.not_packed_cartons)} />
-            <Stat label="Short (PCS)" value={fmtNumber(ps.short_qty)} tone={ps.short_qty > 0 ? 'text-red-700' : 'text-slate-800'} />
+            <Stat label="Short (PCS)" value={fmtNumber(ps.short_qty)} tone={ps.short_qty > 0 ? 'text-red-700' : 'text-ink'} />
           </div>
           <div className="grid gap-4 border-t border-surface-border p-4 lg:grid-cols-2">
             <div className="max-h-72 overflow-auto">
               <table className="w-full text-xs" id="plan-cartons">
-                <thead><tr className="text-left text-slate-500"><th className="py-1">Ctn</th><th>Block</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th className="pl-4">Carton</th><th>State</th></tr></thead>
+                <thead><tr className="text-left text-ink-secondary"><th className="py-1">Ctn</th><th>Block</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th className="pl-4">Carton</th><th>State</th></tr></thead>
                 <tbody>{ps.cartons.map((c: any) => (
-                  <tr key={c.ctn_no} data-ctn={c.ctn_no} data-state={c.state} className="border-t border-slate-100">
+                  <tr key={c.ctn_no} data-ctn={c.ctn_no} data-state={c.state} className="border-t border-surface-divider">
                     <td className="py-1 tabular-nums">{c.ctn_no}</td><td>{c.label ?? c.block_no}</td>
                     <td className="text-right">{c.planned}</td><td className="text-right">{c.carton_id ? c.packed : '—'}</td>
-                    <td className="pl-4 tabular-nums">{c.carton_no ?? ''}{c.pack_no ? <span className="ml-1 font-sans text-slate-400">{c.pack_no}</span> : null}</td>
+                    <td className="pl-4 tabular-nums">{c.carton_no ?? ''}{c.pack_no ? <span className="ml-1 font-sans text-ink-muted">{c.pack_no}</span> : null}</td>
                     <td><Badge color={PLAN_STATE[c.state]?.color ?? 'slate'}>{PLAN_STATE[c.state]?.label ?? c.state}</Badge></td>
                   </tr>))}</tbody>
               </table>
             </div>
             <div className="max-h-72 overflow-auto">
               <table className="w-full text-xs" id="plan-cells">
-                <thead><tr className="text-left text-slate-500"><th className="py-1">Style / colour / size</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th className="text-right">Packing</th><th className="text-right">Short</th></tr></thead>
+                <thead><tr className="text-left text-ink-secondary"><th className="py-1">Style / colour / size</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th className="text-right">Packing</th><th className="text-right">Short</th></tr></thead>
                 <tbody>{ps.cells.map((g: any) => (
-                  <tr key={`${g.style_no}|${g.color_id}:${g.size_id}`} className="border-t border-slate-100">
+                  <tr key={`${g.style_no}|${g.color_id}:${g.size_id}`} className="border-t border-surface-divider">
                     <td className="py-1">{g.style_no} {g.colour} <b>{g.size_label}</b></td><td className="text-right">{g.planned}</td>
                     <td className="text-right text-emerald-700">{g.ready}</td><td className="text-right text-amber-700">{g.in_progress || ''}</td>
                     <td className={`text-right ${g.short > 0 ? 'font-semibold text-red-700' : ''}`}>{g.short || ''}</td>
@@ -622,7 +622,7 @@ export function PackingListDetailPage() {
             </div>
           </div>
           {saved?.follow_ups?.length > 0 && (
-            <div className="border-t border-surface-border px-4 py-2 text-xs text-slate-700" id="pl-follow-ups">
+            <div className="border-t border-surface-border px-4 py-2 text-xs text-ink" id="pl-follow-ups">
               Follow-up list(s) for the shortage: {saved.follow_ups.map((f: any) => (
                 <button key={f.id} className="mr-3 font-semibold text-brand-700 hover:underline" onClick={() => nav(`/logistics/packing-lists/${f.id}`)}>{f.pl_no} ({f.status}, {fmtNumber(f.total_cartons)} ctns / {fmtNumber(f.total_qty)} pcs)</button>))}
             </div>
@@ -638,9 +638,9 @@ export function PackingListDetailPage() {
             <Stat label={`Packed — posted cartons${packSum?.packed ? ` (${fmtNumber(packSum.packed.cartons)} CTNS)` : ''}`} value={packSum?.packed ? fmtNumber(packSum.packed.qty) : '—'} tone="text-emerald-700" />
             <Stat label={`On this list (${fmtNumber(calc.totals.ctns)} CTNS)`} value={fmtNumber(calc.totals.qty)} tone="text-blue-700" />
             <Stat label="Balance to pack (order − packed)" value={packSum?.balance_to_pack != null ? fmtNumber(packSum.balance_to_pack) : '—'}
-              tone={packSum?.balance_to_pack > 0 ? 'text-amber-700' : 'text-slate-800'} />
+              tone={packSum?.balance_to_pack > 0 ? 'text-amber-700' : 'text-ink'} />
           </div>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-surface-border px-4 py-2 text-xs text-slate-600">
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-surface-border px-4 py-2 text-xs text-ink-secondary">
             <span data-testid="pl-sum-cartons">Cartons on this list: <b>{fmtNumber(calc.totals.ctns)}</b>
               {listCartons.count > 0 && <> — from packed cartons {fmtNumber(listCartons.count)} (full <b>{listCartons.full}</b> · partial <b>{listCartons.partial}</b>)</>}
               {handRows.length > 0 && <> · typed {fmtNumber(handRows.reduce((a, x) => a + x.rc.ctns, 0))}</>}
@@ -666,7 +666,7 @@ export function PackingListDetailPage() {
           <div>
             <Select label="Format (template model)" value={header.pl_type} onChange={(e) => changeFormat(e.target.value as PlType)} id="pl-format"
               options={(['ASSORTED', 'SOLID', 'MIXED'] as const).map((t) => ({ value: t, label: FORMAT_LABEL[t] }))} />
-            {buyerTpl && <p className="mt-1 text-caption text-slate-500" data-testid="pl-buyer-default">Buyer default: <b>{buyerTpl.pl_type}</b>{buyerTpl.pl_type !== header.pl_type && ' (another format picked)'}</p>}
+            {buyerTpl && <p className="mt-1 text-caption text-ink-secondary" data-testid="pl-buyer-default">Buyer default: <b>{buyerTpl.pl_type}</b>{buyerTpl.pl_type !== header.pl_type && ' (another format picked)'}</p>}
           </div>
           <Select label="List type" value={header.list_mode} id="pl-mode" disabled={planFinished}
             onChange={(e) => changeMode(e.target.value as 'DOCUMENT' | 'PLAN')}
@@ -801,45 +801,45 @@ export function PackingListDetailPage() {
           subtitle="Pieces per polybag × polybags per carton (or pieces per carton) → cartons and polybags needed for the rows typed from the order">
           <div className="space-y-3 overflow-x-auto p-4">
             <div className="flex flex-wrap items-end gap-3 text-xs">
-              <span className="font-medium text-slate-600">Same for all rows:</span>
+              <span className="font-medium text-ink-secondary">Same for all rows:</span>
               <ReqInput label="Pcs / polybag" value={reqDefault.ppb} onChange={(v) => setReqDefault((d) => ({ ...d, ppb: v }))} id="req-all-ppb" />
               <ReqInput label="Polybags / carton" value={reqDefault.bpc} onChange={(v) => setReqDefault((d) => ({ ...d, bpc: v }))} id="req-all-bpc" />
               <ReqInput label="or Pcs / carton" value={reqDefault.ppc} onChange={(v) => setReqDefault((d) => ({ ...d, ppc: v }))} id="req-all-ppc" />
             </div>
             <table className="min-w-max border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-50 text-micro uppercase text-slate-600">
+                <tr className="bg-surface-muted text-micro uppercase text-ink-secondary">
                   {['Row', 'Style / colour', 'Qty (PCS)', 'Pcs / polybag', 'Polybags / ctn', 'Pcs / ctn', 'Cartons needed', 'Full + loose', 'Polybags needed'].map((h) =>
-                    <th key={h} className="border border-slate-200 px-2 py-1">{h}</th>)}
+                    <th key={h} className="border border-surface-border px-2 py-1">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {reqCalc.map((x, i) => (
                   <tr key={x.r.key}>
-                    <td className="border border-slate-200 px-2 py-1 text-slate-500">{i + 1} (ctn {x.rc.ctn_from}-{x.rc.ctn_to})</td>
-                    <td className="border border-slate-200 px-2 py-1">{x.r.items.map((it) => [it.style_no || it.style_name, it.colour].filter(Boolean).join(' / ')).join(' + ') || '—'}</td>
-                    <td className="border border-slate-200 px-2 py-1 text-right tabular-nums">{fmtNumber(x.qty)}</td>
+                    <td className="border border-surface-border px-2 py-1 text-ink-secondary">{i + 1} (ctn {x.rc.ctn_from}-{x.rc.ctn_to})</td>
+                    <td className="border border-surface-border px-2 py-1">{x.r.items.map((it) => [it.style_no || it.style_name, it.colour].filter(Boolean).join(' / ')).join(' + ') || '—'}</td>
+                    <td className="border border-surface-border px-2 py-1 text-right tabular-nums">{fmtNumber(x.qty)}</td>
                     {(['ppb', 'bpc', 'ppc'] as const).map((k) => (
-                      <td key={k} className="border border-slate-200 p-0">
+                      <td key={k} className="border border-surface-border p-0">
                         <input className="w-20 bg-transparent px-1 py-0.5 text-right text-xs tabular-nums focus:bg-white focus:outline-none" inputMode="numeric"
                           value={x.own[k]} placeholder={k === 'ppc' ? (x.ppc ? String(x.ppc) : '') : (reqDefault[k] || '')}
                           onChange={(e) => setReqField(x.r.key, k, e.target.value)} />
                       </td>
                     ))}
-                    <td className="border border-slate-200 px-2 py-1 text-right font-semibold text-blue-700 tabular-nums">{x.ppc ? fmtNumber(x.cartons) : '—'}</td>
-                    <td className="border border-slate-200 px-2 py-1 text-right tabular-nums text-slate-600">{x.ppc ? `${fmtNumber(x.full)}${x.loose ? ` + ${x.loose} pcs` : ''}` : '—'}</td>
-                    <td className="border border-slate-200 px-2 py-1 text-right tabular-nums">{x.ppb ? fmtNumber(x.polybags) : '—'}</td>
+                    <td className="border border-surface-border px-2 py-1 text-right font-semibold text-blue-700 tabular-nums">{x.ppc ? fmtNumber(x.cartons) : '—'}</td>
+                    <td className="border border-surface-border px-2 py-1 text-right tabular-nums text-ink-secondary">{x.ppc ? `${fmtNumber(x.full)}${x.loose ? ` + ${x.loose} pcs` : ''}` : '—'}</td>
+                    <td className="border border-surface-border px-2 py-1 text-right tabular-nums">{x.ppb ? fmtNumber(x.polybags) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-50 font-semibold">
-                  <td className="border border-slate-200 px-2 py-1" colSpan={2}>Total</td>
-                  <td className="border border-slate-200 px-2 py-1 text-right">{fmtNumber(reqTotals.qty)}</td>
-                  <td className="border border-slate-200" colSpan={3} />
-                  <td className="border border-slate-200 px-2 py-1 text-right text-blue-700" data-testid="req-total-cartons">{fmtNumber(reqTotals.cartons)}</td>
-                  <td className="border border-slate-200" />
-                  <td className="border border-slate-200 px-2 py-1 text-right" data-testid="req-total-polybags">{fmtNumber(reqTotals.polybags)}</td>
+                <tr className="bg-surface-muted font-semibold">
+                  <td className="border border-surface-border px-2 py-1" colSpan={2}>Total</td>
+                  <td className="border border-surface-border px-2 py-1 text-right">{fmtNumber(reqTotals.qty)}</td>
+                  <td className="border border-surface-border" colSpan={3} />
+                  <td className="border border-surface-border px-2 py-1 text-right text-blue-700" data-testid="req-total-cartons">{fmtNumber(reqTotals.cartons)}</td>
+                  <td className="border border-surface-border" />
+                  <td className="border border-surface-border px-2 py-1 text-right" data-testid="req-total-polybags">{fmtNumber(reqTotals.polybags)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -847,7 +847,7 @@ export function PackingListDetailPage() {
               <span>Cartons needed <b>{fmtNumber(reqTotals.cartons)}</b>{packSum?.packaging_stock && <> · in stock <b className={reqTotals.cartons > packSum.packaging_stock.CARTON ? 'text-red-600' : 'text-emerald-700'}>{fmtNumber(packSum.packaging_stock.CARTON)}</b></>}</span>
               <span>Polybags needed <b>{fmtNumber(reqTotals.polybags)}</b>{packSum?.packaging_stock && <> · in stock <b className={reqTotals.polybags > packSum.packaging_stock.POLYBAG ? 'text-red-600' : 'text-emerald-700'}>{fmtNumber(packSum.packaging_stock.POLYBAG)}</b></>}</span>
             </div>
-            {!packSum?.packaging_stock && <p className="text-caption text-slate-400">Pick the sales order / job to compare with carton and polybag stock.</p>}
+            {!packSum?.packaging_stock && <p className="text-caption text-ink-muted">Pick the sales order / job to compare with carton and polybag stock.</p>}
           </div>
         </Card></div>
       )}
@@ -863,7 +863,7 @@ export function PackingListDetailPage() {
           <Stat label="Row issues" value={String(calc.issueCount)} tone={calc.issueCount ? 'text-red-600' : 'text-emerald-600'} />
         </div>
         {!dirty && saved?.measurements?.length > 0 && (
-          <div className="border-t border-surface-border px-4 py-2 text-xs text-slate-600">
+          <div className="border-t border-surface-border px-4 py-2 text-xs text-ink-secondary">
             Carton measurement: {saved.measurements.map((m: any) => `${m.dims} CM - ${m.cartons} CTNS`).join(' / ')}
           </div>
         )}
@@ -873,7 +873,7 @@ export function PackingListDetailPage() {
       <Card title="Order qty / Shipped qty / Diff (PCS)"
         subtitle="Order qty comes from the sales order size breakdown when it matches the style & colour; otherwise enter it here. Diff = Order − Shipped (positive = short shipped); over-shipment is shown on its own Excess row.">
         <div className="space-y-4 overflow-x-auto p-4">
-          {groups.length === 0 && <p className="text-sm text-slate-500">No carton rows yet.</p>}
+          {groups.length === 0 && <p className="text-sm text-ink-secondary">No carton rows yet.</p>}
           {groups.map((g) => {
             const sg = serverGroup(g.key);
             // order qty: the saved server figure, else live from the sales order lines (matched on style + colour)
@@ -888,7 +888,7 @@ export function PackingListDetailPage() {
             return (
               <table key={g.key} className="min-w-max border-collapse text-xs">
                 <thead>
-                  <tr className="bg-slate-50">
+                  <tr className="bg-surface-muted">
                     <th className="border px-2 py-1 text-left">{g.label || '—'} {fromSo && <Badge color="emerald">from sales order</Badge>}</th>
                     {sizes.map((s) => <th key={s} className="w-16 border px-2 py-1">{s}</th>)}
                     <th className="border px-2 py-1">TOTAL</th>
@@ -900,7 +900,7 @@ export function PackingListDetailPage() {
                     {sizes.map((s) => (
                       <td key={s} className="border px-1 py-0.5 text-right">
                         {fromSo || ro ? fmtNumber(order(s)) : (
-                          <input className="w-14 rounded border border-slate-200 px-1 text-right" inputMode="numeric"
+                          <input className="w-14 rounded border border-surface-border px-1 text-right" inputMode="numeric"
                             value={manualOrder[g.key]?.[s] ?? ''}
                             onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ''); setManualOrder((m) => ({ ...m, [g.key]: { ...(m[g.key] || {}), [s]: v } })); setDirty(true); }} />
                         )}
@@ -915,7 +915,7 @@ export function PackingListDetailPage() {
                   </tr>
                   <tr>
                     <td className="border px-2 py-1 font-medium">Diff</td>
-                    {sizes.map((s) => { const d = order(s) - (g.shipped[s] || 0); return <td key={s} className={`border px-2 py-1 text-right ${d ? (d > 0 ? 'text-amber-700' : 'text-red-600') : 'text-slate-400'}`}>{fmtNumber(d)}</td>; })}
+                    {sizes.map((s) => { const d = order(s) - (g.shipped[s] || 0); return <td key={s} className={`border px-2 py-1 text-right ${d ? (d > 0 ? 'text-amber-700' : 'text-red-600') : 'text-ink-muted'}`}>{fmtNumber(d)}</td>; })}
                     <td className="border px-2 py-1 text-right font-semibold">{fmtNumber(orderTotal - g.total)}</td>
                   </tr>
                   {orderTotal > 0 && sizes.some((s) => (g.shipped[s] || 0) > order(s)) && (
@@ -937,9 +937,9 @@ export function PackingListDetailPage() {
         <Card title={`Cartons in linked packing ${saved.pack_no || ''} (${saved.cartons.length})`}>
           <div className="max-h-72 overflow-y-auto p-4">
             <table className="w-full text-xs">
-              <thead className="border-b text-slate-500"><tr><th className="pb-1 text-left">Carton</th><th className="pb-1 text-left">Sizes (PCS)</th><th className="pb-1 text-right">Net (KG)</th><th className="pb-1 text-right">Gross (KG)</th><th className="pb-1 text-right">CBM</th></tr></thead>
+              <thead className="border-b text-ink-secondary"><tr><th className="pb-1 text-left">Carton</th><th className="pb-1 text-left">Sizes (PCS)</th><th className="pb-1 text-right">Net (KG)</th><th className="pb-1 text-right">Gross (KG)</th><th className="pb-1 text-right">CBM</th></tr></thead>
               <tbody>{saved.cartons.map((c: any) => (
-                <tr key={c.id} className="border-b border-slate-50"><td className="py-1 tabular-nums">{c.carton_no}</td><td>{c.size_summary || '—'}</td>
+                <tr key={c.id} className="border-b border-surface-divider"><td className="py-1 tabular-nums">{c.carton_no}</td><td>{c.size_summary || '—'}</td>
                   <td className="text-right">{fmtDecimal(c.net_weight_kg)}</td><td className="text-right">{fmtDecimal(c.gross_weight_kg)}</td><td className="text-right">{fmtDecimal(c.cbm, 3)}</td></tr>))}
               </tbody>
             </table>
@@ -951,9 +951,9 @@ export function PackingListDetailPage() {
       {saved?.revisions?.length > 0 && (
         <div id="pl-revisions"><Card title="Revision history" subtitle="Each confirmed version is frozen before it is revised">
           <table className="w-full text-xs">
-            <thead className="border-b text-slate-500"><tr><th className="px-4 py-1 text-left">Rev</th><th className="text-left">Reason</th><th className="text-right">Cartons</th><th className="text-right">PCS</th><th className="text-right">Gross (KG)</th><th className="text-left pl-4">Revised by</th><th /></tr></thead>
+            <thead className="border-b text-ink-secondary"><tr><th className="px-4 py-1 text-left">Rev</th><th className="text-left">Reason</th><th className="text-right">Cartons</th><th className="text-right">PCS</th><th className="text-right">Gross (KG)</th><th className="text-left pl-4">Revised by</th><th /></tr></thead>
             <tbody>{saved.revisions.map((r: any) => (
-              <tr key={r.revision_no} className="border-b border-slate-50">
+              <tr key={r.revision_no} className="border-b border-surface-divider">
                 <td className="px-4 py-1 font-semibold">Rev {r.revision_no}</td><td>{r.reason}</td>
                 <td className="text-right">{fmtNumber(r.total_cartons)}</td><td className="text-right">{fmtNumber(r.total_qty)}</td><td className="text-right">{fmtDecimal(r.gross_weight_kg, 2)}</td>
                 <td className="pl-4">{r.created_by_name || '—'} · {fmtDate(r.created_at)}</td>
@@ -979,7 +979,7 @@ export function PackingListDetailPage() {
       <Modal open={finishOpen} onClose={() => setFinishOpen(false)} title="Finish packing against the plan" size="md"
         footer={<><Button variant="secondary" onClick={() => setFinishOpen(false)}>Cancel</Button>
           <Button onClick={finishPlan} id="pl-finish-go" disabled={n0(ps?.short_qty) > 0 && !shortReason.trim()}>Finish packing</Button></>}>
-        <div className="space-y-3 text-sm text-slate-700" id="pl-finish-modal">
+        <div className="space-y-3 text-sm text-ink" id="pl-finish-modal">
           <p>The list is rebuilt from the {fmtNumber(ps?.ready_cartons ?? 0)} packed carton(s) — same carton numbers as the buyer list — and goes back to draft for weights and Confirm. Every carton packed for it must be posted and verified / sealed.</p>
           {n0(ps?.short_qty) > 0 ? (<>
             <p className="rounded-md bg-red-50 p-2 text-red-800"><b>{fmtNumber(ps.short_qty)} PCS of the plan are not packed</b> ({ps.not_packed_cartons} carton(s) not packed, {ps.short_cartons} packed short).</p>
@@ -994,14 +994,14 @@ export function PackingListDetailPage() {
       <Modal open={overOpen} onClose={() => setOverOpen(false)} title="Confirm with over-shipment" size="sm"
         subtitle={`${fmtNumber(saved?.over_shipment?.qty ?? 0)} PCS above the order qty`}
         footer={<><Button variant="secondary" onClick={() => setOverOpen(false)}>Cancel</Button><Button variant="danger" onClick={() => handleConfirm(overReason.trim())} disabled={!overReason.trim()} id="pl-over-go">Approve &amp; confirm</Button></>}>
-        <p className="mb-3 text-sm text-slate-600">Shipped quantity is more than the buyer order for some sizes. Confirming needs the Approve Packing right; the reason is printed nowhere but kept on the list and in the audit trail.</p>
+        <p className="mb-3 text-sm text-ink-secondary">Shipped quantity is more than the buyer order for some sizes. Confirming needs the Approve Packing right; the reason is printed nowhere but kept on the list and in the audit trail.</p>
         <Textarea label="Approval reason" required value={overReason} onChange={(e) => setOverReason(e.target.value)} id="pl-over-reason" />
       </Modal>
 
       <Modal open={reopenOpen} onClose={() => setReopenOpen(false)} title={`Revise packing list ${header.pl_no ?? ''}`} size="sm"
         subtitle={`Opens revision ${(saved?.revision_no ?? 0) + 1}`}
         footer={<><Button variant="secondary" onClick={() => setReopenOpen(false)}>Cancel</Button><Button variant="danger" onClick={handleReopen} disabled={!reopenReason.trim()} id="pl-revise-go">Revise</Button></>}>
-        <p className="mb-3 text-sm text-slate-600">A confirmed list cannot be edited. Revising freezes this confirmed version (Rev {saved?.revision_no ?? 0}) in the history and sends the list back to DRAFT as the next revision. Not possible once a shipment uses it. The reason is kept with the revision and in the audit trail.</p>
+        <p className="mb-3 text-sm text-ink-secondary">A confirmed list cannot be edited. Revising freezes this confirmed version (Rev {saved?.revision_no ?? 0}) in the history and sends the list back to DRAFT as the next revision. Not possible once a shipment uses it. The reason is kept with the revision and in the audit trail.</p>
         <Textarea label="Reason" required value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} />
       </Modal>
     </div>
@@ -1012,14 +1012,14 @@ interface CartonInfo { carton_no: string; pack_no: string; status: string; is_pa
 
 function ReqInput({ label, value, onChange, id }: { label: string; value: string; onChange: (v: string) => void; id: string }) {
   return (
-    <label className="flex flex-col gap-0.5 text-caption text-slate-500">{label}
+    <label className="flex flex-col gap-0.5 text-caption text-ink-secondary">{label}
       <input id={id} className="input h-7 w-24 py-0 text-right text-xs" inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))} />
     </label>
   );
 }
 
-function Stat({ label, value, tone = 'text-slate-800' }: { label: string; value: string; tone?: string }) {
-  return <div><p className={`text-xl font-bold ${tone}`}>{value}</p><p className="text-xs text-slate-500">{label}</p></div>;
+function Stat({ label, value, tone = 'text-ink' }: { label: string; value: string; tone?: string }) {
+  return <div><p className={`text-xl font-bold ${tone}`}>{value}</p><p className="text-xs text-ink-secondary">{label}</p></div>;
 }
 
 /* ============================================================
@@ -1041,10 +1041,10 @@ function SizeHeaderEditor({ value, onChange, presets, disabled, compact }: {
       {!compact && <div className="label">Size columns (in print order)</div>}
       <div className="flex flex-wrap items-center gap-1.5">
         {value.map((s, i) => (
-          <span key={s} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-xs font-semibold text-slate-700">
-            {!disabled && <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => move(i, -1)} aria-label={`Move ${s} left`}>‹</button>}
+          <span key={s} className="inline-flex items-center gap-1 rounded-md border border-surface-input bg-white px-1.5 py-0.5 text-xs font-semibold text-ink">
+            {!disabled && <button type="button" className="text-ink-muted hover:text-ink" onClick={() => move(i, -1)} aria-label={`Move ${s} left`}>‹</button>}
             {s}
-            {!disabled && <button type="button" className="text-slate-400 hover:text-slate-700" onClick={() => move(i, 1)} aria-label={`Move ${s} right`}>›</button>}
+            {!disabled && <button type="button" className="text-ink-muted hover:text-ink" onClick={() => move(i, 1)} aria-label={`Move ${s} right`}>›</button>}
             {!disabled && <button type="button" className="ml-0.5 text-red-400 hover:text-red-600" onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label={`Remove ${s}`}>×</button>}
           </span>
         ))}
@@ -1086,19 +1086,19 @@ function BlockEditor(p: {
   const { block: b, bi, ro, plType, calc: c } = p;
   const heads = c.headers;
   const mixed = plType === 'MIXED';
-  const cellIn = 'w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs focus:border-brand-400 focus:bg-white focus:outline-none disabled:text-slate-700';
+  const cellIn = 'w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs focus:border-brand-400 focus:bg-white focus:outline-none disabled:text-ink';
   const numIn = cellIn + ' text-right tabular-nums';
-  const th = 'border border-slate-200 bg-slate-50 px-1 py-1 text-micro font-semibold uppercase text-slate-600';
-  const td = 'border border-slate-200 p-0 align-middle';
-  const tdN = 'border border-slate-200 px-1 text-right text-xs tabular-nums text-slate-700';
+  const th = 'border border-surface-border bg-surface-muted px-1 py-1 text-micro font-semibold uppercase text-ink-secondary';
+  const td = 'border border-surface-border p-0 align-middle';
+  const tdN = 'border border-surface-border px-1 text-right text-xs tabular-nums text-ink';
 
   return (
     <Card title={
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-slate-800">Block {bi + 1}</span>
+        <span className="text-sm font-semibold text-ink">Block {bi + 1}</span>
         <input className="input h-7 w-72 py-0 text-xs" disabled={ro} placeholder="Block label e.g. H26 VANPUR T SHIRT MARINE / Product Code" value={b.label}
           onChange={(e) => p.onLabel(e.target.value)} />
-        <span className="text-xs text-slate-500">{fmtNumber(c.ctns)} CTNS · {fmtNumber(c.qty)} PCS · {fmtDecimal(c.net, 2)} / {fmtDecimal(c.gross, 2)} KG</span>
+        <span className="text-xs text-ink-secondary">{fmtNumber(c.ctns)} CTNS · {fmtNumber(c.qty)} PCS · {fmtDecimal(c.net, 2)} / {fmtDecimal(c.gross, 2)} KG</span>
       </div>}
       actions={!ro && (
         <div className="flex items-center gap-2">
@@ -1147,7 +1147,7 @@ function BlockEditor(p: {
                       <input className={numIn} disabled={ro} inputMode="numeric" value={r.ctn_from} placeholder={String(rc.ctn_from)}
                         onChange={(e) => p.updRow(bi, ri, { ctn_from: e.target.value.replace(/[^0-9]/g, '') })} title="Blank = continue from the previous row" />
                     </td>
-                    <td className={tdN + ' w-14 text-slate-500'} rowSpan={span}>– {rc.ctn_to}</td>
+                    <td className={tdN + ' w-14 text-ink-secondary'} rowSpan={span}>– {rc.ctn_to}</td>
                     <td className={td + ' w-14'} rowSpan={span}>
                       <input className={numIn} disabled={ro} inputMode="numeric" value={r.no_of_ctns} onChange={(e) => p.updRow(bi, ri, { no_of_ctns: e.target.value.replace(/[^0-9]/g, '') })} />
                     </td>
@@ -1184,7 +1184,7 @@ function BlockEditor(p: {
                       <div className="flex items-center">
                         {(['length_cm', 'width_cm', 'height_cm'] as const).map((k, i) => (
                           <span key={k} className="flex items-center">
-                            {i > 0 && <span className="text-micro text-slate-400">×</span>}
+                            {i > 0 && <span className="text-micro text-ink-muted">×</span>}
                             <input className={numIn + ' w-10'} disabled={ro} inputMode="decimal" value={r[k]} onChange={(e) => p.updRow(bi, ri, { [k]: e.target.value.replace(/[^0-9.]/g, '') } as any)} />
                           </span>
                         ))}
@@ -1195,12 +1195,12 @@ function BlockEditor(p: {
                     </td>
                   </>}
                   {!ro && (
-                    <td className="border border-slate-200 px-1 text-caption whitespace-nowrap">
+                    <td className="border border-surface-border px-1 text-caption whitespace-nowrap">
                       {ii === 0 ? (
-                        <span className="flex items-center gap-1.5 text-slate-500">
+                        <span className="flex items-center gap-1.5 text-ink-secondary">
                           <Badge color={TYPE_COLOR[rc.inferred]} className="!px-1 !py-0 text-micro">{rc.inferred[0]}</Badge>
-                          <button type="button" className="hover:text-slate-800" title="Move up" onClick={() => p.moveRow(bi, ri, -1)}>↑</button>
-                          <button type="button" className="hover:text-slate-800" title="Move down" onClick={() => p.moveRow(bi, ri, 1)}>↓</button>
+                          <button type="button" className="hover:text-ink" title="Move up" onClick={() => p.moveRow(bi, ri, -1)}>↑</button>
+                          <button type="button" className="hover:text-ink" title="Move down" onClick={() => p.moveRow(bi, ri, 1)}>↓</button>
                           <button type="button" className="hover:text-brand-700" title="Insert row below" onClick={() => p.addRow(bi, ri)}>＋</button>
                           <button type="button" className="hover:text-brand-700" title="Duplicate row" onClick={() => p.dupRow(bi, ri)}>⧉</button>
                           {mixed && <button type="button" className="hover:text-violet-700" title="Add item line (another colour / style in the same carton)" onClick={() => p.addItem(bi, ri)}>+line</button>}
@@ -1216,18 +1216,18 @@ function BlockEditor(p: {
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-slate-50 font-semibold">
-              <td className="border border-slate-200 px-1 text-xs" colSpan={2}>Sub-total</td>
+            <tr className="bg-surface-muted font-semibold">
+              <td className="border border-surface-border px-1 text-xs" colSpan={2}>Sub-total</td>
               <td className={tdN}>{fmtNumber(c.ctns)}</td>
-              <td className="border border-slate-200" colSpan={4 + heads.length + (mixed ? 2 : 0)} />
-              <td className="border border-slate-200" />
+              <td className="border border-surface-border" colSpan={4 + heads.length + (mixed ? 2 : 0)} />
+              <td className="border border-surface-border" />
               <td className={tdN + ' text-blue-700'}>{fmtNumber(c.qty)}</td>
-              <td className="border border-slate-200" colSpan={2} />
+              <td className="border border-surface-border" colSpan={2} />
               <td className={tdN}>{fmtDecimal(c.net, 2)}</td>
               <td className={tdN}>{fmtDecimal(c.gross, 2)}</td>
               <td className={tdN}>{fmtDecimal(c.cbm, 3)} CBM</td>
-              <td className="border border-slate-200" />
-              {!ro && <td className="border border-slate-200" />}
+              <td className="border border-surface-border" />
+              {!ro && <td className="border border-surface-border" />}
             </tr>
           </tfoot>
         </table>

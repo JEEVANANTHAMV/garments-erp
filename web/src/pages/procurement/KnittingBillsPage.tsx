@@ -33,27 +33,27 @@ function KnittingBillList({ onOpen }: { onOpen: (v: 'new' | number) => void }) {
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold text-slate-800">Knitting job-work bills</h2>
-          <p className="text-xs text-slate-500">Bill the knitter from the knitting GRNs (grey fabric KG × approved quotation rate)</p>
+          <h2 className="text-base font-bold text-ink">Knitting job-work bills</h2>
+          <p className="text-xs text-ink-secondary">Bill the knitter from the knitting GRNs (grey fabric KG × approved quotation rate)</p>
         </div>
         {(can('PURCHASE.CREATE') || can('PRODUCTION.CREATE')) && <Button onClick={() => onOpen('new')} id="btn-new-knit-bill"><Plus size={14} className="mr-1" /> New Knitting Bill</Button>}
       </div>
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Bill no', 'Date', 'Knitter', 'Party bill', 'GRNs', 'Fabric KG', 'Gross', 'GST', 'Net', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Gross|GST|Net|GRNs/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Bill no', 'Date', 'Knitter', 'Party bill', 'GRNs', 'Fabric KG', 'Gross', 'GST', 'Net', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Gross|GST|Net|GRNs/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {(list.data ?? []).map((b) => (
-                <tr key={b.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(Number(b.id))}>
+                <tr key={b.id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => onOpen(Number(b.id))}>
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{b.bill_no}</td><td className="px-3 py-2">{fmtDate(b.bill_date)}</td>
                   <td className="px-3 py-2">{b.vendor_name}</td><td className="px-3 py-2">{b.party_bill_no || '—'}</td>
                   <td className="px-3 py-2 text-right">{b.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(b.fabric_kg, 3)}</td>
                   <td className="px-3 py-2 text-right">{money(b.gross_amount)}</td><td className="px-3 py-2 text-right">{money(b.gst_amount)}</td>
                   <td className="px-3 py-2 text-right font-semibold">{money(b.net_amount)}</td>
-                  <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-caption font-bold ${b.status === 'CANCELLED' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></td>
+                  <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-caption font-bold ${b.status === 'CANCELLED' ? 'bg-surface-border text-ink-secondary' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></td>
                 </tr>
               ))}
-              {!(list.data ?? []).length && <tr><td colSpan={10} className="px-3 py-10 text-center text-slate-400">No knitting bills yet</td></tr>}
+              {!(list.data ?? []).length && <tr><td colSpan={10} className="px-3 py-10 text-center text-ink-muted">No knitting bills yet</td></tr>}
             </tbody>
           </table>
         )}
@@ -107,7 +107,7 @@ function KnittingBillEditor({ onBack, onDone }: { onBack: () => void; onDone: (i
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-bold text-slate-800">New knitting job-work bill</h2>
+        <h2 className="text-base font-bold text-ink">New knitting job-work bill</h2>
         <Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button>
       </div>
       <ProcessBillHeader h={h} setH={setH} suppliers={suppliers.data} vendorLabel="Knitter (job-work unit)" idPrefix="kb" onVendorChange={() => { setSel({}); setOrder([]); }} />
@@ -116,13 +116,13 @@ function KnittingBillEditor({ onBack, onDone }: { onBack: () => void; onDone: (i
         <>
           <div className="card mb-3 overflow-x-auto">
             <table className="w-full text-xs" id="kb-lines">
-              <thead className="bg-slate-50 text-slate-500"><tr>{['Knitting GRN', 'Date', 'Program', 'Job', 'Fabric', 'Our DC(s)', 'Party DC', 'Gate', 'Receipt', 'Rolls', 'Fabric KG', 'Reject', 'Loss', 'Quotation', 'Rate / KG', 'Amount', ''].map((x, i) => <th key={i} className={`px-2 py-2 ${/KG|Reject|Loss|Rate|Amount|Rolls/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{['Knitting GRN', 'Date', 'Program', 'Job', 'Fabric', 'Our DC(s)', 'Party DC', 'Gate', 'Receipt', 'Rolls', 'Fabric KG', 'Reject', 'Loss', 'Quotation', 'Rate / KG', 'Amount', ''].map((x, i) => <th key={i} className={`px-2 py-2 ${/KG|Reject|Loss|Rate|Amount|Rolls/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>
                 {picked.map((r) => {
                   const diff = r.quotation_rate != null && Math.abs(n(r.quotation_rate) - n(sel[r.receipt_id])) > 0.005;
                   return (
-                    <tr key={r.receipt_id} className="border-t border-slate-100">
-                      <td className="px-2 py-1 tabular-nums">{r.receipt_no}{r.grn_no && <span className="block text-micro text-slate-400">{r.grn_no}</span>}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
+                    <tr key={r.receipt_id} className="border-t border-surface-divider">
+                      <td className="px-2 py-1 tabular-nums">{r.receipt_no}{r.grn_no && <span className="block text-micro text-ink-muted">{r.grn_no}</span>}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
                       <td className="px-2 py-1">{r.program_no}</td><td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1">{[r.fabric_type, r.fabric_colour ? `Kora / Raw for ${r.fabric_colour}` : ''].filter(Boolean).join(' · ') || '—'}</td>
                       <td className="px-2 py-1 tabular-nums">{r.dc_nos || '—'}</td><td className="px-2 py-1">{r.party_dc_no || '—'}</td><td className="px-2 py-1">{r.gate_entry_no ? `${r.gate_entry_no}${r.vehicle_no ? ` · ${r.vehicle_no}` : ''}` : '—'}</td>
                       <td className="px-2 py-1">{r.receipt_type === 'FINAL' ? 'Final' : 'Partial'}</td><td className="px-2 py-1 text-right">{r.rolls || '—'}</td>
@@ -131,7 +131,7 @@ function KnittingBillEditor({ onBack, onDone }: { onBack: () => void; onDone: (i
                       <td className="px-2 py-1 text-right"><input type="number" step="0.01" className={`input w-20 py-0.5 text-right text-xs ${diff ? 'border-amber-500 bg-amber-50' : ''}`} value={sel[r.receipt_id]} id={`kb-rate-${r.receipt_id}`}
                         onChange={(e) => setSel((s) => ({ ...s, [r.receipt_id]: Number(e.target.value) }))} /></td>
                       <td className="px-2 py-1 text-right font-semibold">{money(n(r.fabric_kg) * n(sel[r.receipt_id]))}</td>
-                      <td className="px-1"><button type="button" className="text-slate-400 hover:text-rose-600" title="Remove" onClick={() => remove(String(r.receipt_id))}>✕</button></td>
+                      <td className="px-1"><button type="button" className="text-ink-muted hover:text-rose-600" title="Remove" onClick={() => remove(String(r.receipt_id))}>✕</button></td>
                     </tr>
                   );
                 })}
@@ -165,7 +165,7 @@ function KnittingBillView({ id, onBack }: { id: number; onBack: () => void }) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-bold text-slate-800">Knitting bill {b.bill_no} <span className={`ml-2 rounded px-1.5 py-0.5 text-caption ${b.status === 'CANCELLED' ? 'bg-slate-200' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></h2>
+        <h2 className="text-base font-bold text-ink">Knitting bill {b.bill_no} <span className={`ml-2 rounded px-1.5 py-0.5 text-caption ${b.status === 'CANCELLED' ? 'bg-surface-border' : 'bg-emerald-100 text-emerald-800'}`}>{b.status}</span></h2>
         <div className="flex gap-2">
           {b.status !== 'CANCELLED' && (can('PURCHASE.DELETE') || can('PURCHASE.APPROVE') || can('PRODUCTION.APPROVE')) && <Button variant="secondary" onClick={cancel}><XCircle size={14} className="mr-1" /> Cancel bill</Button>}
           <Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button>
@@ -173,14 +173,14 @@ function KnittingBillView({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-6">
         {([['Knitter', b.vendor_name], ['Bill date', fmtDate(b.bill_date)], ...processBillFacts(b)] as [string, unknown][]).map(([k, v]) => (
-          <div key={k}><div className="text-slate-500">{k}</div><div className="font-semibold">{String(v)}</div></div>
+          <div key={k}><div className="text-ink-secondary">{k}</div><div className="font-semibold">{String(v)}</div></div>
         ))}
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['GRN', 'Date', 'Program', 'Job', 'DC(s)', 'Fabric KG', 'Quotation rate', 'Rate', 'Amount'].map((x) => <th key={x} className={`px-2 py-2 ${/KG|rate|Rate|Amount/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['GRN', 'Date', 'Program', 'Job', 'DC(s)', 'Fabric KG', 'Quotation rate', 'Rate', 'Amount'].map((x) => <th key={x} className={`px-2 py-2 ${/KG|rate|Rate|Amount/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
           <tbody>{(b.lines ?? []).map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-100">
+            <tr key={l.id} className="border-t border-surface-divider">
               <td className="px-2 py-1 tabular-nums">{l.receipt_no}</td><td className="px-2 py-1">{fmtDate(l.receipt_date)}</td><td className="px-2 py-1">{l.program_no}</td><td className="px-2 py-1">{l.io_no || '—'}</td>
               <td className="px-2 py-1 tabular-nums">{l.dc_nos || '—'}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.fabric_kg, 3)}</td>
               <td className="px-2 py-1 text-right">{l.quotation_rate != null ? money(l.quotation_rate) : '—'}</td>
@@ -189,9 +189,9 @@ function KnittingBillView({ id, onBack }: { id: number; onBack: () => void }) {
             </tr>
           ))}</tbody>
         </table>
-        <div className="border-t border-slate-100 p-3"><ProcessBillTotalsView b={b} /></div>
+        <div className="border-t border-surface-divider p-3"><ProcessBillTotalsView b={b} /></div>
       </div>
-      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-caption text-slate-600">{b.remarks}</pre>}
+      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-caption text-ink-secondary">{b.remarks}</pre>}
     </div>
   );
 }

@@ -15,7 +15,7 @@ import { useAuth } from '../../lib/auth';
 const MATERIALS = [['YARN', 'Yarn (lots)'], ['FABRIC', 'Fabric (rolls)'], ['TRIM', 'Trims & accessories']] as const;
 const STATUS: Record<string, [string, string]> = {
   PENDING_APPROVAL: ['Waiting for approval', 'bg-amber-100 text-amber-800'], POSTED: ['Approved & posted', 'bg-emerald-100 text-emerald-800'],
-  SEND_BACK: ['Sent back', 'bg-orange-100 text-orange-800'], REJECTED: ['Rejected', 'bg-rose-100 text-rose-700'], CANCELLED: ['Cancelled', 'bg-slate-200 text-slate-600'],
+  SEND_BACK: ['Sent back', 'bg-orange-100 text-orange-800'], REJECTED: ['Rejected', 'bg-rose-100 text-rose-700'], CANCELLED: ['Cancelled', 'bg-surface-border text-ink-secondary'],
 };
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : (e as any)?.message || 'Failed');
 
@@ -57,14 +57,14 @@ function TransferList({ onNew }: { onNew: () => void }) {
         </div>
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Transfer no', 'Date', 'Material', 'From job', '', 'To job', 'To style', 'Lines', 'Qty', 'Reason', 'By', 'Status', ''].map((h, i) => <th key={i} className={`px-3 py-2 ${/Qty|Lines/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Transfer no', 'Date', 'Material', 'From job', '', 'To job', 'To style', 'Lines', 'Qty', 'Reason', 'By', 'Status', ''].map((h, i) => <th key={i} className={`px-3 py-2 ${/Qty|Lines/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t border-slate-100">
+                <tr key={r.id} className="border-t border-surface-divider">
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.transfer_no}</td><td className="px-3 py-2">{fmtDate(r.transfer_date)}</td>
                   <td className="px-3 py-2">{MATERIALS.find((m) => m[0] === r.material_type)?.[1]}</td><td className="px-3 py-2 font-semibold">{r.from_job}</td>
-                  <td className="px-1 text-slate-400"><ArrowRight size={12} /></td><td className="px-3 py-2 font-semibold">{r.to_job}</td><td className="px-3 py-2">{r.to_style || '—'}</td>
-                  <td className="px-3 py-2 text-right">{r.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(r.total_qty, 3)}</td><td className="px-3 py-2">{r.reason}{r.decision_remarks ? <span className="block text-caption text-slate-500">↳ {r.decision_remarks}</span> : null}</td><td className="px-3 py-2">{r.created_by_name}</td>
+                  <td className="px-1 text-ink-muted"><ArrowRight size={12} /></td><td className="px-3 py-2 font-semibold">{r.to_job}</td><td className="px-3 py-2">{r.to_style || '—'}</td>
+                  <td className="px-3 py-2 text-right">{r.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(r.total_qty, 3)}</td><td className="px-3 py-2">{r.reason}{r.decision_remarks ? <span className="block text-caption text-ink-secondary">↳ {r.decision_remarks}</span> : null}</td><td className="px-3 py-2">{r.created_by_name}</td>
                   <td className="px-3 py-2 whitespace-nowrap"><span className={`rounded px-1.5 py-0.5 text-caption font-bold ${STATUS[r.status ?? 'POSTED']?.[1] ?? ''}`}>{STATUS[r.status ?? 'POSTED']?.[0] ?? r.status}</span>
                     {r.priority && r.priority !== 'NORMAL' && <span className="ml-1 rounded bg-rose-100 px-1 text-micro font-bold text-rose-700">{r.priority}</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
@@ -73,11 +73,11 @@ function TransferList({ onNew }: { onNew: () => void }) {
                       <button className="mr-1 rounded border border-amber-400 px-2 py-0.5 text-caption text-amber-800" onClick={() => act(r, 'send-back')}>Send back</button>
                       <button className="mr-1 rounded border border-rose-400 px-2 py-0.5 text-caption text-rose-700" onClick={() => act(r, 'reject')} id={`jt-reject-${r.id}`}>Reject</button>
                     </>}
-                    {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-slate-300 px-2 py-0.5 text-caption text-slate-600" onClick={() => act(r, 'cancel')}>Cancel</button>}
+                    {['PENDING_APPROVAL', 'SEND_BACK'].includes(r.status) && (Number(r.created_by) === Number(user?.id) || canApprove) && <button className="rounded border border-surface-input px-2 py-0.5 text-caption text-ink-secondary" onClick={() => act(r, 'cancel')}>Cancel</button>}
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">No job transfers yet</td></tr>}
+              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-ink-muted">No job transfers yet</td></tr>}
             </tbody>
           </table>
         )}
@@ -126,13 +126,13 @@ function TransferEditor({ onBack }: { onBack: () => void }) {
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['', 'Item', 'Lot', 'Colour', 'Source (GRN / PO / supplier)', 'Store', 'Available', 'Transfer qty'].map((h, i) => <th key={i} className={`px-2 py-2 ${/Available|qty/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['', 'Item', 'Lot', 'Colour', 'Source (GRN / PO / supplier)', 'Store', 'Available', 'Transfer qty'].map((h, i) => <th key={i} className={`px-2 py-2 ${/Available|qty/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>
-            {stock.isLoading && <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">Loading…</td></tr>}
+            {stock.isLoading && <tr><td colSpan={8} className="px-3 py-6 text-center text-ink-muted">Loading…</td></tr>}
             {(stock.data ?? []).map((r) => {
               const on = sel[r.ref_id] !== undefined;
               return (
-                <tr key={r.ref_id} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
+                <tr key={r.ref_id} className={`border-t border-surface-divider ${on ? 'bg-emerald-50' : ''}`}>
                   <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const c = { ...s }; if (on) delete c[r.ref_id]; else c[r.ref_id] = r.available; return c; })} /></td>
                   <td className="px-2 py-1 font-semibold">{r.item}{r.state && r.state !== 'GREY' ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">{r.state}</span> : null}</td>
                   <td className="px-2 py-1">{r.lot_no || '—'}</td><td className="px-2 py-1">{r.colour || '—'}</td><td className="px-2 py-1">{r.source}</td><td className="px-2 py-1">{r.store || '—'}</td>
@@ -141,12 +141,12 @@ function TransferEditor({ onBack }: { onBack: () => void }) {
                 </tr>
               );
             })}
-            {!stock.isLoading && !(stock.data ?? []).length && <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-400">The selected job holds no {head.material_type.toLowerCase()} stock</td></tr>}
+            {!stock.isLoading && !(stock.data ?? []).length && <tr><td colSpan={8} className="px-3 py-8 text-center text-ink-muted">The selected job holds no {head.material_type.toLowerCase()} stock</td></tr>}
           </tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={7} className="px-2 py-2 text-right">Total to transfer</td><td className="px-2 py-2 text-right">{fmtDecimal(total, 3)}</td></tr></tfoot>
+          <tfoot className="bg-surface-header font-bold"><tr><td colSpan={7} className="px-2 py-2 text-right">Total to transfer</td><td className="px-2 py-2 text-right">{fmtDecimal(total, 3)}</td></tr></tfoot>
         </table>
       </div>
-      <p className="mt-2 text-small text-slate-500">Part of a fabric roll becomes a new roll for the target job (same GRN — traceable). Yarn lots keep their GRN / PO; only the job that may use them changes.</p>
+      <p className="mt-2 text-small text-ink-secondary">Part of a fabric roll becomes a new roll for the target job (same GRN — traceable). Yarn lots keep their GRN / PO; only the job that may use them changes.</p>
       <div className="mt-3 flex justify-end gap-2"><Button variant="secondary" onClick={onBack}>Cancel</Button><Button loading={busy} onClick={save}><CheckCircle2 size={14} className="mr-1" /> Post Transfer</Button></div>
     </>
   );

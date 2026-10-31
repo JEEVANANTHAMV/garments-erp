@@ -44,8 +44,8 @@ export function StyleSetPartsPanel({ styleId, editable }: { styleId: number; edi
     <div className="card p-4" data-set-parts-panel>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-body font-bold uppercase tracking-wider text-slate-700">Set composition</h3>
-          <p className="text-small text-slate-500">
+          <h3 className="text-body font-bold uppercase tracking-wider text-ink">Set composition</h3>
+          <p className="text-small text-ink-secondary">
             Sold as a set (e.g. TOP + BOTTOM)? List its parts and the pieces of each per set. The sales order can then be
             entered in sets; each part is still cut, sewn and checked as pieces and paired at packing. Leave empty for a piece style.
           </p>
@@ -58,7 +58,7 @@ export function StyleSetPartsPanel({ styleId, editable }: { styleId: number; edi
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                <td className="td text-slate-400">{i + 1}{i === 0 ? ' (set colour)' : ''}</td>
+                <td className="td text-ink-muted">{i + 1}{i === 0 ? ' (set colour)' : ''}</td>
                 <td className="td p-1">
                   <input className="input w-36 uppercase" list="set-part-suggest" maxLength={20} disabled={!editable} id={`set-part-name-${i}`}
                     value={r.part_name} onChange={(e) => change(rows.map((x, k) => (k === i ? { ...x, part_name: e.target.value.toUpperCase() } : x)))} />
@@ -69,7 +69,7 @@ export function StyleSetPartsPanel({ styleId, editable }: { styleId: number; edi
                 </td>
                 <td className="td">
                   {editable && (
-                    <button type="button" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Remove part"
+                    <button type="button" className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-red-600" title="Remove part"
                       onClick={() => change(rows.filter((_, k) => k !== i))}><Trash2 size={14} /></button>
                   )}
                 </td>
@@ -98,7 +98,7 @@ export function StyleSetPartsPanel({ styleId, editable }: { styleId: number; edi
         </div>
       )}
       {(cur.data?.set_orders?.length ?? 0) > 0 && (
-        <p className="mt-2 text-caption text-slate-500">
+        <p className="mt-2 text-caption text-ink-secondary">
           Orders entered in sets ({cur.data!.set_orders.join(', ')}) keep the composition they were entered with.
         </p>
       )}

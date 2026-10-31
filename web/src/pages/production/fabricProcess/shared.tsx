@@ -38,19 +38,19 @@ export function useJobs() {
 
 /** Status chip with the document's wording (Draft / Confirmed / Partially received …). */
 const STATUS_LABEL: Record<string, [string, string]> = {
-  DRAFT: ['Draft', 'bg-slate-100 text-slate-700'], DISPATCHED: ['Confirmed', 'bg-sky-100 text-sky-800'], IN_PROCESS: ['In process', 'bg-amber-100 text-amber-800'],
+  DRAFT: ['Draft', 'bg-surface-header text-ink'], DISPATCHED: ['Confirmed', 'bg-sky-100 text-sky-800'], IN_PROCESS: ['In process', 'bg-amber-100 text-amber-800'],
   PARTIALLY_RECEIVED: ['Partially received', 'bg-amber-100 text-amber-800'], COMPLETED: ['Fully received', 'bg-emerald-100 text-emerald-800'],
-  CLOSED: ['Closed', 'bg-slate-200 text-slate-700'], CANCELLED: ['Cancelled', 'bg-red-100 text-red-700'], POSTED: ['Posted', 'bg-emerald-100 text-emerald-800'],
+  CLOSED: ['Closed', 'bg-surface-border text-ink'], CANCELLED: ['Cancelled', 'bg-red-100 text-red-700'], POSTED: ['Posted', 'bg-emerald-100 text-emerald-800'],
   CONFIRMED: ['Confirmed', 'bg-sky-100 text-sky-800'], SENT_TO_REPROCESS: ['Sent to reprocess', 'bg-purple-100 text-purple-800'],
   PENDING: ['Pending', 'bg-amber-100 text-amber-800'], APPROVED: ['Approved', 'bg-emerald-100 text-emerald-800'], BILLED: ['Billed', 'bg-indigo-100 text-indigo-800'],
-  EXCLUDED: ['Excluded', 'bg-slate-100 text-slate-600'], REVERSED: ['Reversed', 'bg-red-100 text-red-700'], PARTIAL: ['Partial', 'bg-amber-100 text-amber-800'],
+  EXCLUDED: ['Excluded', 'bg-surface-header text-ink-secondary'], REVERSED: ['Reversed', 'bg-red-100 text-red-700'], PARTIAL: ['Partial', 'bg-amber-100 text-amber-800'],
   AT_VENDOR: ['At vendor', 'bg-sky-100 text-sky-800'], RECEIVED: ['Received', 'bg-emerald-100 text-emerald-800'],
   QC_PENDING: ['QC pending', 'bg-orange-100 text-orange-800'], ACCEPTED: ['QC accepted', 'bg-teal-100 text-teal-800'], REJECTED: ['QC rejected', 'bg-red-100 text-red-700'],
   HOLD: ['Hold', 'bg-orange-100 text-orange-800'],
   INWARD_PENDING: ['Inward pending', 'bg-amber-100 text-amber-800'], AT_UNIT: ['At unit', 'bg-sky-100 text-sky-800'], ISSUED: ['Issued', 'bg-sky-100 text-sky-800'],
 };
 export function FpStatus({ value }: { value: string }) {
-  const [label, cls] = STATUS_LABEL[value] ?? [value, 'bg-slate-100 text-slate-700'];
+  const [label, cls] = STATUS_LABEL[value] ?? [value, 'bg-surface-header text-ink'];
   return <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-caption font-semibold ${cls}`}>{label}</span>;
 }
 
@@ -61,8 +61,8 @@ export function FpTitle({ no, title, sub, actions }: { no: number; title: string
       <div className="flex items-center gap-3">
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600 text-lg font-bold text-white">{no}</span>
         <div>
-          <h1 className="text-lg font-bold text-slate-900">{title}</h1>
-          {sub && <p className="text-small text-slate-500">{sub}</p>}
+          <h1 className="text-lg font-bold text-ink">{title}</h1>
+          {sub && <p className="text-small text-ink-secondary">{sub}</p>}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">{actions}</div>
@@ -75,7 +75,7 @@ export function ReconCards({ t }: { t: { outward_kg: number; good_kg: number; re
   const cards: [string, number, string][] = [
     ['Outward', t.outward_kg, 'bg-sky-50 border-sky-200 text-sky-900'], ['Good', t.good_kg, 'bg-emerald-50 border-emerald-200 text-emerald-900'],
     ['Reject', t.reject_kg, 'bg-red-50 border-red-200 text-red-900'], ['Process loss', t.loss_kg, 'bg-amber-50 border-amber-200 text-amber-900'],
-    ['Balance', t.balance_kg, t.balance_kg > 0.0005 ? 'bg-orange-50 border-orange-300 text-orange-900' : 'bg-slate-50 border-slate-200 text-slate-700'],
+    ['Balance', t.balance_kg, t.balance_kg > 0.0005 ? 'bg-orange-50 border-orange-300 text-orange-900' : 'bg-surface-muted border-surface-border text-ink'],
   ];
   return (
     <div className="grid grid-cols-2 gap-2 md:grid-cols-5">

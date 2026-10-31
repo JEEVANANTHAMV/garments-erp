@@ -41,12 +41,12 @@ export function BenefitSchemesPage() {
             {list.data?.map((s) => <tr key={s.id} className="row-hover align-top" data-scheme={s.code}>
               <td className="td tabular-nums text-small">{s.code}</td>
               <td className="td text-body"><button className="text-left font-semibold text-brand-700 hover:underline" onClick={() => setEdit({ ...s, effective_from: s.effective_from ?? '', effective_to: s.effective_to ?? '', short_name: s.short_name ?? '', description: s.description ?? '', is_suggested: !!s.is_suggested, allow_multiple: !!s.allow_multiple, is_active: !!s.is_active, reason: '' })}>{s.display_name}</button>
-                {s.sb_field && <p className="text-caption text-slate-400">shipping bill field</p>}</td>
-              <td className="td text-small">{s.mode_label}<p className="text-caption text-slate-400">{s.allowed_events.length} events · {s.custom_fields.length} fields</p></td>
-              <td className="td text-small">{M?.settlement_bases.find((b) => b.value === s.settlement_basis)?.label}<p className="text-caption text-slate-400">aged from {s.ageing_label}</p></td>
+                {s.sb_field && <p className="text-caption text-ink-muted">shipping bill field</p>}</td>
+              <td className="td text-small">{s.mode_label}<p className="text-caption text-ink-muted">{s.allowed_events.length} events · {s.custom_fields.length} fields</p></td>
+              <td className="td text-small">{M?.settlement_bases.find((b) => b.value === s.settlement_basis)?.label}<p className="text-caption text-ink-muted">aged from {s.ageing_label}</p></td>
               <td className="td text-small">{s.policy_label}</td>
               <td className="td text-right tabular-nums">{s.claims}{s.open_claims ? <p className="text-caption text-amber-700">{s.open_claims} open</p> : null}</td>
-              <td className="td text-small">v{s.config_version}<button className="ml-1 text-slate-400 hover:text-slate-700" title="Configuration history" onClick={() => setHist(s.id)}><History size={13} /></button></td>
+              <td className="td text-small">v{s.config_version}<button className="ml-1 text-ink-muted hover:text-ink" title="Configuration history" onClick={() => setHist(s.id)}><History size={13} /></button></td>
               <td className="td">{s.is_active ? <Badge tone="green">active</Badge> : <Badge tone="slate">inactive</Badge>}{!s.is_active && s.readiness.length > 0 && <p className="text-caption text-red-600">{s.readiness.length} to complete</p>}</td>
               <td className="td">{M?.rights.admin && <SchemeToggle s={s} />}</td></tr>)}</tbody></table>
       </div>
@@ -63,7 +63,7 @@ function SchemeToggle({ s }: { s: any }) {
   const run = async (fn: () => Promise<unknown>, msg: string) => { setBusy(true); try { await fn(); toast(msg); void qc.invalidateQueries({ queryKey: ['export-benefits'] }); } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); } };
   if (s.is_active) return <Button size="sm" variant="secondary" loading={busy} data-deactivate={s.code} onClick={() => { const reason = window.prompt(`Deactivate ${s.display_name}? New claims are blocked; history stays. Reason:`); if (reason) void run(() => http.post(`/export-benefits/schemes/${s.id}/deactivate`, { reason }), 'Deactivated'); }}>Deactivate</Button>;
   return <div className="flex gap-1"><Button size="sm" loading={busy} data-activate={s.code} onClick={() => void run(() => http.post(`/export-benefits/schemes/${s.id}/activate`, {}), 'Activated — it now shows on shipping bills and reports')}>Activate</Button>
-    {!s.is_used && <button className="text-slate-400 hover:text-red-600" title="Delete (never used)" onClick={() => { if (window.confirm(`Delete ${s.display_name}? It was never used.`)) void run(() => http.del(`/export-benefits/schemes/${s.id}`), 'Deleted'); }}><Trash2 size={14} /></button>}</div>;
+    {!s.is_used && <button className="text-ink-muted hover:text-red-600" title="Delete (never used)" onClick={() => { if (window.confirm(`Delete ${s.display_name}? It was never used.`)) void run(() => http.del(`/export-benefits/schemes/${s.id}`), 'Deleted'); }}><Trash2 size={14} /></button>}</div>;
 }
 
 function SchemeEditor({ initial, meta, onClose }: { initial: any; meta: Meta; onClose: () => void }) {
@@ -141,9 +141,9 @@ function SchemeEditor({ initial, meta, onClose }: { initial: any; meta: Meta; on
           </FormSection>
           <FormSection title="Custom fields" description="Extra fields shown on the claim (shipping bill row) or on an event; validated by the server"
             actions={<Button size="sm" variant="secondary" id="sch-add-field" onClick={() => set('custom_fields', [...fields, { key: '', label: '', type: 'text', required: false, applies_to: 'EVENT', options: '', event_types: [] }])}><Plus size={13} />Field</Button>} cols={1}>
-            {!fields.length && <p className="text-small text-slate-400">No custom fields.</p>}
+            {!fields.length && <p className="text-small text-ink-muted">No custom fields.</p>}
             {fields.map((f, i) => (
-              <div key={i} className="grid gap-2 rounded-lg border border-slate-200 p-2 sm:grid-cols-6" data-field-row={i}>
+              <div key={i} className="grid gap-2 rounded-lg border border-surface-border p-2 sm:grid-cols-6" data-field-row={i}>
                 <Input label="Key" value={f.key} error={errOf(`custom_fields.${i}`)} onChange={(e) => setField(i, 'key', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} />
                 <Input label="Label" value={f.label} onChange={(e) => setField(i, 'label', e.target.value)} />
                 <Select label="Type" value={f.type} options={meta.field_types.map((t) => ({ value: t, label: t }))} onChange={(e) => setField(i, 'type', e.target.value)} />
@@ -152,21 +152,21 @@ function SchemeEditor({ initial, meta, onClose }: { initial: any; meta: Meta; on
                   : f.type === 'number' ? <div className="grid grid-cols-2 gap-1"><Input label="Min" type="number" value={f.min ?? ''} onChange={(e) => setField(i, 'min', e.target.value)} /><Input label="Max" type="number" value={f.max ?? ''} onChange={(e) => setField(i, 'max', e.target.value)} /></div>
                     : f.type === 'text' ? <Input label="Pattern (regex)" value={f.pattern ?? ''} onChange={(e) => setField(i, 'pattern', e.target.value)} /> : <div />}
                 <div className="flex items-end justify-between gap-2 pb-1.5"><Checkbox label="Required" checked={!!f.required} onChange={(c) => setField(i, 'required', c)} />
-                  <button className="text-slate-400 hover:text-red-600" title="Remove" onClick={() => set('custom_fields', fields.filter((_, j) => j !== i))}><Trash2 size={14} /></button></div>
-                {f.applies_to === 'EVENT' && <div className="flex flex-wrap gap-2 sm:col-span-6"><span className="text-caption text-slate-500">Only on:</span>{v.allowed_events.filter((x: string) => x !== 'REVERSAL').map((x: string) => (
+                  <button className="text-ink-muted hover:text-red-600" title="Remove" onClick={() => set('custom_fields', fields.filter((_, j) => j !== i))}><Trash2 size={14} /></button></div>
+                {f.applies_to === 'EVENT' && <div className="flex flex-wrap gap-2 sm:col-span-6"><span className="text-caption text-ink-secondary">Only on:</span>{v.allowed_events.filter((x: string) => x !== 'REVERSAL').map((x: string) => (
                   <label key={x} className="flex items-center gap-1 text-caption"><input type="checkbox" checked={(f.event_types ?? []).includes(x)} onChange={(e) => setField(i, 'event_types', e.target.checked ? [...(f.event_types ?? []), x] : (f.event_types ?? []).filter((y: string) => y !== x))} />{meta.event_types.find((t) => t.value === x)?.label}</label>))}
-                  <span className="text-caption text-slate-400">(none ticked = every event)</span></div>}
+                  <span className="text-caption text-ink-muted">(none ticked = every event)</span></div>}
               </div>
             ))}
           </FormSection>
           <FormSection title="Required documents" actions={<Button size="sm" variant="secondary" onClick={() => set('required_documents', [...docs, { doc_type: '', label: '', stage: 'RECEIPT', policy: 'WARN' }])}><Plus size={13} />Document</Button>} cols={1}>
-            {!docs.length && <p className="text-small text-slate-400">None required.</p>}
+            {!docs.length && <p className="text-small text-ink-muted">None required.</p>}
             {docs.map((d, i) => <div key={i} className="grid gap-2 sm:grid-cols-5">
               <Input label="Type code" value={d.doc_type} error={errOf(`required_documents.${i}`)} onChange={(e) => setDoc(i, 'doc_type', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))} />
               <Input label="Label" value={d.label} onChange={(e) => setDoc(i, 'label', e.target.value)} />
               <Select label="When" value={d.stage} options={meta.doc_stages} onChange={(e) => setDoc(i, 'stage', e.target.value)} />
               <Select label="If missing" value={d.policy} options={[{ value: 'WARN', label: 'Warn' }, { value: 'BLOCK', label: 'Block posting' }]} onChange={(e) => setDoc(i, 'policy', e.target.value)} />
-              <div className="flex items-end pb-2"><button className="text-slate-400 hover:text-red-600" onClick={() => set('required_documents', docs.filter((_, j) => j !== i))}><Trash2 size={14} /></button></div></div>)}
+              <div className="flex items-end pb-2"><button className="text-ink-muted hover:text-red-600" onClick={() => set('required_documents', docs.filter((_, j) => j !== i))}><Trash2 size={14} /></button></div></div>)}
           </FormSection>
           {!isNew && <FormSection title="Change" cols={2}>
             <Input className="sm:col-span-2" label="Reason for the change" required={used} id="sch-reason" value={v.reason} onChange={(e) => set('reason', e.target.value)} hint="Kept in the configuration history" />
@@ -180,13 +180,13 @@ function SchemeEditor({ initial, meta, onClose }: { initial: any; meta: Meta; on
           </div>}
         </div>
         <div className="space-y-3" id="sch-preview">
-          <div className="rounded-lg border border-dashed border-slate-300 p-3">
-            <p className="mb-2 text-small font-semibold uppercase tracking-wide text-slate-500">Preview — shipping bill row</p>
+          <div className="rounded-lg border border-dashed border-surface-input p-3">
+            <p className="mb-2 text-small font-semibold uppercase tracking-wide text-ink-secondary">Preview — shipping bill row</p>
             <div className="grid gap-2"><Input label={`${v.display_name || 'New benefit'} — declared ₹`} type="number" disabled value="" placeholder="0.00" />
               <DynamicFields fields={previewFields.filter((f) => f.applies_to === 'CLAIM')} values={pvValues} onChange={setPvValues} idPrefix="pv-claim" /></div>
           </div>
-          <div className="rounded-lg border border-dashed border-slate-300 p-3">
-            <p className="mb-2 text-small font-semibold uppercase tracking-wide text-slate-500">Preview — event form</p>
+          <div className="rounded-lg border border-dashed border-surface-input p-3">
+            <p className="mb-2 text-small font-semibold uppercase tracking-wide text-ink-secondary">Preview — event form</p>
             <Select value={pvEvent} placeholder="— pick an event —" options={v.allowed_events.filter((x: string) => x !== 'REVERSAL').map((x: string) => ({ value: x, label: meta.event_types.find((t) => t.value === x)?.label ?? x }))} onChange={(e) => setPvEvent(e.target.value)} />
             {pvEvent && (() => { const t = meta.event_types.find((x) => x.value === pvEvent)!; return <div className="mt-2 grid gap-2">
               <Input label="Actual date" type="date" disabled value="" /><Input label="Amount" disabled value="" />
@@ -211,8 +211,8 @@ function HistoryModal({ id, onClose }: { id: number; onClose: () => void }) {
       {q.isLoading ? <LoadingBlock rows={3} /> : q.error ? <ErrorState error={q.error} /> : (
         <table className="w-full" id="sch-history"><thead><tr><th className="th">Version</th><th className="th">Change</th><th className="th">What changed (old → new)</th><th className="th">Reason</th><th className="th">By · when</th></tr></thead>
           <tbody>{q.data.history.map((h: any) => <tr key={h.id} className="align-top"><td className="td">v{h.config_version}</td><td className="td text-small">{h.change_type.toLowerCase().replace('_', ' ')}</td>
-            <td className="td max-w-[360px] tabular-nums text-caption text-slate-600">{diff(h.old_snapshot, h.snapshot).map((k) => <p key={k}>{k}: {JSON.stringify(h.old_snapshot[k]).slice(0, 60)} → {JSON.stringify(h.snapshot[k]).slice(0, 60)}</p>)}</td>
-            <td className="td text-small">{h.reason ?? ''}</td><td className="td text-small">{h.changed_by_name ?? 'system'}<p className="text-slate-400">{fmtDateTime(h.changed_at)}</p></td></tr>)}</tbody></table>
+            <td className="td max-w-[360px] tabular-nums text-caption text-ink-secondary">{diff(h.old_snapshot, h.snapshot).map((k) => <p key={k}>{k}: {JSON.stringify(h.old_snapshot[k]).slice(0, 60)} → {JSON.stringify(h.snapshot[k]).slice(0, 60)}</p>)}</td>
+            <td className="td text-small">{h.reason ?? ''}</td><td className="td text-small">{h.changed_by_name ?? 'system'}<p className="text-ink-muted">{fmtDateTime(h.changed_at)}</p></td></tr>)}</tbody></table>
       )}
     </Modal>
   );

@@ -26,12 +26,12 @@ export default function BillsInwardHub() {
   const tab = tabs.find((t) => t.key === params.get('tab'))?.key ?? tabs[0]?.key ?? 'SUPPLIER';
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-1.5">
-        <span className="px-2 text-caption font-bold uppercase tracking-wider text-slate-500">Bills Inward</span>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-surface-border bg-white p-1.5">
+        <span className="px-2 text-caption font-bold uppercase tracking-wider text-ink-secondary">Bills Inward</span>
         {tabs.map((t) => (
           <button key={t.key} type="button" id={`bills-tab-${t.key}`}
             onClick={() => setParams({ tab: t.key })}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === t.key ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === t.key ? 'bg-brand-600 text-white' : 'text-ink-secondary hover:bg-surface-header'}`}>
             {t.label}
           </button>
         ))}

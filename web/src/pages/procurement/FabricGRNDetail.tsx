@@ -666,7 +666,7 @@ export default function FabricGRNDetailPage() {
 
   if (!isNew && loadingExisting) {
     return (
-      <div className="py-20 text-center text-slate-400">
+      <div className="py-20 text-center text-ink-muted">
         Loading fabric GRN #{id}...
       </div>
     );
@@ -675,11 +675,11 @@ export default function FabricGRNDetailPage() {
   return (
     <div className="space-y-5 pb-16">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => nav('/procurement/fabric/grn')}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 transition"
+            className="p-1.5 rounded-lg border border-surface-input hover:bg-surface-header text-ink-secondary transition"
             title="Back to Fabric GRNs"
           >
             <ArrowLeft size={16} />
@@ -689,12 +689,12 @@ export default function FabricGRNDetailPage() {
               <span className="p-1.5 rounded-md bg-emerald-100 text-emerald-700">
                 <PackageCheck size={18} />
               </span>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl font-bold text-ink tracking-tight">
                 {isNew ? 'New Fabric GRN & Physical Roll Inward' : `Fabric GRN: ${header.grn_no}`}
               </h1>
               {!isNew && <Badge tone="green">POSTED TO STOCK</Badge>}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-ink-secondary mt-0.5">
               Roll barcode tagging, physical yardage/kg inspection, GSM verification, and bin storage
             </p>
           </div>
@@ -703,7 +703,7 @@ export default function FabricGRNDetailPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => nav('/procurement/fabric/roll-stock')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <Boxes size={14} className="text-sky-600" />
             <span>Roll Stock Ledger</span>
@@ -736,9 +736,9 @@ export default function FabricGRNDetailPage() {
           <div className="text-caption font-semibold text-sky-700 uppercase tracking-wider">Total Rolls</div>
           <div className="text-xl font-bold text-sky-900 mt-0.5">{summary.totalRolls} rolls</div>
         </div>
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="text-caption font-semibold text-slate-600 uppercase tracking-wider">Accepted Yardage</div>
-          <div className="text-xl font-bold text-slate-800 mt-0.5">{fmtDecimal(summary.acceptedMeters)} m</div>
+        <div className="p-3 bg-surface-muted rounded-xl border border-surface-border">
+          <div className="text-caption font-semibold text-ink-secondary uppercase tracking-wider">Accepted Yardage</div>
+          <div className="text-xl font-bold text-ink mt-0.5">{fmtDecimal(summary.acceptedMeters)} m</div>
         </div>
         <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200">
           <div className="text-caption font-semibold text-amber-700 uppercase tracking-wider">Taxable Value</div>
@@ -753,13 +753,13 @@ export default function FabricGRNDetailPage() {
       </div>
 
       {/* Header Fields Card */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-100">
+      <div className="bg-white p-4 rounded-xl border border-surface-border/80 shadow-sm space-y-4">
+        <div className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center justify-between pb-2 border-b border-surface-divider">
           <div className="flex items-center gap-1.5">
             <Layers size={14} className="text-emerald-600" />
             <span>Receipt Header & Reference Information</span>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-ink bg-surface-muted px-2.5 py-1 rounded-md border border-surface-border">
             <input
               type="checkbox"
               checked={header.is_interstate}
@@ -767,7 +767,7 @@ export default function FabricGRNDetailPage() {
               disabled={!isNew}
               className="h-3.5 w-3.5 rounded text-emerald-600 focus:ring-emerald-500"
             />
-            <span className="font-semibold text-slate-800">Inter-state Purchase (IGST)</span>
+            <span className="font-semibold text-ink">Inter-state Purchase (IGST)</span>
           </label>
         </div>
 
@@ -790,7 +790,7 @@ export default function FabricGRNDetailPage() {
           {isNew ? (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-caption font-medium text-slate-600">
+                <label className="text-caption font-medium text-ink-secondary">
                   Link Fabric POs ({selectedPoIds.length} selected)
                 </label>
                 {selectedPoIds.length > 0 && (
@@ -800,7 +800,7 @@ export default function FabricGRNDetailPage() {
               <select
                 value=""
                 onChange={(e) => handleAddPO(e.target.value)}
-                className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold text-emerald-900"
+                className="w-full text-xs rounded-lg border border-surface-input py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold text-emerald-900"
               >
                 <option value="">+ Add PO to this GRN...</option>
                 {poList.filter((p) => !selectedPoIds.includes(String(p.id)) && openForGrn(p)).map((p) => (
@@ -841,7 +841,7 @@ export default function FabricGRNDetailPage() {
             </div>
           ) : (
             <div>
-              <label className="block text-caption font-medium text-slate-600 mb-1">
+              <label className="block text-caption font-medium text-ink-secondary mb-1">
                 Linked Purchase Orders ({selectedPoIds.length || (header.po_id ? 1 : 0)})
               </label>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -851,7 +851,7 @@ export default function FabricGRNDetailPage() {
                   </span>
                 ))}
                 {!selectedPoIds.length && !header.po_id && (
-                  <span className="text-xs text-slate-400">Direct Receipt</span>
+                  <span className="text-xs text-ink-muted">Direct Receipt</span>
                 )}
               </div>
             </div>
@@ -859,7 +859,7 @@ export default function FabricGRNDetailPage() {
 
           {isNew ? (
             <div>
-              <label className="block text-caption font-medium text-slate-600 mb-1">
+              <label className="block text-caption font-medium text-ink-secondary mb-1">
                 Map Gate Entry (Auto-fills details)
               </label>
               <select
@@ -939,13 +939,13 @@ export default function FabricGRNDetailPage() {
           />
 
           <div>
-            <label className="block text-caption font-medium text-slate-600 mb-1">
+            <label className="block text-caption font-medium text-ink-secondary mb-1">
               Overall QC Status
             </label>
             <select
               value={header.qc_status}
               onChange={(e) => setHeader((p) => ({ ...p, qc_status: e.target.value }))}
-              className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold"
+              className="w-full text-xs rounded-lg border border-surface-input py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold"
               disabled={!isNew}
             >
               <option value="ACCEPTED">ACCEPTED (Pass to Available Stock)</option>
@@ -967,14 +967,14 @@ export default function FabricGRNDetailPage() {
       </div>
 
       {/* Fabric Line Items Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden space-y-3 p-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm overflow-hidden space-y-3 p-4">
+        <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
           <div>
-            <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <Layers size={14} className="text-emerald-600" />
               <span>Fabric Line Items ({lines.length})</span>
             </h2>
-            <p className="text-caption text-slate-400">
+            <p className="text-caption text-ink-muted">
               Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
             </p>
           </div>
@@ -984,7 +984,7 @@ export default function FabricGRNDetailPage() {
                 setLines((p) => [...p, emptyLine()]);
                 setSelectedLineIdx(lines.length);
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
             >
               <Plus size={13} />
               <span>Add Fabric Item</span>
@@ -995,7 +995,7 @@ export default function FabricGRNDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+              <tr className="bg-surface-muted text-ink-secondary font-semibold border-b border-surface-border">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
                 <th className="py-2.5 px-2 min-w-[100px]">PO Ref</th>
                 <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
@@ -1016,17 +1016,17 @@ export default function FabricGRNDetailPage() {
                 {isNew && <th className="py-2.5 px-2 text-center">Action</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {lines.map((l, idx) => (
                 <tr
                   key={l._key || idx}
                   onClick={() => setSelectedLineIdx(idx)}
                   className={`cursor-pointer transition ${
-                    selectedLineIdx === idx ? 'bg-emerald-50/70 font-medium' : 'hover:bg-slate-50/70'
+                    selectedLineIdx === idx ? 'bg-emerald-50/70 font-medium' : 'hover:bg-surface-muted/70'
                   }`}
                 >
                   {/* # S.No */}
-                  <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-caption">{idx + 1}</td>
+                  <td className="py-2.5 px-2 text-center text-ink-muted tabular-nums text-caption">{idx + 1}</td>
 
                   {/* PO Ref */}
                   <td className="py-2.5 px-2">
@@ -1035,7 +1035,7 @@ export default function FabricGRNDetailPage() {
                         {l.po_no || `PO #${l.po_id}`}
                       </span>
                     ) : (
-                      <span className="text-slate-400 text-caption">—</span>
+                      <span className="text-ink-muted text-caption">—</span>
                     )}
                   </td>
 
@@ -1049,7 +1049,7 @@ export default function FabricGRNDetailPage() {
                           updateLineField(idx, 'so_id', e.target.value);
                           if (so?.style_id) updateLineField(idx, 'style_id', String(so.style_id));
                         }}
-                        className="w-32 text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        className="w-32 text-xs rounded border border-surface-input py-1 px-1 bg-white"
                       >
                         <option value="">Stock / General</option>
                         {toOptions(salesOrders.data).map((so) => (
@@ -1059,7 +1059,7 @@ export default function FabricGRNDetailPage() {
                         ))}
                       </select>
                     ) : (
-                      <span className="text-slate-700 font-medium">
+                      <span className="text-ink font-medium">
                         {l.so_id ? String((salesOrders.data ?? []).find((x: any) => String(x.id) === String(l.so_id))?.job_no ?? `SO #${l.so_id}`) : 'Stock / General'}
                       </span>
                     )}
@@ -1071,7 +1071,7 @@ export default function FabricGRNDetailPage() {
                       <select
                         value={l.style_id || ''}
                         onChange={(e) => updateLineField(idx, 'style_id', e.target.value)}
-                        className="w-28 text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        className="w-28 text-xs rounded border border-surface-input py-1 px-1 bg-white"
                       >
                         <option value="">—</option>
                         {toOptions(styles.data).map((st) => (
@@ -1081,7 +1081,7 @@ export default function FabricGRNDetailPage() {
                         ))}
                       </select>
                     ) : (
-                      <span className="text-slate-700 font-medium">
+                      <span className="text-ink font-medium">
                         {l.style_id ? `Style #${l.style_id}` : '—'}
                       </span>
                     )}
@@ -1100,7 +1100,7 @@ export default function FabricGRNDetailPage() {
                             return copy;
                           });
                         }}
-                        className="w-44 text-xs rounded border border-slate-300 py-1 px-1.5 bg-white"
+                        className="w-44 text-xs rounded border border-surface-input py-1 px-1.5 bg-white"
                       >
                         <option value="">Select Fabric</option>
                         {toOptions(fabrics.data).map((o) => (
@@ -1110,17 +1110,17 @@ export default function FabricGRNDetailPage() {
                         ))}
                       </select>
                     ) : (
-                      <div className="font-semibold text-slate-900">{l.fabric_name || 'Fabric Item'}</div>
+                      <div className="font-semibold text-ink">{l.fabric_name || 'Fabric Item'}</div>
                     )}
                   </td>
-                  <td className="py-2.5 px-2 text-slate-600">
+                  <td className="py-2.5 px-2 text-ink-secondary">
                     <span className={`inline-block text-micro font-bold px-1.5 py-0.5 rounded ${l.fabric_category === 'Dyed Fabric' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-800'}`}>
                       {l.fabric_category === 'Dyed Fabric' ? 'Dyed' : 'Grey'}
                     </span>
                     {' '}{l.fabric_type}
                   </td>
                   <td className="py-2.5 px-2">
-                    <span className="tabular-nums text-caption bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
+                    <span className="tabular-nums text-caption bg-surface-header px-1.5 py-0.5 rounded text-ink">
                       {l.color_name && <>{l.color_name} / </>}{l.shade_code || '—'} / {l.lot_no}
                     </span>
                     {l.fabric_category === 'Dyed Fabric' && l.pantone_spec && (
@@ -1130,8 +1130,8 @@ export default function FabricGRNDetailPage() {
                   <td className="py-2.5 px-2 text-right whitespace-nowrap">
                     {l.ordered_qty != null ? (
                       <div className="leading-tight">
-                        <div>{fmtDecimal(l.ordered_qty)} <span className="text-micro text-slate-400">ordered</span></div>
-                        {Number(l.prev_received) > 0 && <div className="text-slate-500">{fmtDecimal(l.prev_received)} <span className="text-micro">recd earlier</span></div>}
+                        <div>{fmtDecimal(l.ordered_qty)} <span className="text-micro text-ink-muted">ordered</span></div>
+                        {Number(l.prev_received) > 0 && <div className="text-ink-secondary">{fmtDecimal(l.prev_received)} <span className="text-micro">recd earlier</span></div>}
                         <div className="font-semibold text-amber-700">{fmtDecimal(l.po_qty)} <span className="text-micro font-normal">pending</span></div>
                         {isNew && l.po_line_id && <div><LineReceiptSelect id={`fgrn-line-${idx}-receipt`} value={l.receipt_type} onChange={(v) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, receipt_type: v } : x)))} /></div>}
                         {isNew && <LineReceiptChip ordered={l.ordered_qty} prev={l.prev_received} accepted={Number(l.accepted_qty) || 0} type={l.receipt_type ?? 'PARTIAL'} />}
@@ -1143,7 +1143,7 @@ export default function FabricGRNDetailPage() {
                     title={l.ordered_qty != null && Number(l.received_qty) > Number(l.po_qty) + 0.001 ? 'More than pending on the PO' : undefined}>
                     {fmtDecimal(l.received_qty)} {uomCode(l.uom_id).toLowerCase() || 'm'}
                   </td>
-                  <td className="py-2.5 px-2 text-right font-medium text-slate-800">
+                  <td className="py-2.5 px-2 text-right font-medium text-ink">
                     {fmtDecimal(l.received_weight)} kg
                   </td>
                   <td className="py-2.5 px-2 text-center font-bold text-sky-700">
@@ -1156,14 +1156,14 @@ export default function FabricGRNDetailPage() {
                         type="number"
                         value={l.rate}
                         onChange={(e) => updateLineField(idx, 'rate', Number(e.target.value))}
-                        className="w-16 text-right text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        className="w-16 text-right text-xs rounded border border-surface-input py-1 px-1 bg-white"
                         step="0.01"
                       />
                     ) : (
                       <span>₹{fmtDecimal(l.rate)}</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2 text-right font-medium text-slate-800">
+                  <td className="py-2.5 px-2 text-right font-medium text-ink">
                     ₹{fmtDecimal(l.taxable_amount)}
                   </td>
                   <td className="py-2.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1172,7 +1172,7 @@ export default function FabricGRNDetailPage() {
                         type="number"
                         value={l.gst_rate}
                         onChange={(e) => updateLineField(idx, 'gst_rate', Number(e.target.value))}
-                        className="w-12 text-center text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        className="w-12 text-center text-xs rounded border border-surface-input py-1 px-1 bg-white"
                         step="0.1"
                       />
                     ) : (
@@ -1199,7 +1199,7 @@ export default function FabricGRNDetailPage() {
                           setLines((p) => p.filter((_, i) => i !== idx));
                           if (selectedLineIdx >= lines.length - 1) setSelectedLineIdx(0);
                         }}
-                        className="p-1 text-slate-400 hover:text-red-600 rounded"
+                        className="p-1 text-ink-muted hover:text-red-600 rounded"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -1214,14 +1214,14 @@ export default function FabricGRNDetailPage() {
 
       {/* Physical Roll Sub-Grid Cockpit */}
       {activeLine && (
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-100">
+        <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-surface-divider">
             <div>
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
                 <Boxes size={15} className="text-sky-600" />
                 <span>Physical Roll Inspection Sub-Grid: {activeLine.fabric_name || 'Selected Fabric'}</span>
               </h3>
-              <p className="text-caption text-slate-500">
+              <p className="text-caption text-ink-secondary">
                 Individual roll tags, meters, weight, GSM, Dia, QC, and bin allocations
               </p>
             </div>
@@ -1237,7 +1237,7 @@ export default function FabricGRNDetailPage() {
                 </button>
                 <button
                   onClick={addSingleRoll}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-surface-header hover:bg-surface-border text-ink transition"
                 >
                   <Plus size={13} />
                   <span>Add Roll</span>
@@ -1249,7 +1249,7 @@ export default function FabricGRNDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-sky-50/50 text-slate-700 font-semibold border-b border-sky-100">
+                <tr className="bg-sky-50/50 text-ink font-semibold border-b border-sky-100">
                   <th className="py-2 px-3">#</th>
                   <th className="py-2 px-2">Roll No *</th>
                   <th className="py-2 px-2">Lot No</th>
@@ -1267,24 +1267,24 @@ export default function FabricGRNDetailPage() {
                   {isNew && <th className="py-2 px-2 text-center">Del</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-surface-divider text-ink">
                 {activeLine.rolls?.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="py-8 text-center text-slate-400">
+                    <td colSpan={15} className="py-8 text-center text-ink-muted">
                       No rolls added. Click "Auto-Generate Rolls" or "Add Roll".
                     </td>
                   </tr>
                 ) : (
                   activeLine.rolls.map((r, rIdx) => (
-                    <tr key={r._key || rIdx} className="hover:bg-slate-50/60">
-                      <td className="py-2 px-3 text-slate-400 tabular-nums text-caption">{rIdx + 1}</td>
+                    <tr key={r._key || rIdx} className="hover:bg-surface-muted/60">
+                      <td className="py-2 px-3 text-ink-muted tabular-nums text-caption">{rIdx + 1}</td>
                       <td className="py-2 px-2">
                         {isNew ? (
                           <input
                             type="text"
                             value={r.roll_no}
                             onChange={(e) => updateRoll(rIdx, 'roll_no', e.target.value)}
-                            className="w-24 text-xs tabular-nums font-semibold text-sky-700 border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-24 text-xs tabular-nums font-semibold text-sky-700 border border-surface-input rounded px-1.5 py-0.5"
                           />
                         ) : (
                           <span className="tabular-nums font-semibold text-sky-700">{r.roll_no}</span>
@@ -1296,10 +1296,10 @@ export default function FabricGRNDetailPage() {
                             type="text"
                             value={r.lot_no}
                             onChange={(e) => updateRoll(rIdx, 'lot_no', e.target.value)}
-                            className="w-24 text-xs tabular-nums border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-24 text-xs tabular-nums border border-surface-input rounded px-1.5 py-0.5"
                           />
                         ) : (
-                          <span className="tabular-nums text-slate-600">{r.lot_no}</span>
+                          <span className="tabular-nums text-ink-secondary">{r.lot_no}</span>
                         )}
                       </td>
                       <td className="py-2 px-2 text-right">
@@ -1308,7 +1308,7 @@ export default function FabricGRNDetailPage() {
                             type="number"
                             value={r.meters}
                             onChange={(e) => updateRoll(rIdx, 'meters', parseFloat(e.target.value) || 0)}
-                            className="w-20 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-20 text-xs text-right font-medium border border-surface-input rounded px-1.5 py-0.5"
                           />
                         ) : (
                           <span className="font-medium text-emerald-700">{fmtDecimal(r.meters)} m</span>
@@ -1320,7 +1320,7 @@ export default function FabricGRNDetailPage() {
                             type="number"
                             value={r.weight_kg}
                             onChange={(e) => updateRoll(rIdx, 'weight_kg', parseFloat(e.target.value) || 0)}
-                            className="w-20 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-20 text-xs text-right font-medium border border-surface-input rounded px-1.5 py-0.5"
                           />
                         ) : (
                           <span className="font-medium text-indigo-700">{fmtDecimal(r.weight_kg)} kg</span>
@@ -1332,7 +1332,7 @@ export default function FabricGRNDetailPage() {
                             type="number"
                             value={r.gsm}
                             onChange={(e) => updateRoll(rIdx, 'gsm', parseInt(e.target.value) || 0)}
-                            className="w-16 text-xs text-center border border-slate-300 rounded px-1 py-0.5"
+                            className="w-16 text-xs text-center border border-surface-input rounded px-1 py-0.5"
                           />
                         ) : (
                           <span>{r.gsm}</span>
@@ -1342,7 +1342,7 @@ export default function FabricGRNDetailPage() {
                         {isNew ? (
                           <input type="number" value={r.actual_gsm ?? ''} placeholder="QC" id={`grn-agsm-${rIdx}`}
                             onChange={(e) => updateRoll(rIdx, 'actual_gsm', e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-16 text-xs text-center border border-slate-300 rounded px-1 py-0.5" />
+                            className="w-16 text-xs text-center border border-surface-input rounded px-1 py-0.5" />
                         ) : <span>{(r as any).actual_gsm ? Number((r as any).actual_gsm).toFixed(1) : '—'}</span>}
                       </td>
                       <td className="py-2 px-2 text-center">
@@ -1351,7 +1351,7 @@ export default function FabricGRNDetailPage() {
                             type="text"
                             value={r.dia}
                             onChange={(e) => updateRoll(rIdx, 'dia', e.target.value)}
-                            className="w-16 text-xs text-center border border-slate-300 rounded px-1 py-0.5"
+                            className="w-16 text-xs text-center border border-surface-input rounded px-1 py-0.5"
                           />
                         ) : (
                           <span>{r.dia}</span>
@@ -1367,7 +1367,7 @@ export default function FabricGRNDetailPage() {
                             type="text"
                             value={r.shade}
                             onChange={(e) => updateRoll(rIdx, 'shade', e.target.value)}
-                            className="w-20 text-xs border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-20 text-xs border border-surface-input rounded px-1.5 py-0.5"
                           />
                         ) : (
                           <span>{r.shade}</span>
@@ -1379,10 +1379,10 @@ export default function FabricGRNDetailPage() {
                             type="text"
                             value={r.location_bin}
                             onChange={(e) => updateRoll(rIdx, 'location_bin', e.target.value)}
-                            className="w-20 text-xs tabular-nums border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-20 text-xs tabular-nums border border-surface-input rounded px-1.5 py-0.5"
                           />
                         ) : (
-                          <span className="tabular-nums text-slate-700">{r.location_bin || '—'}</span>
+                          <span className="tabular-nums text-ink">{r.location_bin || '—'}</span>
                         )}
                       </td>
                       <td className="py-2 px-2 text-center">
@@ -1423,17 +1423,17 @@ export default function FabricGRNDetailPage() {
                             value={r.remarks || ''}
                             onChange={(e) => updateRoll(rIdx, 'remarks', e.target.value)}
                             placeholder="Roll notes..."
-                            className="w-28 text-xs border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-28 text-xs border border-surface-input rounded px-1.5 py-0.5"
                           />
                         ) : (
-                          <span className="text-slate-500 text-caption">{r.remarks || '—'}</span>
+                          <span className="text-ink-secondary text-caption">{r.remarks || '—'}</span>
                         )}
                       </td>
                       {isNew && (
                         <td className="py-2 px-2 text-center">
                           <button
                             onClick={() => removeRoll(rIdx)}
-                            className="p-1 text-slate-400 hover:text-red-600 rounded"
+                            className="p-1 text-ink-muted hover:text-red-600 rounded"
                           >
                             <Trash2 size={13} />
                           </button>

@@ -36,17 +36,17 @@ function BillList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
       <div className="card overflow-x-auto">
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['Bill no', 'Date', 'Supplier / Vendor', 'Party bill', 'Lines', 'Gross', 'Recovery', 'GST', 'Net', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/Gross|Recovery|GST|Net|Lines/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['Bill no', 'Date', 'Supplier / Vendor', 'Party bill', 'Lines', 'Gross', 'Recovery', 'GST', 'Net', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/Gross|Recovery|GST|Net|Lines/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {(list.data ?? []).map((b) => (
-                <tr key={b.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(b.id)}>
+                <tr key={b.id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => onOpen(b.id)}>
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{b.bill_no}</td><td className="px-3 py-2">{fmtDate(b.bill_date)}</td><td className="px-3 py-2">{b.vendor_name}</td>
                   <td className="px-3 py-2">{b.party_bill_no || '—'}</td><td className="px-3 py-2 text-right">{b.line_count}</td><td className="px-3 py-2 text-right">{money(b.gross_amount)}</td>
                   <td className="px-3 py-2 text-right text-red-700">{n(b.recovery_amount) ? `− ${money(b.recovery_amount)}` : '—'}</td><td className="px-3 py-2 text-right">{money(b.gst_amount)}</td>
                   <td className="px-3 py-2 text-right font-semibold">{money(b.net_amount)}</td><td className="px-3 py-2"><FpStatus value={b.status} /></td>
                 </tr>
               ))}
-              {!(list.data ?? []).length && <tr><td colSpan={10} className="px-3 py-10 text-center text-slate-400">No contractor bills yet</td></tr>}
+              {!(list.data ?? []).length && <tr><td colSpan={10} className="px-3 py-10 text-center text-ink-muted">No contractor bills yet</td></tr>}
             </tbody>
           </table>
         )}
@@ -75,15 +75,15 @@ function BillView({ id, onBack }: { id: number; onBack: () => void }) {
     <div>
       <FpTitle no={6} title={`Contractor Bill — ${b.bill_no}`} sub={`${b.vendor_name} · ${fmtDate(b.bill_date)}${b.party_bill_no ? ` · party bill ${b.party_bill_no}` : ''}`}
         actions={<><FpStatus value={b.status} />{b.status === 'POSTED' && can('FABRIC_PROCESS.BILL_CANCEL') && <Button variant="danger" onClick={cancel}><Ban size={14} className="mr-1" /> Cancel bill</Button>}<Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
-      <div className="card mb-3 grid grid-cols-2 gap-2 p-3 text-xs md:grid-cols-6">{processBillFacts(b).map(([k, v]) => <div key={k}><div className="text-slate-500">{k}</div><div className="font-semibold">{String(v)}</div></div>)}</div>
+      <div className="card mb-3 grid grid-cols-2 gap-2 p-3 text-xs md:grid-cols-6">{processBillFacts(b).map(([k, v]) => <div key={k}><div className="text-ink-secondary">{k}</div><div className="font-semibold">{String(v)}</div></div>)}</div>
       <div className="card overflow-x-auto p-2">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'Doc no', 'Date', 'Our DC', 'Party challan', 'Vehicle', 'Job', 'Process', 'Qty KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 tabular-nums">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 tabular-nums">{l.dc_no || '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.sub_process}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{money(l.rate)}</td><td className={`px-2 py-1 text-right ${n(l.amount) < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td></tr>)}</tbody>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['Type', 'Doc no', 'Date', 'Our DC', 'Party challan', 'Vehicle', 'Job', 'Process', 'Qty KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-surface-divider"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 tabular-nums">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 tabular-nums">{l.dc_no || '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.sub_process}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{money(l.rate)}</td><td className={`px-2 py-1 text-right ${n(l.amount) < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td></tr>)}</tbody>
         </table>
-        <div className="mt-2 border-t border-slate-100 pt-2"><ProcessBillTotalsView b={b} /></div>
+        <div className="mt-2 border-t border-surface-divider pt-2"><ProcessBillTotalsView b={b} /></div>
       </div>
-      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-caption text-slate-600">{b.remarks}</pre>}
+      {b.remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-caption text-ink-secondary">{b.remarks}</pre>}
     </div>
   );
 }

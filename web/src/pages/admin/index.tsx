@@ -61,7 +61,7 @@ export function UsersPage() {
           { key: 'username', header: 'Username', sortable: true,
             render: (r: any) => <span className="tabular-nums text-small font-medium text-brand-700">{r.username}</span> },
           { key: 'full_name', header: 'Full name', sortable: true,
-            render: (r: any) => <span className="font-medium text-slate-800">{r.full_name}</span> },
+            render: (r: any) => <span className="font-medium text-ink">{r.full_name}</span> },
           { key: 'email', header: 'Email' },
           { key: 'roles', header: 'Roles',
             render: (r: any) => <div className="flex flex-wrap gap-1">
@@ -76,12 +76,12 @@ export function UsersPage() {
             render: (r: any) => (
               <div className="flex justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                 {can('USER.UPDATE') && (
-                  <button onClick={() => openEdit(r)} className="rounded-md p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-600">
+                  <button onClick={() => openEdit(r)} className="rounded-md p-1.5 text-ink-muted hover:bg-brand-50 hover:text-brand-600">
                     <Pencil size={14} />
                   </button>
                 )}
                 {can('USER.DELETE') && (
-                  <button onClick={() => setDeleting(r.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600">
+                  <button onClick={() => setDeleting(r.id)} className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600">
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -201,12 +201,12 @@ export function RolesPage() {
               {(roles.data ?? []).map((r: any) => (
                 <tr key={r.id} className="row-hover cursor-pointer" onClick={() => void openEdit(r)}>
                   <td className="td"><span className="tabular-nums text-small font-medium text-brand-700">{r.role_code}</span></td>
-                  <td className="td font-medium text-slate-800">{r.role_name}</td>
+                  <td className="td font-medium text-ink">{r.role_name}</td>
                   <td className="td"><Badge tone="blue">{r.permission_count ?? 0} permissions</Badge></td>
                   <td className="td">{r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>}</td>
                   <td className="td text-right">
                     <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => void openEdit(r)} className="rounded-md p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-600">
+                      <button onClick={() => void openEdit(r)} className="rounded-md p-1.5 text-ink-muted hover:bg-brand-50 hover:text-brand-600">
                         <Pencil size={14} />
                       </button>
                     </div>
@@ -472,9 +472,9 @@ export function CompanyPage() {
                 header: 'Legal Entity & Trade Name',
                 render: (r: any) => (
                   <div>
-                    <span className="font-semibold text-slate-900">{r.legal_name}</span>
+                    <span className="font-semibold text-ink">{r.legal_name}</span>
                     {r.trade_name && (
-                      <span className="block text-small text-slate-500">{r.trade_name}</span>
+                      <span className="block text-small text-ink-secondary">{r.trade_name}</span>
                     )}
                   </div>
                 ),
@@ -485,11 +485,11 @@ export function CompanyPage() {
                 render: (r: any) => (
                   <div className="tabular-nums text-small">
                     {r.gstin ? (
-                      <span className="font-medium text-slate-800">{r.gstin}</span>
+                      <span className="font-medium text-ink">{r.gstin}</span>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-ink-muted">—</span>
                     )}
-                    {r.pan && <span className="block text-caption text-slate-500">PAN: {r.pan}</span>}
+                    {r.pan && <span className="block text-caption text-ink-secondary">PAN: {r.pan}</span>}
                   </div>
                 ),
               },
@@ -497,7 +497,7 @@ export function CompanyPage() {
                 key: 'location',
                 header: 'Location',
                 render: (r: any) => (
-                  <span className="text-small text-slate-600">
+                  <span className="text-small text-ink-secondary">
                     {[r.city, r.state].filter(Boolean).join(', ') || '—'}
                   </span>
                 ),
@@ -593,7 +593,7 @@ export function CompanyPage() {
         <div className="card p-5">
           <div className="mb-4 flex items-center gap-2 border-b border-surface-border pb-3">
             <Building2 size={18} className="text-brand-600" />
-            <h3 className="text-body-lg font-semibold text-slate-900">
+            <h3 className="text-body-lg font-semibold text-ink">
               Editing: {company?.legal_name} ({company?.company_code})
             </h3>
           </div>
@@ -653,7 +653,7 @@ export function CompanyPage() {
         <div className="space-y-4 py-1">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="label font-semibold text-slate-800">Company Code * (e.g. TEX02)</label>
+              <label className="label font-semibold text-ink">Company Code * (e.g. TEX02)</label>
               <input
                 className="input tabular-nums font-bold uppercase"
                 placeholder="e.g. TEX02"
@@ -663,7 +663,7 @@ export function CompanyPage() {
               />
             </div>
             <div>
-              <label className="label font-semibold text-slate-800">Legal Name *</label>
+              <label className="label font-semibold text-ink">Legal Name *</label>
               <input
                 className="input"
                 placeholder="e.g. Kongu Apparels Private Limited"
@@ -765,13 +765,13 @@ export function CompanyPage() {
           </div>
 
           {/* settings, process stages + operations, warehouses, FY, reference lists, calendar / T&A are always copied */}
-          <div className="rounded-xl border border-surface-border bg-slate-50 p-3" id="nc-copy-masters">
-            <label className="label !mb-1 font-semibold text-slate-800">Copy masters from this company</label>
-            <p className="mb-2 text-small text-slate-500">Configuration (settings, number series, roles, process stages &amp; operations, stores, financial year, T&amp;A) is always set up.</p>
+          <div className="rounded-xl border border-surface-border bg-surface-muted p-3" id="nc-copy-masters">
+            <label className="label !mb-1 font-semibold text-ink">Copy masters from this company</label>
+            <p className="mb-2 text-small text-ink-secondary">Configuration (settings, number series, roles, process stages &amp; operations, stores, financial year, T&amp;A) is always set up.</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {([['tax', 'Tax rates'], ['ledger', 'Ledger accounts'], ['colors', 'Colours'], ['sizeGroups', 'Size groups'],
                 ['gsm', 'GSM'], ['dia', 'Dia'], ['yarnCounts', 'Yarn counts'], ['compositions', 'Compositions']] as const).map(([k, label]) => (
-                <label key={k} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-small">
+                <label key={k} className="flex items-center gap-2 rounded-lg border border-surface-border bg-white px-2 py-1.5 text-small">
                   <input type="checkbox" checked={!!newCompany.copy_masters?.[k]}
                     onChange={(e) => setNewCompany({ ...newCompany, copy_masters: { ...(newCompany.copy_masters ?? {}), [k]: e.target.checked } })} />
                   {label}
@@ -781,8 +781,8 @@ export function CompanyPage() {
           </div>
 
           {allUsers.data && allUsers.data.length > 0 && (
-            <div className="mt-2 rounded-xl border border-surface-border bg-slate-50 p-3">
-              <label className="label !mb-2 font-semibold text-slate-800">
+            <div className="mt-2 rounded-xl border border-surface-border bg-surface-muted p-3">
+              <label className="label !mb-2 font-semibold text-ink">
                 Grant Initial Login Access To Users:
               </label>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 max-h-36 overflow-y-auto">
@@ -791,7 +791,7 @@ export function CompanyPage() {
                   return (
                     <label
                       key={u.id}
-                      className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-small border border-slate-200 cursor-pointer hover:bg-brand-50"
+                      className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-small border border-surface-border cursor-pointer hover:bg-brand-50"
                     >
                       <input
                         type="checkbox"
@@ -802,10 +802,10 @@ export function CompanyPage() {
                             : newCompany.assigned_user_ids.filter((id: number) => id !== u.id);
                           setNewCompany({ ...newCompany, assigned_user_ids: next });
                         }}
-                        className="rounded border-slate-300 text-brand-600 focus:ring-brand-500/30"
+                        className="rounded border-surface-input text-brand-600 focus:ring-brand-500/30"
                       />
-                      <span className="truncate font-medium text-slate-700">
-                        {u.full_name} <span className="tabular-nums text-slate-400">({u.username})</span>
+                      <span className="truncate font-medium text-ink">
+                        {u.full_name} <span className="tabular-nums text-ink-muted">({u.username})</span>
                       </span>
                     </label>
                   );
@@ -846,7 +846,7 @@ export function CompanyPage() {
                   key={u.id}
                   className={clsx(
                     'flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-colors',
-                    isChecked ? 'border-brand-500 bg-brand-50/50' : 'border-surface-border bg-white hover:bg-slate-50'
+                    isChecked ? 'border-brand-500 bg-brand-50/50' : 'border-surface-border bg-white hover:bg-surface-muted'
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -860,11 +860,11 @@ export function CompanyPage() {
                           setSelectedUserIds(selectedUserIds.filter((id) => id !== u.id));
                         }
                       }}
-                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/30"
+                      className="h-4 w-4 rounded border-surface-input text-brand-600 focus:ring-brand-500/30"
                     />
                     <div>
-                      <p className="text-body font-semibold text-slate-900">{u.full_name}</p>
-                      <p className="tabular-nums text-caption text-slate-500">@{u.username} {u.email ? `· ${u.email}` : ''}</p>
+                      <p className="text-body font-semibold text-ink">{u.full_name}</p>
+                      <p className="tabular-nums text-caption text-ink-secondary">@{u.username} {u.email ? `· ${u.email}` : ''}</p>
                     </div>
                   </div>
                   {isChecked && (
@@ -934,13 +934,13 @@ export function SettingsPage() {
               <div key={s.key} className="flex flex-wrap items-center gap-4 py-3.5 first:pt-0 last:pb-0" data-setting={s.key}>
                 <div className="min-w-0 flex-1">
                   <p className="tabular-nums text-body font-medium text-brand-700">{s.key}</p>
-                  {s.description && <p className="text-small text-slate-500">{s.description}</p>}
+                  {s.description && <p className="text-small text-ink-secondary">{s.description}</p>}
                 </div>
                 <div className="w-full sm:w-64">
                   {isFlag ? (
                     <button type="button" role="switch" aria-checked={on} disabled={!s.is_editable && s.is_editable !== undefined && s.is_editable !== null && Number(s.is_editable) === 0}
                       onClick={() => setVals((cur) => ({ ...cur, [s.key]: on ? '0' : '1' }))}
-                      className={`flex items-center gap-2 rounded-full px-1 py-1 pr-3 text-small font-semibold transition-colors ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      className={`flex items-center gap-2 rounded-full px-1 py-1 pr-3 text-small font-semibold transition-colors ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-header text-ink-secondary'}`}>
                       <span className={`h-5 w-9 rounded-full p-0.5 transition-colors ${on ? 'bg-emerald-500' : 'bg-slate-300'}`}>
                         <span className={`block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
                       </span>
@@ -1015,7 +1015,7 @@ export function MenuAccessPage() {
         </div>
         <SearchInput value={find} onChange={setFind} placeholder="Find a screen…" className="w-72" />
       </div>
-      {!roleId ? <div className="card p-6 text-body text-slate-500">Choose a role to see its menu.</div>
+      {!roleId ? <div className="card p-6 text-body text-ink-secondary">Choose a role to see its menu.</div>
         : current.isLoading ? <div className="card"><LoadingBlock rows={6} /></div> : (
         <div className="space-y-3" id="ma-list">
           {NAV.map((sec) => {
@@ -1023,22 +1023,22 @@ export function MenuAccessPage() {
             if (!items.length) return null;
             return (
               <div key={sec.label} className="card p-4">
-                <h3 className="mb-2 text-small font-semibold uppercase tracking-wider text-slate-500">{sec.label}</h3>
+                <h3 className="mb-2 text-small font-semibold uppercase tracking-wider text-ink-secondary">{sec.label}</h3>
                 <div className="divide-y divide-surface-border">
                   {items.map((i) => {
                     const m = modes[i.to] ?? '';
                     return (
                       <div key={i.to} className="flex flex-wrap items-center gap-3 py-2" data-menu-path={i.to}>
                         <div className="min-w-0 flex-1">
-                          <p className="text-body font-medium text-slate-800">{i.label}
+                          <p className="text-body font-medium text-ink">{i.label}
                             {i.hidden && <Badge tone="slate" className="ml-2">hidden by default</Badge>}</p>
-                          <p className="tabular-nums text-caption text-slate-400">{i.to} · needs {i.perms.join(' or ')}</p>
+                          <p className="tabular-nums text-caption text-ink-muted">{i.to} · needs {i.perms.join(' or ')}</p>
                         </div>
                         <div className="flex overflow-hidden rounded-lg border border-surface-border text-small">
                           {([['', 'Default'], ['SHOW', 'Show'], ['HIDE', 'Hide']] as const).map(([v, label]) => (
                             <button key={v} type="button" data-mode={v || 'DEFAULT'}
                               onClick={() => setModes((cur) => ({ ...cur, [i.to]: v }))}
-                              className={`px-3 py-1 ${m === v ? (v === 'HIDE' ? 'bg-red-600 text-white' : v === 'SHOW' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white') : 'text-slate-600 hover:bg-slate-50'}`}>
+                              className={`px-3 py-1 ${m === v ? (v === 'HIDE' ? 'bg-red-600 text-white' : v === 'SHOW' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white') : 'text-ink-secondary hover:bg-surface-muted'}`}>
                               {label}
                             </button>
                           ))}

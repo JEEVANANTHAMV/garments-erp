@@ -60,14 +60,14 @@ export default function Login() {
   return (
     <div className="flex min-h-screen bg-white">
       {/* Brand panel (Pure White / Light Canvas Enterprise Showcase) */}
-      <div className="relative hidden w-1/2 flex-col justify-between border-r border-surface-border bg-surface-canvas p-12 text-slate-900 lg:flex">
+      <div className="relative hidden w-1/2 flex-col justify-between border-r border-surface-border bg-surface-canvas p-12 text-ink lg:flex">
         <div className="relative flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 border border-brand-200/80 text-brand-700 shadow-subtle">
             <Factory size={22} />
           </div>
           <div>
-            <p className="text-title font-bold text-slate-900 tracking-tight">Garment Manufacturing ERP</p>
-            <p className="text-xs text-slate-500">Tiruppur Export House Edition</p>
+            <p className="text-title font-bold text-ink tracking-tight">Garment Manufacturing ERP</p>
+            <p className="text-xs text-ink-secondary">Tiruppur Export House Edition</p>
           </div>
         </div>
 
@@ -76,23 +76,23 @@ export default function Login() {
             <span className="h-1.5 w-1.5 rounded-full bg-brand-600" />
             Next-Gen Enterprise Platform
           </div>
-          <h2 className="text-3xl font-bold leading-tight tracking-tight text-slate-900">
+          <h2 className="text-3xl font-bold leading-tight tracking-tight text-ink">
             From buyer enquiry<br />to bill of lading.
           </h2>
-          <p className="mt-4 text-body-lg leading-relaxed text-slate-600">
+          <p className="mt-4 text-body-lg leading-relaxed text-ink-secondary">
             One connected system across sampling, costing, orders, MRP, procurement,
             production, quality, packing, export documentation and finance.
           </p>
           <div className="mt-8 grid grid-cols-3 gap-3 border-t border-surface-border pt-6">
             {[['111', 'Tables'], ['15', 'Modules'], ['133', 'Permissions']].map(([n, l]) => (
               <div key={l} className="rounded-xl border border-surface-border bg-white p-3.5 shadow-subtle">
-                <p className="text-xl font-bold text-slate-900">{n}</p>
-                <p className="text-caption font-semibold uppercase tracking-wider text-slate-400 mt-0.5">{l}</p>
+                <p className="text-xl font-bold text-ink">{n}</p>
+                <p className="text-caption font-semibold uppercase tracking-wider text-ink-muted mt-0.5">{l}</p>
               </div>
             ))}
           </div>
         </div>
-        <p className="relative text-caption text-slate-400">
+        <p className="relative text-caption text-ink-muted">
           © {new Date().getFullYear()} Garment ERP · Built for export manufacturing
         </p>
       </div>
@@ -104,7 +104,7 @@ export default function Login() {
             <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-brand-50 border border-brand-200/80 text-brand-700 shadow-subtle">
               <Factory size={22} />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Garment ERP</h1>
+            <h1 className="text-xl font-bold tracking-tight text-ink">Garment ERP</h1>
           </div>
 
           {companiesToSelect ? (
@@ -112,8 +112,8 @@ export default function Login() {
             <div className="animate-fade-in">
               <div className="mb-6 flex items-center justify-between">
                 <div>
-                  <h2 className="text-page font-semibold tracking-tight text-slate-900">Select Company</h2>
-                  <p className="mt-1 text-body text-slate-500">
+                  <h2 className="text-page font-semibold tracking-tight text-ink">Select Company</h2>
+                  <p className="mt-1 text-body text-ink-secondary">
                     Choose which company / GST entity you want to enter:
                   </p>
                 </div>
@@ -143,16 +143,16 @@ export default function Login() {
                           <Building2 size={20} />
                         </div>
                         <div>
-                          <p className="text-body-lg font-semibold text-slate-900 group-hover:text-brand-700">
+                          <p className="text-body-lg font-semibold text-ink group-hover:text-brand-700">
                             {comp.legal_name}
                           </p>
                           {comp.trade_name && (
-                            <p className="text-small font-medium text-slate-600">
+                            <p className="text-small font-medium text-ink-secondary">
                               {comp.trade_name}
                             </p>
                           )}
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-caption text-slate-500">
-                            <span className="rounded bg-slate-100 px-1.5 py-0.5 tabular-nums font-medium text-slate-700">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-caption text-ink-secondary">
+                            <span className="rounded bg-surface-header px-1.5 py-0.5 tabular-nums font-medium text-ink">
                               {comp.company_code}
                             </span>
                             {comp.gstin && (
@@ -163,7 +163,7 @@ export default function Login() {
                           </div>
                         </div>
                       </div>
-                      <div className="ml-2 text-slate-400 group-hover:text-brand-600">
+                      <div className="ml-2 text-ink-muted group-hover:text-brand-600">
                         {isBusy ? <Spinner size={18} /> : <ArrowRight size={18} />}
                       </div>
                     </button>
@@ -174,7 +174,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => { setCompaniesToSelect(null); setError(null); }}
-                className="mt-6 flex items-center gap-1.5 text-body font-medium text-slate-500 hover:text-slate-800"
+                className="mt-6 flex items-center gap-1.5 text-body font-medium text-ink-secondary hover:text-ink"
               >
                 <ArrowLeft size={15} /> Back to credentials
               </button>
@@ -182,8 +182,8 @@ export default function Login() {
           ) : (
             /* Standard Login Form */
             <>
-              <h2 className="text-page font-semibold tracking-tight text-slate-900">Sign in</h2>
-              <p className="mt-1 text-body text-slate-500">Enter your credentials to continue.</p>
+              <h2 className="text-page font-semibold tracking-tight text-ink">Sign in</h2>
+              <p className="mt-1 text-body text-ink-secondary">Enter your credentials to continue.</p>
 
               <form onSubmit={submit} className="mt-6 space-y-4">
                 {error && (
@@ -206,7 +206,7 @@ export default function Login() {
                       value={password} autoComplete="current-password"
                       onChange={(e) => setPassword(e.target.value)} required />
                     <button type="button" onClick={() => setShowPw((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink-secondary"
                       aria-label={showPw ? 'Hide password' : 'Show password'}>
                       {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -219,7 +219,7 @@ export default function Login() {
               </form>
 
               <div className="mt-7 rounded-xl border border-surface-border bg-white p-3.5">
-                <p className="mb-2 text-caption font-semibold uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-caption font-semibold uppercase tracking-wide text-ink-secondary">
                   Demo accounts · password <code className="font-mono text-brand-700">Admin@123</code>
                 </p>
                 <div className="grid grid-cols-2 gap-1">
@@ -228,7 +228,7 @@ export default function Login() {
                       onClick={() => { setUsername(u); setPassword('Admin@123'); setError(null); }}
                       className="rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-brand-50">
                       <span className="block tabular-nums text-small font-medium text-brand-700">{u}</span>
-                      <span className="block text-caption text-slate-500">{role}</span>
+                      <span className="block text-caption text-ink-secondary">{role}</span>
                     </button>
                   ))}
                 </div>

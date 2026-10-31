@@ -166,13 +166,13 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
         <div className="flex justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
           {can(`${cfg.permission}.UPDATE`) && (
             <button onClick={() => openEdit(row)} title="Edit"
-              className="rounded-md p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-700 transition-colors">
+              className="rounded-md p-1.5 text-ink-muted hover:bg-brand-50 hover:text-brand-700 transition-colors">
               <Pencil size={14} />
             </button>
           )}
           {can(`${cfg.permission}.DELETE`) && (
             <button onClick={() => setDeleting(row)} title="Delete"
-              className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+              className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600 transition-colors">
               <Trash2 size={14} />
             </button>
           )}

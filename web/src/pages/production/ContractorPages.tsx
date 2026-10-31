@@ -136,8 +136,8 @@ export function JobRateCardPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Production Costing – Rate Fixing</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-2xl font-bold text-ink">Production Costing – Rate Fixing</h1>
+        <p className="text-sm text-ink-secondary">
           Production fixes the rate of every process of a job — cutting, each stitching operation, checking, ironing, packing, printing / embroidery —
           then submits it and the production head <b>approves &amp; locks</b> it. Once locked, every Process DC (contractor and in-house),
           contractor bill and production costing of the job uses only these rates; a change needs <b>Revise</b> with a reason.
@@ -167,7 +167,7 @@ export function JobRateCardPage() {
               <Calculator size={14} className="mr-1 inline" />Load rates from costing
             </Button>
           </div>
-          <p className="px-3 pb-2 text-caption text-slate-500">
+          <p className="px-3 pb-2 text-caption text-ink-secondary">
             "Load rates from costing" takes the rate per piece of each operation from the style's approved pre-costing
             (Cutting and Processes: the row rate · Sewing SMV rows only when the costing used detailed SMV — a merchandiser's
             flat CMT rate is compared in Variance instead). Production enters SMV here: rate = SMV × the job's ₹ / min.
@@ -175,7 +175,7 @@ export function JobRateCardPage() {
           {loaded && status && (
             <div id="rc-status" data-status={status.status ?? ''} className={`mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-lg border p-2.5 text-xs ${locked ? 'border-emerald-200 bg-emerald-50' : status.status === 'SUBMITTED' ? 'border-sky-200 bg-sky-50' : 'border-amber-200 bg-amber-50'}`}>
               <CardBadge status={status.status} rev={status.revision_no} />
-              <span className="text-slate-700">
+              <span className="text-ink">
                 {locked ? <>Locked by <b>{status.locked_by ?? '—'}</b> on {fmtDate(status.locked_at)} · <b>₹{num(status.total_rate).toFixed(2)} / PCS</b> over {status.operations} operation(s), all processes</>
                   : status.status === 'SUBMITTED' ? <>Submitted by <b>{status.submitted_by ?? '—'}</b> on {fmtDate(status.submitted_at)} — waiting for approval</>
                     : status.status ? <>Draft — rates can be changed; submit when ready</> : <>No rates fixed for this job yet</>}
@@ -196,14 +196,14 @@ export function JobRateCardPage() {
             </div>
           )}
           {loaded && (
-            <div id="rc-settings" className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs">
+            <div id="rc-settings" className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-surface-border bg-surface-muted p-2.5 text-xs">
               <div>
-                <label className="block text-caption font-semibold text-slate-600">₹ per standard minute</label>
+                <label className="block text-caption font-semibold text-ink-secondary">₹ per standard minute</label>
                 <input id="rc-cpm" type="number" min={0} step="0.01" disabled={locked} className="input h-8 w-28 text-right text-xs" value={cfg.cpm}
                   placeholder="e.g. 1.20" onChange={(ev) => setCfg((c) => ({ ...c, cpm: ev.target.value }))} />
               </div>
               <div>
-                <label className="block text-caption font-semibold text-slate-600">Production overhead</label>
+                <label className="block text-caption font-semibold text-ink-secondary">Production overhead</label>
                 <div className="flex gap-1">
                   <select id="rc-oh-basis" disabled={locked} className="input !h-8 !py-0 w-32 text-xs" value={cfg.ohBasis}
                     onChange={(ev) => setCfg((c) => ({ ...c, ohBasis: ev.target.value as any }))}>
@@ -216,7 +216,7 @@ export function JobRateCardPage() {
                 </div>
               </div>
               {!locked && <Button size="sm" variant="secondary" id="rc-cfg-save" loading={cfgBusy} onClick={saveCfg}><Save size={12} className="mr-1 inline" />Save settings</Button>}
-              <span className="ml-auto text-slate-600" id="rc-cfg-summary">
+              <span className="ml-auto text-ink-secondary" id="rc-cfg-summary">
                 {status?.total_smv ? <>Total SMV <b>{num(status.total_smv).toFixed(2)}</b> min · </> : null}
                 Overhead <b>{status?.overhead_pc != null ? `₹${num(status.overhead_pc).toFixed(2)} / PCS` : 'not set'}</b>
                 {status?.in_revision && status.in_force_overhead_pc != null && status.in_force_overhead_pc !== status.overhead_pc
@@ -227,7 +227,7 @@ export function JobRateCardPage() {
           {loaded && (
             <>
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500"><tr>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>
                   <th className="w-8 px-3 py-2" /><th className="px-3 py-2 text-left">Operation</th>
                   <th className="px-3 py-2 text-right">Master rate</th>
                   <th className="px-3 py-2 text-right" title="Standard minutes — rate = SMV × ₹ / min">SMV</th>
@@ -238,10 +238,10 @@ export function JobRateCardPage() {
                     const e = edit[o.operation_id] ?? { on: false, rate: '', smv: '', remarks: '' };
                     const bySmv = e.smv !== '';
                     return (
-                      <tr key={o.operation_id} className={`border-t border-slate-100 ${e.on ? 'bg-brand-50/40' : ''}`}>
+                      <tr key={o.operation_id} className={`border-t border-surface-divider ${e.on ? 'bg-brand-50/40' : ''}`}>
                         <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={e.on} disabled={locked} onChange={() => setEdit((c) => ({ ...c, [o.operation_id]: { ...e, on: !e.on } }))} /></td>
-                        <td className="px-3 py-1.5 font-medium">{o.op_name} <span className="text-slate-400">{o.op_code}</span></td>
-                        <td className="px-3 py-1.5 text-right text-slate-500">{num(o.default_rate).toFixed(2)}</td>
+                        <td className="px-3 py-1.5 font-medium">{o.op_name} <span className="text-ink-muted">{o.op_code}</span></td>
+                        <td className="px-3 py-1.5 text-right text-ink-secondary">{num(o.default_rate).toFixed(2)}</td>
                         <td className="px-3 py-1.5 text-right">
                           <input type="number" min={0} step="0.01" disabled={!e.on || locked} className="input h-7 w-20 text-right text-xs" value={e.smv}
                             data-smv-op={o.operation_id} placeholder="—"
@@ -265,10 +265,10 @@ export function JobRateCardPage() {
                       </tr>
                     );
                   })}
-                  {!rows.length && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">This process has no operations — add them in Process & Operations.</td></tr>}
+                  {!rows.length && <tr><td colSpan={6} className="px-3 py-6 text-center text-ink-muted">This process has no operations — add them in Process & Operations.</td></tr>}
                 </tbody>
               </table>
-              <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between border-t border-surface-border px-3 py-2 text-sm">
                 <span>{Object.values(edit).filter((e) => e.on).length} operation(s){totalSmv ? ` · ${totalSmv.toFixed(2)} SMV` : ''} · <b>₹{total.toFixed(2)} / PCS</b> for {ioNo}</span>
                 {locked
                   ? <span className="text-xs font-semibold text-emerald-700"><Lock size={12} className="mr-1 inline" />Locked — use Revise to change</span>
@@ -297,21 +297,21 @@ export function JobRateCardPage() {
         <Modal open onClose={() => setShowHistory(false)} size="lg" icon={<History size={18} />} title="Rate card history" subtitle={`${ioNo} · revision ${status.revision_no}`}
           footer={<Button variant="secondary" onClick={() => setShowHistory(false)}>Close</Button>}>
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>
               <th className="px-2 py-2 text-left">When</th><th className="px-2 py-2 text-left">Action</th><th className="px-2 py-2 text-right">Rev</th>
               <th className="px-2 py-2 text-left">By</th><th className="px-2 py-2 text-right">₹ / PCS</th><th className="px-2 py-2 text-left">Reason / rates</th>
             </tr></thead>
             <tbody>
               {status.history.map((h) => (
-                <tr key={h.id} className="border-t border-slate-100 align-top">
+                <tr key={h.id} className="border-t border-surface-divider align-top">
                   <td className="px-2 py-1.5 whitespace-nowrap">{fmtDate(h.created_at)}</td>
                   <td className="px-2 py-1.5"><Badge tone={h.action === 'LOCK' ? 'green' : h.action === 'REVISE' ? 'amber' : h.action === 'REJECT' ? 'red' : 'blue'}>{{ SUBMIT: 'Submitted', LOCK: 'Approved & locked', REJECT: 'Sent back', REVISE: 'Revised' }[h.action]}</Badge></td>
                   <td className="px-2 py-1.5 text-right">{h.revision_no}</td>
                   <td className="px-2 py-1.5">{h.by_name ?? '—'}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{num(h.total_rate).toFixed(2)}</td>
                   <td className="px-2 py-1.5">
-                    {h.reason && <div className="font-medium text-slate-700">{h.reason}</div>}
-                    <div className="text-caption text-slate-500">{h.rates.map((r) => `${r.op_name} ${num(r.rate).toFixed(2)}`).join(' · ')}</div>
+                    {h.reason && <div className="font-medium text-ink">{h.reason}</div>}
+                    <div className="text-caption text-ink-secondary">{h.rates.map((r) => `${r.op_name} ${num(r.rate).toFixed(2)}`).join(' · ')}</div>
                   </td>
                 </tr>
               ))}
@@ -348,15 +348,15 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
     api.get('/job-rate-cards/variance', { params: { io_no: ioNo } }).then((r) => setD(r.data.data)).catch((e) => { toast(errMsg(e), 'error'); onClose(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ioNo]);
-  const rate = (v: number | null | undefined) => (v == null ? <span className="text-slate-400">—</span> : num(v).toFixed(2));
-  const vr = (v: number | null | undefined) => (v == null ? <span className="text-slate-400">—</span>
-    : <span className={v > 0.00005 ? 'text-rose-600' : v < -0.00005 ? 'text-emerald-600' : 'text-slate-500'}>{v > 0 ? '+' : ''}{num(v).toFixed(2)}</span>);
+  const rate = (v: number | null | undefined) => (v == null ? <span className="text-ink-muted">—</span> : num(v).toFixed(2));
+  const vr = (v: number | null | undefined) => (v == null ? <span className="text-ink-muted">—</span>
+    : <span className={v > 0.00005 ? 'text-rose-600' : v < -0.00005 ? 'text-emerald-600' : 'text-ink-secondary'}>{v > 0 ? '+' : ''}{num(v).toFixed(2)}</span>);
   const t = d?.totals;
   return (
     <Modal open onClose={onClose} size="xl" icon={<Scale size={18} />} title="Merchandiser vs Production vs Actual"
       subtitle={d ? `${ioNo} · order ${fmtNumber(d.order_qty)} PCS · ${d.costing ? `costing ${d.costing.costing_no} v${d.costing.version} (${d.costing.status})` : 'no pre-costing'} · rate card ${d.card.status ? `${d.card.status.toLowerCase()}${d.card.revision_no ? ` rev ${d.card.revision_no}` : ''}` : 'not set'}` : ioNo}
       footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
-      {!d ? <p className="p-4 text-sm text-slate-500">Loading…</p> : (
+      {!d ? <p className="p-4 text-sm text-ink-secondary">Loading…</p> : (
         <div className="space-y-3" id="rc-variance-table">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {[
@@ -365,10 +365,10 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               ['Actual ₹ / PCS (card operations)', t.actual_rate_pc, `all DCs of the job: ₹${num(t.actual_rate_pc_all).toFixed(2)} / PCS · ${money(t.actual_amount)} on received PCS`],
               ['Actual − Production', t.var_actual_vs_prod_amount, `carded operations, received PCS: ${money(t.actual_amount_on_card)} vs ${money(t.prod_amount_on_received)}`],
             ].map(([l, v, sub], i) => (
-              <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                <div className="text-caption font-semibold uppercase text-slate-500">{l as string}</div>
-                <div className={`text-lg font-bold ${i === 3 ? (num(v) > 0 ? 'text-rose-600' : 'text-emerald-600') : 'text-slate-800'}`}>{i === 3 ? money(v) : `₹${num(v).toFixed(2)}`}</div>
-                <div className="text-caption text-slate-500">{sub as string}</div>
+              <div key={i} className="rounded-lg border border-surface-border bg-surface-muted p-2.5">
+                <div className="text-caption font-semibold uppercase text-ink-secondary">{l as string}</div>
+                <div className={`text-lg font-bold ${i === 3 ? (num(v) > 0 ? 'text-rose-600' : 'text-emerald-600') : 'text-ink'}`}>{i === 3 ? money(v) : `₹${num(v).toFixed(2)}`}</div>
+                <div className="text-caption text-ink-secondary">{sub as string}</div>
               </div>
             ))}
           </div>
@@ -381,7 +381,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               </tr></thead>
               <tbody>
                 {d.groups.map((g: any) => (
-                  <tr key={g.key} data-group={g.key} className="border-t border-slate-100">
+                  <tr key={g.key} data-group={g.key} className="border-t border-surface-divider">
                     <td className="px-2 py-1.5 font-medium" title={g.operations?.length ? `Production operations: ${g.operations.join(', ')}` : ''}>{g.label}</td>
                     <td className="px-2 py-1.5 text-right">{rate(g.merch_rate)}</td>
                     <td className="px-2 py-1.5 text-right font-semibold">{rate(g.prod_rate)}</td>
@@ -395,7 +395,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
           )}
           {t.off_card_rows > 0 && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{t.off_card_rows} DC operation(s) of this job are not on its rate card — add them so production has a rate to compare.</p>}
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>
               <th className="px-2 py-2 text-left">Process</th><th className="px-2 py-2 text-left">Operation</th>
               <th className="px-2 py-2 text-right">Merch</th><th className="px-2 py-2 text-right">Production</th><th className="px-2 py-2 text-right">Actual</th>
               <th className="px-2 py-2 text-right" title="Production − merchandiser">Prod − Merch</th><th className="px-2 py-2 text-right" title="Actual − production">Actual − Prod</th>
@@ -403,22 +403,22 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
             </tr></thead>
             <tbody>
               {d.rows.map((r: any, i: number) => (
-                <tr key={i} className={`border-t border-slate-100 ${r.off_card ? 'bg-amber-50/60' : ''}`}>
-                  <td className="px-2 py-1.5 text-slate-500">{r.stage_name}</td>
-                  <td className="px-2 py-1.5 font-medium" title={r.dcs.length ? `DCs: ${r.dcs.join(', ')}` : ''}>{r.op_name}{r.inhouse_dcs > 0 && <span className="ml-1 text-micro text-slate-400">in-house</span>}</td>
+                <tr key={i} className={`border-t border-surface-divider ${r.off_card ? 'bg-amber-50/60' : ''}`}>
+                  <td className="px-2 py-1.5 text-ink-secondary">{r.stage_name}</td>
+                  <td className="px-2 py-1.5 font-medium" title={r.dcs.length ? `DCs: ${r.dcs.join(', ')}` : ''}>{r.op_name}{r.inhouse_dcs > 0 && <span className="ml-1 text-micro text-ink-muted">in-house</span>}</td>
                   <td className="px-2 py-1.5 text-right">{rate(r.merch_rate)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{rate(r.prod_rate)}{r.draft_rate != null && r.draft_rate !== r.prod_rate && <div className="text-micro font-normal text-amber-700" title="Rate of the pending revision — not in force yet">draft {num(r.draft_rate).toFixed(2)}</div>}</td>
                   <td className="px-2 py-1.5 text-right">{rate(r.actual_rate)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_prod_vs_merch)}</td>
                   <td className="px-2 py-1.5 text-right font-semibold">{vr(r.var_actual_vs_prod)}</td>
-                  <td className="px-2 py-1.5 text-right text-slate-500">{r.issued_qty ? `${fmtNumber(r.issued_qty)} / ${fmtNumber(r.received_qty)}` : '—'}</td>
+                  <td className="px-2 py-1.5 text-right text-ink-secondary">{r.issued_qty ? `${fmtNumber(r.issued_qty)} / ${fmtNumber(r.received_qty)}` : '—'}</td>
                   <td className="px-2 py-1.5 text-right">{r.actual_rate == null && r.issued_qty ? <span className="text-amber-700" title="DC has no rate">no rate</span> : r.actual_amount ? money(r.actual_amount) : '—'}</td>
                 </tr>
               ))}
-              {!d.rows.length && <tr><td colSpan={9} className="px-2 py-6 text-center text-slate-400">No costing rows, rate card or DCs for this job yet.</td></tr>}
+              {!d.rows.length && <tr><td colSpan={9} className="px-2 py-6 text-center text-ink-muted">No costing rows, rate card or DCs for this job yet.</td></tr>}
             </tbody>
             {d.rows.length > 0 && (
-              <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold"><tr>
+              <tfoot className="border-t-2 border-surface-input bg-surface-muted font-bold"><tr>
                 <td className="px-2 py-2" colSpan={2}>Total / PCS</td>
                 <td className="px-2 py-2 text-right">{num(t.merch_rate_pc).toFixed(2)}</td>
                 <td className="px-2 py-2 text-right">{num(t.prod_rate_pc).toFixed(2)}</td>
@@ -429,7 +429,7 @@ function RateVarianceModal({ ioNo, onClose }: { ioNo: string; onClose: () => voi
               </tr></tfoot>
             )}
           </table>
-          <p className="text-caption text-slate-500">Merch = the style's pre-costing (sewing SMV × ₹ / min, cutting and process rows) · Production = this rate card · Actual = rate on the job's issued DCs, weighted by issued PCS; amount on received PCS. Variances count only operations that have both figures. + over, − under.</p>
+          <p className="text-caption text-ink-secondary">Merch = the style's pre-costing (sewing SMV × ₹ / min, cutting and process rows) · Production = this rate card · Actual = rate on the job's issued DCs, weighted by issued PCS; amount on received PCS. Variances count only operations that have both figures. + over, − under.</p>
         </div>
       )}
     </Modal>
@@ -489,8 +489,8 @@ function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button id="rc-costing-apply" loading={busy} disabled={!picked.length} onClick={apply}><Save size={13} className="mr-1 inline" />Apply {picked.length} rate(s)</Button>
       </>}>
-      {!data ? <p className="p-4 text-sm text-slate-500">Loading…</p>
-        : !c ? <p className="p-4 text-sm text-slate-500">No pre-costing found for the style of job {ioNo}. Save a pre-costing for the style first.</p>
+      {!data ? <p className="p-4 text-sm text-ink-secondary">Loading…</p>
+        : !c ? <p className="p-4 text-sm text-ink-secondary">No pre-costing found for the style of job {ioNo}. Save a pre-costing for the style first.</p>
           : (
             <div className="space-y-2">
               {c.flat_cmt && (
@@ -501,7 +501,7 @@ function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose
                 </p>
               )}
               <table className="w-full text-xs" id="rc-costing-preview">
-                <thead className="bg-slate-50 text-slate-500"><tr>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>
                   <th className="w-8 px-2 py-2" /><th className="px-2 py-2 text-left">Costing row</th><th className="px-2 py-2 text-left">Operation</th>
                   <th className="px-2 py-2 text-right">Costing rate</th><th className="px-2 py-2 text-right">Current card rate</th><th className="px-2 py-2 text-left">Action</th>
                 </tr></thead>
@@ -510,9 +510,9 @@ function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose
                     const op = opById.get(Number(map[i]) || 0);
                     const act = actionOf(r, i);
                     return (
-                      <tr key={i} className="border-t border-slate-100" data-action={act}>
+                      <tr key={i} className="border-t border-surface-divider" data-action={act}>
                         <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={!!on[i]} disabled={!op} onChange={() => setOn((m) => ({ ...m, [i]: !m[i] }))} /></td>
-                        <td className="px-2 py-1.5"><Badge tone={r.source === 'SEWING' ? 'blue' : r.source === 'CUTTING' ? 'violet' : 'slate'}>{r.source === 'SEWING' ? 'Sewing' : r.source === 'CUTTING' ? 'Cutting' : 'Process'}</Badge> <span className="font-medium">{r.name}</span>{r.smv != null && <span className="text-slate-400"> · {r.smv} SMV</span>}</td>
+                        <td className="px-2 py-1.5"><Badge tone={r.source === 'SEWING' ? 'blue' : r.source === 'CUTTING' ? 'violet' : 'slate'}>{r.source === 'SEWING' ? 'Sewing' : r.source === 'CUTTING' ? 'Cutting' : 'Process'}</Badge> <span className="font-medium">{r.name}</span>{r.smv != null && <span className="text-ink-muted"> · {r.smv} SMV</span>}</td>
                         <td className="px-2 py-1.5">
                           <select className="input !h-8 !py-0 w-52 text-xs" value={map[i] ?? ''} onChange={(e) => { const v = e.target.value; setMap((m) => ({ ...m, [i]: v })); setOn((m) => ({ ...m, [i]: !!v })); }}>
                             <option value="">— not mapped —</option>
@@ -520,15 +520,15 @@ function CostingRatesModal({ ioNo, onClose, onApplied }: { ioNo: string; onClose
                           </select>
                         </td>
                         <td className="px-2 py-1.5 text-right font-semibold">{r.costing_rate.toFixed(4)}</td>
-                        <td className="px-2 py-1.5 text-right text-slate-500">{op?.current_rate != null ? op.current_rate.toFixed(4) : '—'}</td>
+                        <td className="px-2 py-1.5 text-right text-ink-secondary">{op?.current_rate != null ? op.current_rate.toFixed(4) : '—'}</td>
                         <td className="px-2 py-1.5"><Badge tone={tone[act]}>{label[act]}</Badge></td>
                       </tr>
                     );
                   })}
-                  {!data.rows.length && <tr><td colSpan={6} className="px-2 py-6 text-center text-slate-400">The costing has no sewing, cutting or process rows.</td></tr>}
+                  {!data.rows.length && <tr><td colSpan={6} className="px-2 py-6 text-center text-ink-muted">The costing has no sewing, cutting or process rows.</td></tr>}
                 </tbody>
               </table>
-              <p className="text-caption text-slate-500">Rows mapped to the same operation are added together. Operations not in the costing keep their current card rate.</p>
+              <p className="text-caption text-ink-secondary">Rows mapped to the same operation are added together. Operations not in the costing keep their current card rate.</p>
             </div>
           )}
     </Modal>
@@ -570,8 +570,8 @@ export function ContractorAdvancesPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Contractor Advances</h1>
-          <p className="text-sm text-slate-500">Advances paid to contractors, and bill excess kept as advance — recovered through "Advance adjust" on contractor bills</p>
+          <h1 className="text-2xl font-bold text-ink">Contractor Advances</h1>
+          <p className="text-sm text-ink-secondary">Advances paid to contractors, and bill excess kept as advance — recovered through "Advance adjust" on contractor bills</p>
         </div>
         <Button onClick={() => { setF({ vendor_id: vendor, advance_date: today(), amount: '', pay_mode: 'CASH', ref_no: '', remarks: '' }); setAdding(true); }}><Plus size={14} className="mr-1 inline" />New advance</Button>
       </div>
@@ -658,8 +658,8 @@ export function ContractorDebitNotesPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Contractor Debit Notes</h1>
-          <p className="text-sm text-slate-500">Charge a contractor for defective work (wrong stitching, damage) — deducted on a contractor bill</p>
+          <h1 className="text-2xl font-bold text-ink">Contractor Debit Notes</h1>
+          <p className="text-sm text-ink-secondary">Charge a contractor for defective work (wrong stitching, damage) — deducted on a contractor bill</p>
         </div>
         <Button onClick={() => { setF({ vendor_id: vendor, dn_date: today(), io_no: '', reason: '', qty: '', rate: '', amount: '' }); setAdding(true); }}><Plus size={14} className="mr-1 inline" />New debit note</Button>
       </div>
@@ -677,7 +677,7 @@ export function ContractorDebitNotesPage() {
             { key: 'reason', header: 'Reason' },
             { key: 'qty', header: 'PCS × rate', align: 'right' as const, render: (r: any) => (num(r.qty) ? `${fmtNumber(r.qty)} × ${num(r.rate).toFixed(2)}` : '—') },
             { key: 'amount', header: 'Amount', align: 'right' as const, render: (r: any) => <b>{money(r.amount)}</b> },
-            { key: 'status', header: 'Status', render: (r: any) => <span><Badge tone={DN_TONE[r.status] ?? 'slate'}>{r.status}</Badge>{r.bill_no ? <span className="ml-1 text-caption text-slate-500">on {r.bill_no}</span> : null}</span> },
+            { key: 'status', header: 'Status', render: (r: any) => <span><Badge tone={DN_TONE[r.status] ?? 'slate'}>{r.status}</Badge>{r.bill_no ? <span className="ml-1 text-caption text-ink-secondary">on {r.bill_no}</span> : null}</span> },
             { key: 'act', header: '', render: (r: any) => (r.status === 'OPEN' ? <Button size="sm" variant="ghost" onClick={() => { setReason(''); setCancelRow(r); }}><Ban size={12} /></Button> : null) },
           ]} />
       </Card>

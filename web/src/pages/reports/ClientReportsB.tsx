@@ -396,18 +396,18 @@ export function ClientReportsBPage() {
   return (
     <div data-page="client-reports-b">
       <div className="mb-4">
-        <h1 className="text-page font-semibold tracking-tight text-slate-900">Client Reports — Purchase, Stores, Gate &amp; Users</h1>
-        <p className="mt-0.5 text-body text-slate-500">The client's own report set (part B). Click any document number to open it; every report exports to Excel.</p>
+        <h1 className="text-page font-semibold tracking-tight text-ink">Client Reports — Purchase, Stores, Gate &amp; Users</h1>
+        <p className="mt-0.5 text-body text-ink-secondary">The client's own report set (part B). Click any document number to open it; every report exports to Excel.</p>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr]">
         <nav className="card h-fit p-1.5" data-report-list>
           {groups.map((g) => (
             <div key={g} className="mb-1">
-              <p className="px-3 pb-1 pt-2 text-caption font-semibold uppercase tracking-wide text-slate-400">{g}</p>
+              <p className="px-3 pb-1 pt-2 text-caption font-semibold uppercase tracking-wide text-ink-muted">{g}</p>
               {entries.filter((e) => e.group === g).map((e) => (
                 <button key={e.key} data-report-key={e.key} onClick={() => pick(e.key)}
                   className={clsx('block w-full rounded-md px-3 py-2 text-left text-body',
-                    e.key === cur.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50')}>
+                    e.key === cur.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-ink-secondary hover:bg-surface-muted')}>
                   {e.title}
                 </button>
               ))}

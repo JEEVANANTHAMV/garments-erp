@@ -193,7 +193,7 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
                     <input type="checkbox"
                       checked={selected.length > 0 && selected.length === shortfalls.length}
                       onChange={(e) => setSelected(e.target.checked ? shortfalls.map((r: any) => r.id) : [])}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600" />
+                      className="h-3.5 w-3.5 rounded border-surface-input text-brand-600" />
                   </th>
                   <th className="th">Material</th><th className="th">Type</th>
                   <th className="th text-right">Gross</th><th className="th text-right">In stock</th>
@@ -211,7 +211,7 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
                             <input type="checkbox" checked={selected.includes(r.id)}
                               onChange={(e) => setSelected((s) =>
                                 e.target.checked ? [...s, r.id] : s.filter((x) => x !== r.id))}
-                              className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600" />
+                              className="h-3.5 w-3.5 rounded border-surface-input text-brand-600" />
                           )}
                         </td>
                         <td className="td font-medium">{name}</td>
@@ -220,7 +220,7 @@ function MrpDetailModal({ id, onClose }: { id: number | null; onClose: () => voi
                         <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.in_stock, 3)}</td>
                         <td className="td text-right tabular-nums text-blue-700">{fmtDecimal(r.on_order, 3)}</td>
                         <td className="td text-right">
-                          <span className={`font-semibold tabular-nums ${net > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                          <span className={`font-semibold tabular-nums ${net > 0 ? 'text-red-600' : 'text-ink-muted'}`}>
                             {fmtDecimal(net, 3)}
                           </span>
                         </td>
@@ -294,7 +294,7 @@ export function GrnPage() {
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-caption font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                 {r.gate_entry_no}
               </span>
-            ) : <span className="text-slate-400">—</span> },
+            ) : <span className="text-ink-muted">—</span> },
           { key: 'supplier_name', header: 'Supplier' },
           { key: 'po_no', header: 'Against PO' },
           { key: 'warehouse_name', header: 'Warehouse' },
@@ -467,13 +467,13 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
         <Select label="Supplier" required options={toOptions(suppliers.data)} placeholder="— Select —"
           value={head.supplier_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, supplier_id: e.target.value }))} />
         <div>
-          <label className="block text-caption font-medium text-slate-700 mb-1">
+          <label className="block text-caption font-medium text-ink mb-1">
             Against Purchase Orders ({selectedPoIds.length})
           </label>
           <select
             value=""
             onChange={(e) => { if (e.target.value) void handleAddPo(e.target.value); }}
-            className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 font-medium"
+            className="w-full text-xs rounded-lg border border-surface-input py-1.5 px-2 font-medium"
           >
             <option value="">+ Add PO (Auto-pulls open lines)...</option>
             {(purchaseOrders.data || [])
@@ -516,8 +516,8 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
           onChange={(e) => setHead((s) => ({ ...s, vehicle_no: e.target.value }))} />
       </FormSection>
 
-      <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Receipt lines</h3>
+      <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-surface-divider pb-1.5">
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-ink-secondary">Receipt lines</h3>
         <button className="btn-secondary btn-sm" onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
           <Plus size={14} /> Add line
         </button>
@@ -596,7 +596,7 @@ function GrnModal({ open, onClose, onDone }: { open: boolean; onClose: () => voi
                   <td className="td p-1.5 text-right">
                     <button onClick={() => setLines((s) => s.filter((x) => x._key !== l._key))}
                       disabled={lines.length === 1}
-                      className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30">
+                      className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600 disabled:opacity-30">
                       <Trash2 size={14} />
                     </button>
                   </td>
@@ -720,8 +720,8 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
           value={head.issued_to_unit ?? ''} onChange={(e) => setHead((s) => ({ ...s, issued_to_unit: e.target.value }))} />
       </FormSection>
 
-      <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Issue lines</h3>
+      <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-surface-divider pb-1.5">
+        <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-ink-secondary">Issue lines</h3>
         <button className="btn-secondary btn-sm" onClick={() => setLines((s) => [...s, emptyGrnLine()])}>
           <Plus size={14} /> Add line
         </button>
@@ -773,7 +773,7 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
                   <td className="td p-1.5 text-right">
                     <button onClick={() => setLines((s) => s.filter((x) => x._key !== l._key))}
                       disabled={lines.length === 1}
-                      className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30">
+                      className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600 disabled:opacity-30">
                       <Trash2 size={14} />
                     </button>
                   </td>

@@ -61,21 +61,21 @@ export default function SalesOrdersPage() {
                   <Link to={`/sales/orders/${r.id}`}
                     className="tabular-nums text-small font-bold text-brand-700 hover:underline">{r.so_no}</Link>
                   {r.order_type && (
-                    <span className="rounded bg-slate-100 px-1.5 py-0.2 text-micro font-bold uppercase tracking-wider text-slate-600">
+                    <span className="rounded bg-surface-header px-1.5 py-0.2 text-micro font-bold uppercase tracking-wider text-ink-secondary">
                       {r.order_type}
                     </span>
                   )}
                 </div>
                 {r.io_no && (
-                  <p className="text-caption tabular-nums text-slate-500 font-medium">IO: {r.io_no}</p>
+                  <p className="text-caption tabular-nums text-ink-secondary font-medium">IO: {r.io_no}</p>
                 )}
               </div>
             ) },
           { key: 'so_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.so_date) },
           { key: 'buyer_name', header: 'Buyer & Merchandiser', render: (r: any) => (
             <div>
-              <p className="font-medium text-slate-800">{r.buyer_name}</p>
-              <div className="flex flex-wrap items-center gap-1.5 text-caption text-slate-500">
+              <p className="font-medium text-ink">{r.buyer_name}</p>
+              <div className="flex flex-wrap items-center gap-1.5 text-caption text-ink-secondary">
                 {r.buyer_po_no && <span>PO: {r.buyer_po_no}</span>}
                 {r.merchandiser_name && (
                   <span className="font-medium text-sky-700">· {r.merchandiser_name}</span>
@@ -86,7 +86,7 @@ export default function SalesOrdersPage() {
           { key: 'order_qty', header: 'Order qty', align: 'right', sortable: true,
             render: (r: any) => (
               <div className="text-right">
-                <p className="font-semibold text-slate-800 tabular-nums">{fmtNumber(r.order_qty)} pcs</p>
+                <p className="font-semibold text-ink tabular-nums">{fmtNumber(r.order_qty)} pcs</p>
                 {Number(r.plan_cut_qty) > Number(r.order_qty) && (
                   <p className="text-caption text-amber-700 font-medium tabular-nums" title="Planned Cutting Qty with buffer">
                     Plan: {fmtNumber(r.plan_cut_qty)} ({r.excess_pct ? `+${Number(r.excess_pct)}%` : ''})
@@ -99,10 +99,10 @@ export default function SalesOrdersPage() {
             return (
               <div className="min-w-[110px]">
                 <div className="mb-1 flex justify-between text-caption">
-                  <span className="tabular-nums text-slate-600">{fmtNumber(r.produced_qty)}</span>
-                  <span className="text-slate-400">{pct.toFixed(0)}%</span>
+                  <span className="tabular-nums text-ink-secondary">{fmtNumber(r.produced_qty)}</span>
+                  <span className="text-ink-muted">{pct.toFixed(0)}%</span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-1.5 overflow-hidden rounded-full bg-surface-header">
                   <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-brand-500'}`}
                     style={{ width: `${Math.min(100, pct)}%` }} />
                 </div>
@@ -115,7 +115,7 @@ export default function SalesOrdersPage() {
           { key: 'approval_state', header: 'State', render: (r: any) => (
             <div>
               <StatusBadge value={r.approval_state} />
-              {r.closure_type === 'SHORT_CLOSED' && <p className="mt-0.5 text-caption text-slate-500">Short closed {fmtDate(r.closed_date)}</p>}
+              {r.closure_type === 'SHORT_CLOSED' && <p className="mt-0.5 text-caption text-ink-secondary">Short closed {fmtDate(r.closed_date)}</p>}
               {Number(r.additional_qty) > 0 && <p className="mt-0.5 text-caption text-emerald-700">+{fmtNumber(r.additional_qty)} additional</p>}
               {Number(r.cancelled_qty) > 0 && <p className="mt-0.5 text-caption text-red-700">−{fmtNumber(r.cancelled_qty)} cancelled</p>}
             </div>) },

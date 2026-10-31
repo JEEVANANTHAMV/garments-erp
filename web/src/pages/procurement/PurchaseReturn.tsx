@@ -52,8 +52,8 @@ export function PurchaseReturnsPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Purchase Returns</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="text-xl font-bold text-ink">Purchase Returns</h1>
+          <p className="text-xs text-ink-secondary">
             Physical returns of rejected, excess, or wrong materials back to suppliers with Return DC tracking
           </p>
         </div>
@@ -68,7 +68,7 @@ export function PurchaseReturnsPage() {
       </div>
 
       {/* Category Tabs */}
-      <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-xs flex flex-wrap items-center gap-2 overflow-x-auto">
+      <div className="bg-white border border-surface-border rounded-xl p-2 shadow-xs flex flex-wrap items-center gap-2 overflow-x-auto">
         {[
           { id: 'ALL', label: 'All Returns', icon: '📋' },
           { id: 'FABRIC', label: 'Fabric Returns', icon: '🧶' },
@@ -83,7 +83,7 @@ export function PurchaseReturnsPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
               category === t.id
                 ? 'bg-slate-900 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                : 'text-ink-secondary hover:text-ink hover:bg-surface-header'
             }`}
           >
             <span>{t.icon}</span>
@@ -93,9 +93,9 @@ export function PurchaseReturnsPage() {
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-surface-border shadow-xs">
         <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted" />
           <input
             className="input pl-9 h-9 text-xs"
             placeholder="Search return no, supplier, GRN, DC no..."
@@ -105,7 +105,7 @@ export function PurchaseReturnsPage() {
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-500 font-medium">Status:</span>
+          <span className="text-ink-secondary font-medium">Status:</span>
           <select
             className="input h-9 py-0 text-xs"
             value={status}
@@ -124,19 +124,19 @@ export function PurchaseReturnsPage() {
       </div>
 
       {/* Returns List Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+      <div className="rounded-xl border border-surface-border bg-white shadow-xs overflow-hidden">
         {loading ? (
           <div className="flex h-48 items-center justify-center">
             <Spinner size={24} />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 text-sm">
+          <div className="p-12 text-center text-ink-muted text-sm">
             No purchase returns found for this category or filter.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
-              <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 text-caption uppercase tracking-wider">
+            <table className="w-full text-left text-xs text-ink-secondary">
+              <thead className="bg-surface-muted text-ink font-semibold border-b border-surface-border text-caption uppercase tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Return No</th>
                   <th className="py-3 px-4">Date</th>
@@ -151,37 +151,37 @@ export function PurchaseReturnsPage() {
                   <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {filtered.map((r) => {
                   const catCfg = categoryConfig[r.material_category] || { label: r.material_category, tone: 'slate' };
                   return (
                     <tr
                       key={r.id}
                       onClick={() => nav(`/procurement/returns/${r.id}`)}
-                      className="hover:bg-slate-50 cursor-pointer transition-colors"
+                      className="hover:bg-surface-muted cursor-pointer transition-colors"
                     >
                       <td className="py-3 px-4 tabular-nums font-bold text-brand-700">
                         {r.return_no}
                       </td>
-                      <td className="py-3 px-4 text-slate-500">
+                      <td className="py-3 px-4 text-ink-secondary">
                         {fmtDate(r.return_date)}
                       </td>
                       <td className="py-3 px-4">
                         <Badge tone={catCfg.tone}>{catCfg.label}</Badge>
                       </td>
-                      <td className="py-3 px-4 font-medium text-slate-900">
+                      <td className="py-3 px-4 font-medium text-ink">
                         {r.supplier_name || '—'}
                       </td>
-                      <td className="py-3 px-4 tabular-nums text-slate-600">
+                      <td className="py-3 px-4 tabular-nums text-ink-secondary">
                         {r.grn_no || '—'}
                       </td>
                       <td className="py-3 px-4">
-                        <span className="text-slate-700 font-medium">{humanize(r.return_reason)}</span>
+                        <span className="text-ink font-medium">{humanize(r.return_reason)}</span>
                       </td>
                       <td className="py-3 px-4 text-right tabular-nums font-semibold text-red-700">
                         {fmtDecimal(r.total_qty, 2)}
                       </td>
-                      <td className="py-3 px-4 text-right tabular-nums font-bold text-slate-800">
+                      <td className="py-3 px-4 text-right tabular-nums font-bold text-ink">
                         ₹{fmtDecimal(r.total_amount, 2)}
                       </td>
                       <td className="py-3 px-4">
@@ -190,14 +190,14 @@ export function PurchaseReturnsPage() {
                             {r.return_dc_no}
                           </span>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-ink-muted">—</span>
                         )}
                       </td>
                       <td className="py-3 px-4">
                         <StatusBadge value={r.status} />
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <ChevronRight className="h-4 w-4 text-slate-400 inline" />
+                        <ChevronRight className="h-4 w-4 text-ink-muted inline" />
                       </td>
                     </tr>
                   );

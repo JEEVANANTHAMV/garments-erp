@@ -1,9 +1,15 @@
 import { chartColors } from '../../theme/designTokens.js';
 
-export interface OutputRow {
-  id: number; output_date: string; style_id: number | null; style_code: string | null;
-  stage_id: number | null; stage_name: string | null; actual_good: number | string;
-}
+/** One row of GET /dashboard/output: good pieces for a day, stage and style. */
+export interface OutputRow { output_date: string; stage: string; style_code: string | null; qty: number | string }
+
+// The four stages of the reference chart, in floor order, with the spec's series colours.
+export const STAGES = [
+  { key: 'CUTTING', name: 'Cutting', color: chartColors.cutting },
+  { key: 'SEWING', name: 'Sewing', color: chartColors.sewing },
+  { key: 'FINISHING', name: 'Finishing', color: chartColors.finishing },
+  { key: 'PACKING', name: 'Packing', color: chartColors.packing },
+];
 export interface StockRow {
   fabric_id: number; item_name: string; uom_code: string | null;
   total_in: number | string; total_out: number | string; balance: number | string;
@@ -22,30 +28,41 @@ export function monthRange(date: string, previous = false) {
 
 export function aggregateOutput(rows: OutputRow[]) {
   const dates = new Map<string, Record<string, string | number>>();
-  const stages = new Map<string, { key: string; name: string; color: string }>();
   const styles = new Map<string, { name: string; value: number; color: string }>();
+  const totals: Record<string, number> = {};
   for (const row of rows) {
     const date = row.output_date.slice(0, 10);
-    const key = `stage_${row.stage_id ?? 'unassigned'}`;
-    const name = row.stage_name || 'Unassigned';
-    if (!stages.has(key)) {
-      const tone = /cut/i.test(name) ? chartColors.cutting : /sew|stitch/i.test(name) ? chartColors.sewing
-        : /finish|iron/i.test(name) ? chartColors.finishing : /pack/i.test(name) ? chartColors.packing : chartColors.other;
-      stages.set(key, { key, name, color: tone });
-    }
-    const qty = Number(row.actual_good) || 0;
+    const qty = Number(row.qty) || 0;
     const day = dates.get(date) ?? { date };
-    day[key] = Number(day[key] ?? 0) + qty;
+    day[row.stage] = Number(day[row.stage] ?? 0) + qty;
     dates.set(date, day);
-    const styleKey = String(row.style_id ?? 'unassigned');
-    const style = styles.get(styleKey) ?? { name: row.style_code || 'Unassigned', value: 0, color: chartPalette[styles.size % chartPalette.length] };
+    totals[row.stage] = (totals[row.stage] ?? 0) + qty;
+    // Style mix counts sewn pieces (each garment once), not every stage it passed through.
+    if (row.stage !== 'SEWING') continue;
+    const name = row.style_code || 'Unassigned';
+    const style = styles.get(name) ?? { name, value: 0, color: chartPalette[styles.size % chartPalette.length] };
     style.value += qty;
-    styles.set(styleKey, style);
+    styles.set(name, style);
   }
   return {
     days: [...dates.values()].sort((a, b) => String(a.date).localeCompare(String(b.date))),
-    stages: [...stages.values()], styles: [...styles.values()].filter((s) => s.value > 0),
+    stages: STAGES, totals, styles: [...styles.values()].filter((s) => s.value > 0),
   };
+}
+
+/** The same days of the previous month (1st … same date, clamped to that month's end) for fair trends. */
+export function samePeriodLastMonth(date: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const start = new Date(Date.UTC(year, month - 2, 1));
+  const last = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0)).getUTCDate();
+  const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), Math.min(day, last)));
+  return { dateFrom: start.toISOString().slice(0, 10), dateTo: end.toISOString().slice(0, 10) };
+}
+
+/** Percent change; null when there is nothing to compare against. */
+export function trendPct(current: number, previous: number) {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
 }
 
 // Keep units separate: kilograms and metres must never be added together.

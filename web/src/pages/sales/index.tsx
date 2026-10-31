@@ -58,7 +58,7 @@ export function QuotationsPage() {
   return (
     <div className="space-y-3">
       {/* Departmental Quotation Tabs */}
-      <div className="flex border-b border-slate-200 space-x-2 bg-white px-2 pt-2 rounded-t-xl overflow-x-auto">
+      <div className="flex border-b border-surface-border space-x-2 bg-white px-2 pt-2 rounded-t-xl overflow-x-auto">
         {[
           { id: 'ALL', label: 'All Quotations', icon: Layers, tone: 'slate' },
           { id: 'FABRIC', label: 'Fabric Quotations', icon: Layers, tone: 'sky' },
@@ -75,7 +75,7 @@ export function QuotationsPage() {
               className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition whitespace-nowrap ${
                 active
                   ? 'border-brand-600 text-brand-700 bg-brand-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  : 'border-transparent text-ink-secondary hover:text-ink'
               }`}
             >
               <Icon size={14} />
@@ -98,7 +98,7 @@ export function QuotationsPage() {
         render: (r: any) => (
           <span className="tabular-nums text-small font-medium text-brand-700">
             {r.quotation_no}
-            <span className={`ml-1.5 rounded px-1.5 py-0.5 text-micro font-bold ${Number(r.version) > 1 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}
+            <span className={`ml-1.5 rounded px-1.5 py-0.5 text-micro font-bold ${Number(r.version) > 1 ? 'bg-amber-100 text-amber-800' : 'bg-surface-header text-ink-secondary'}`}
               title={Number(r.version) > 1 ? `Edited — ${Number(r.version) - 1} earlier version(s)` : 'First version'}>V{Number(r.version) || 1}</span>
           </span>
         ) },
@@ -134,7 +134,7 @@ export function QuotationsPage() {
         } },
       { key: 'quotation_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.quotation_date) },
       { key: 'buyer_name', header: 'Buyer / Supplier',
-        render: (r: any) => <span className="font-medium text-slate-800">{r.buyer_name || r.supplier_name || '—'}</span> },
+        render: (r: any) => <span className="font-medium text-ink">{r.buyer_name || r.supplier_name || '—'}</span> },
       { key: 'incoterm', header: 'Incoterm' },
       { key: 'currency_code', header: 'Ccy', align: 'center' },
       { key: 'total_amount', header: 'Amount', align: 'right',

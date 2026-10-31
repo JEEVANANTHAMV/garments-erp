@@ -41,8 +41,8 @@ export function SampleTypesPage() {
           <div className="card overflow-hidden" id="type-list">
             {types.map((t) => (
               <button key={t.id} type="button" onClick={() => setSel(t.id)} data-type={t.type_code}
-                className={clsx('flex w-full items-center justify-between border-b border-slate-100 px-3.5 py-2.5 text-left text-body last:border-0', cur?.id === t.id ? 'bg-brand-50' : 'hover:bg-slate-50')}>
-                <span><b>{t.type_name}</b><span className="block text-caption text-slate-500">{t.type_code} · {t.stages.length} stages · v{t.version_no ?? '—'}</span></span>
+                className={clsx('flex w-full items-center justify-between border-b border-surface-divider px-3.5 py-2.5 text-left text-body last:border-0', cur?.id === t.id ? 'bg-brand-50' : 'hover:bg-surface-muted')}>
+                <span><b>{t.type_name}</b><span className="block text-caption text-ink-secondary">{t.type_code} · {t.stages.length} stages · v{t.version_no ?? '—'}</span></span>
                 {!Number(t.is_active) && <Badge tone="slate">inactive</Badge>}
               </button>
             ))}
@@ -119,21 +119,21 @@ function TypeEditor({ t, onSaved }: { t: any; onSaved: () => void }) {
                   <td className="td text-center"><input type="checkbox" checked={r.is_mandatory} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, is_mandatory: e.target.checked } : x)))} /></td>
                   <td className="td"><input className="input h-8 w-20 py-0 text-small" type="number" min={0} step="0.5" value={r.sla_days} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, sla_days: e.target.value } : x)))} /></td>
                   <td className="td text-center"><input type="checkbox" checked={r.needs_output} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, needs_output: e.target.checked } : x)))} /></td>
-                  {editable && <td className="td whitespace-nowrap"><button className="p-1 text-slate-400 hover:text-slate-700" onClick={() => move(i, -1)}><ArrowUp size={13} /></button>
-                    <button className="p-1 text-slate-400 hover:text-slate-700" onClick={() => move(i, 1)}><ArrowDown size={13} /></button>
+                  {editable && <td className="td whitespace-nowrap"><button className="p-1 text-ink-muted hover:text-ink" onClick={() => move(i, -1)}><ArrowUp size={13} /></button>
+                    <button className="p-1 text-ink-muted hover:text-ink" onClick={() => move(i, 1)}><ArrowDown size={13} /></button>
                     <button className="p-1 text-red-400 hover:text-red-600" onClick={() => change(rows.filter((_, j) => j !== i))}><Trash2 size={13} /></button></td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {editable && dirty && <div className="border-t border-slate-100 p-3"><Input label="What changed (kept with the version)" value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>}
+        {editable && dirty && <div className="border-t border-surface-divider p-3"><Input label="What changed (kept with the version)" value={remarks} onChange={(e) => setRemarks(e.target.value)} /></div>}
       </Card>
       <Card title="Versions">
         <div className="p-3 text-body">
           {(versions.data ?? []).map((w) => (
-            <p key={w.id} className="border-b border-slate-100 py-1.5 last:border-0"><b>v{w.version_no}</b>{Number(w.is_current) ? <Badge tone="green" className="ml-1">current</Badge> : null}
-              <span className="ml-2 text-slate-500">{fmtDate(w.effective_from)} · {w.stages.length} stages · {w.sample_count} sample(s){w.created_by_name ? ` · ${w.created_by_name}` : ''}{w.remarks ? ` · ${w.remarks}` : ''}</span></p>
+            <p key={w.id} className="border-b border-surface-divider py-1.5 last:border-0"><b>v{w.version_no}</b>{Number(w.is_current) ? <Badge tone="green" className="ml-1">current</Badge> : null}
+              <span className="ml-2 text-ink-secondary">{fmtDate(w.effective_from)} · {w.stages.length} stages · {w.sample_count} sample(s){w.created_by_name ? ` · ${w.created_by_name}` : ''}{w.remarks ? ` · ${w.remarks}` : ''}</span></p>
           ))}
         </div>
       </Card>

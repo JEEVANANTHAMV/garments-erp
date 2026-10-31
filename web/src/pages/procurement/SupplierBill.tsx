@@ -644,7 +644,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       ) : (
         <div className="space-y-4">
           {/* Bill Category Selector Tabs */}
-          <div className="p-2 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-1.5 overflow-x-auto">
+          <div className="p-2 bg-surface-muted rounded-xl border border-surface-border/80 flex items-center gap-1.5 overflow-x-auto">
             {BILL_TYPES.filter((bt) => !OWN_TAB_TYPES.includes(bt.value) || billType === bt.value).map((bt) => {
               const active = billType === bt.value;
               return (
@@ -657,8 +657,8 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                   }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
                     active
-                      ? 'bg-white text-brand-700 shadow-sm border border-slate-200'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                      ? 'bg-white text-brand-700 shadow-sm border border-surface-border'
+                      : 'text-ink-secondary hover:text-ink hover:bg-white/60'
                   }`}
                 >
                   <span>{bt.icon}</span>
@@ -735,7 +735,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               />
 
               <div className="sm:col-span-2">
-                <label className="block text-caption font-semibold text-slate-700 mb-1">
+                <label className="block text-caption font-semibold text-ink mb-1">
                   Link GRN (Select to Auto-Fetch)
                 </label>
                 <select
@@ -791,7 +791,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             {/* Selected Multi-GRN Badges */}
             {selectedGrnIds.length > 0 && (
               <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-indigo-100">
-                <span className="text-caption font-bold text-slate-600 flex items-center gap-1">
+                <span className="text-caption font-bold text-ink-secondary flex items-center gap-1">
                   <Layers size={13} className="text-indigo-600" /> Linked GRNs ({selectedGrnIds.length}):
                 </span>
                 {selectedGrnIds.map((gid) => {
@@ -822,17 +822,17 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             )}
 
             {/* GST Tax Type & Import Configuration Row */}
-            <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-3 pt-3 border-t border-surface-divider flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-caption font-bold text-slate-700 uppercase tracking-wider">GST Tax Nature:</span>
-                <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs">
+                <span className="text-caption font-bold text-ink uppercase tracking-wider">GST Tax Nature:</span>
+                <div className="inline-flex rounded-lg border border-surface-border p-0.5 bg-surface-muted text-xs">
                   <button
                     type="button"
                     onClick={() => setHeader((p) => ({ ...p, gst_type: 'INTRA_STATE' }))}
                     className={`px-2.5 py-1 rounded-md font-semibold transition ${
                       header.gst_type === 'INTRA_STATE'
                         ? 'bg-white text-indigo-700 shadow-xs border border-indigo-200'
-                        : 'text-slate-600 hover:text-slate-900'
+                        : 'text-ink-secondary hover:text-ink'
                     }`}
                   >
                     Intra-State (CGST + SGST)
@@ -843,7 +843,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     className={`px-2.5 py-1 rounded-md font-semibold transition ${
                       header.gst_type === 'INTER_STATE'
                         ? 'bg-white text-brand-700 shadow-xs border border-brand-200'
-                        : 'text-slate-600 hover:text-slate-900'
+                        : 'text-ink-secondary hover:text-ink'
                     }`}
                   >
                     Inter-State (IGST)
@@ -854,7 +854,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     className={`px-2.5 py-1 rounded-md font-semibold transition ${
                       header.gst_type === 'IMPORT'
                         ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        : 'text-ink-secondary hover:text-ink'
                     }`}
                   >
                     Overseas Import (Customs IGST)
@@ -874,7 +874,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               <FormSection title="Import & customs documentation" className="mt-4"
                 description={<>All lines entered in <strong>{selectedCurrency?.code || 'FC'}</strong>, auto-converted to INR for GST & accounts</>}>
                   <div>
-                    <label className="block text-caption font-semibold text-slate-700 mb-1">
+                    <label className="block text-caption font-semibold text-ink mb-1">
                       Exchange Rate (₹ per 1 {selectedCurrency?.code || 'FC'}) *
                     </label>
                     <input
@@ -882,7 +882,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                       step="0.0001"
                       value={header.exchange_rate}
                       onChange={(e) => setHeader((p) => ({ ...p, exchange_rate: parseFloat(e.target.value) || 1.0 }))}
-                      className="w-full text-xs font-bold text-emerald-800 border border-slate-300 rounded px-2 py-1.5 bg-white"
+                      className="w-full text-xs font-bold text-emerald-800 border border-surface-input rounded px-2 py-1.5 bg-white"
                       placeholder="e.g. 85.50"
                     />
                   </div>
@@ -913,9 +913,9 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
           {/* Line Items Table Customized by Bill Category */}
           <div className="space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-2 pb-1.5 border-b border-slate-100">
+            <div className="flex flex-wrap items-end justify-between gap-2 pb-1.5 border-b border-surface-divider">
               <div className="flex items-center gap-2">
-                <h3 className="text-small font-semibold uppercase tracking-wider text-slate-500">
+                <h3 className="text-small font-semibold uppercase tracking-wider text-ink-secondary">
                   Inward Bill Line Items ({lines.length})
                 </h3>
                 <Badge tone={isYarn ? 'indigo' : isFab ? 'purple' : isTrim ? 'amber' : 'slate'}>
@@ -929,14 +929,14 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     <Plus size={13} />
                     <span>Add Item Line</span>
                   </Button>
-                ) : <span className="text-caption text-slate-500" id="sb-grn-only">Lines come from the linked GRN(s) — a direct bill is only for General</span>}
+                ) : <span className="text-caption text-ink-secondary" id="sb-grn-only">Lines come from the linked GRN(s) — a direct bill is only for General</span>}
               </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <tr className="bg-surface-muted text-ink font-bold border-b border-surface-border">
                     <th className="py-2.5 px-3 min-w-[180px]">
                       {isYarn ? 'Yarn Count / Desc *' : isFab ? 'Fabric Construction *' : isTrim ? 'Trim Item *' : 'Description *'}
                     </th>
@@ -963,16 +963,16 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     <th className="py-2.5 px-2 w-10 text-center">Del</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
+                <tbody className="divide-y divide-surface-divider text-ink">
                   {lines.map((l, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50">
+                    <tr key={idx} className="hover:bg-surface-muted/50">
                       <td className="py-1.5 px-3">
                         <input
                           type="text"
                           value={l.description}
                           onChange={(e) => updateLine(idx, { description: e.target.value })}
                           placeholder={isYarn ? 'e.g. 30s Combed Cotton' : isFab ? 'e.g. Single Jersey 160 GSM' : 'Item name'}
-                          className="w-full text-xs font-semibold border border-slate-300 rounded px-2 py-1"
+                          className="w-full text-xs font-semibold border border-surface-input rounded px-2 py-1"
                         />
                       </td>
 
@@ -982,7 +982,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                             {l.grn_no || `GRN #${l.grn_id}`}
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-caption">—</span>
+                          <span className="text-ink-muted text-caption">—</span>
                         )}
                       </td>
 
@@ -995,7 +995,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.lot_no || ''}
                               onChange={(e) => updateLine(idx, { lot_no: e.target.value })}
                               placeholder="Lot no"
-                              className="w-full text-xs tabular-nums border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs tabular-nums border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                           <td className="py-1.5 px-2 text-right">
@@ -1004,7 +1004,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.no_of_bags ?? ''}
                               onChange={(e) => updateLine(idx, { no_of_bags: parseFloat(e.target.value) || 0 })}
                               placeholder="Bags"
-                              className="w-full text-xs text-right border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs text-right border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                         </>
@@ -1019,7 +1019,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.dia || ''}
                               onChange={(e) => updateLine(idx, { dia: e.target.value })}
                               placeholder='e.g. 32"'
-                              className="w-full text-xs tabular-nums border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs tabular-nums border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                           <td className="py-1.5 px-2 text-right">
@@ -1028,7 +1028,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.gsm ?? ''}
                               onChange={(e) => updateLine(idx, { gsm: parseFloat(e.target.value) || 0 })}
                               placeholder="GSM"
-                              className="w-full text-xs text-right border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs text-right border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                           <td className="py-1.5 px-2 text-right">
@@ -1037,7 +1037,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.no_of_rolls ?? ''}
                               onChange={(e) => updateLine(idx, { no_of_rolls: parseFloat(e.target.value) || 0 })}
                               placeholder="Rolls"
-                              className="w-full text-xs text-right border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs text-right border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                         </>
@@ -1052,7 +1052,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.color_name || ''}
                               onChange={(e) => updateLine(idx, { color_name: e.target.value })}
                               placeholder="Color"
-                              className="w-full text-xs border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                           <td className="py-1.5 px-2">
@@ -1061,7 +1061,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.size_name || ''}
                               onChange={(e) => updateLine(idx, { size_name: e.target.value })}
                               placeholder="Size"
-                              className="w-full text-xs border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                         </>
@@ -1073,7 +1073,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                           step="0.01"
                           value={l.bill_qty}
                           onChange={(e) => updateLine(idx, { bill_qty: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-xs text-right font-bold text-brand-700 border border-slate-300 rounded px-1.5 py-1"
+                          className="w-full text-xs text-right font-bold text-brand-700 border border-surface-input rounded px-1.5 py-1"
                         />
                       </td>
 
@@ -1081,7 +1081,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                         <select
                           value={l.uom_id}
                           onChange={(e) => updateLine(idx, { uom_id: parseInt(e.target.value) || 5 })}
-                          className="w-full text-xs border border-slate-300 rounded px-1.5 py-1 bg-white"
+                          className="w-full text-xs border border-surface-input rounded px-1.5 py-1 bg-white"
                         >
                           {(uoms.data || [
                             { id: 5, label: 'KG' },
@@ -1103,7 +1103,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                           step="0.01"
                           value={l.rate}
                           onChange={(e) => updateLine(idx, { rate: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
+                          className="w-full text-xs text-right font-medium border border-surface-input rounded px-1.5 py-1"
                         />
                       </td>
 
@@ -1113,7 +1113,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                           step="1"
                           value={l.gst_rate ?? 5}
                           onChange={(e) => updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })}
-                          className="w-full text-xs text-right border border-slate-300 rounded px-1.5 py-1"
+                          className="w-full text-xs text-right border border-surface-input rounded px-1.5 py-1"
                         />
                       </td>
 
@@ -1125,7 +1125,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                         <button
                           type="button"
                           onClick={() => removeLine(idx)}
-                          className="p-1 text-slate-400 hover:text-red-600 rounded"
+                          className="p-1 text-ink-muted hover:text-red-600 rounded"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -1140,47 +1140,47 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
           {/* Financial Totals & Verification Card */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 3-Way Match & Status Card */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
-              <h4 className="border-b border-slate-200 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
+            <div className="p-4 bg-surface-muted rounded-xl border border-surface-border/80 space-y-3">
+              <h4 className="border-b border-surface-border pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">
                 Matching & Verification
               </h4>
 
               <div className="grid grid-cols-3 gap-2">
-                <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 text-xs cursor-pointer">
+                <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-surface-border text-xs cursor-pointer">
                   <input
                     type="checkbox"
                     checked={header.po_matched}
                     onChange={(e) => setHeader((p) => ({ ...p, po_matched: e.target.checked }))}
                     className="rounded text-brand-600"
                   />
-                  <span className="font-semibold text-slate-700">PO Matched</span>
+                  <span className="font-semibold text-ink">PO Matched</span>
                 </label>
 
-                <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 text-xs cursor-pointer">
+                <label className="flex items-center gap-2 p-2 bg-white rounded-lg border border-surface-border text-xs cursor-pointer">
                   <input
                     type="checkbox"
                     checked={header.grn_matched}
                     onChange={(e) => setHeader((p) => ({ ...p, grn_matched: e.target.checked }))}
                     className="rounded text-brand-600"
                   />
-                  <span className="font-semibold text-slate-700">GRN Matched</span>
+                  <span className="font-semibold text-ink">GRN Matched</span>
                 </label>
 
-                <div className="col-span-full rounded-lg border border-slate-200 bg-white p-2 text-xs">
+                <div className="col-span-full rounded-lg border border-surface-border bg-white p-2 text-xs">
                   {header.supplier_id
                     ? <GateEntryPicker partyId={header.supplier_id} value={header.gate_inward_id} idPrefix="sb-gate" onChange={(v) => setHeader((p) => ({ ...p, gate_inward_id: v, gate_matched: !!v }))} />
-                    : <span className="text-slate-400">Choose the supplier to map the gate entry</span>}
-                  <span className={`mt-1 block font-semibold ${header.gate_inward_id ? 'text-emerald-700' : 'text-slate-500'}`} id="sb-gate-matched">{header.gate_inward_id ? '✓ Gate matched' : 'Gate not matched'}</span>
+                    : <span className="text-ink-muted">Choose the supplier to map the gate entry</span>}
+                  <span className={`mt-1 block font-semibold ${header.gate_inward_id ? 'text-emerald-700' : 'text-ink-secondary'}`} id="sb-gate-matched">{header.gate_inward_id ? '✓ Gate matched' : 'Gate not matched'}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="block text-caption font-semibold text-slate-600">Match Status</label>
+                  <label className="block text-caption font-semibold text-ink-secondary">Match Status</label>
                   <select
                     value={header.match_status}
                     onChange={(e) => setHeader((p) => ({ ...p, match_status: e.target.value }))}
-                    className="w-full text-xs border border-slate-300 rounded px-2 py-1.5 bg-white font-medium mt-0.5"
+                    className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white font-medium mt-0.5"
                   >
                     <option value="UNMATCHED">Unmatched</option>
                     <option value="PARTIAL">Partial Matched</option>
@@ -1190,11 +1190,11 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                 </div>
 
                 <div>
-                  <label className="block text-caption font-semibold text-slate-600">Bill Status</label>
+                  <label className="block text-caption font-semibold text-ink-secondary">Bill Status</label>
                   <select
                     value={header.status}
                     onChange={(e) => setHeader((p) => ({ ...p, status: e.target.value }))}
-                    className="w-full text-xs border border-slate-300 rounded px-2 py-1.5 bg-white font-medium mt-0.5"
+                    className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white font-medium mt-0.5"
                   >
                     <option value="DRAFT">Draft</option>
                     <option value="VERIFIED">Verified</option>
@@ -1206,13 +1206,13 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               </div>
 
               <div>
-                <label className="block text-caption font-semibold text-slate-600">Remarks / Discrepancy Notes</label>
+                <label className="block text-caption font-semibold text-ink-secondary">Remarks / Discrepancy Notes</label>
                 <textarea
                   rows={2}
                   value={header.remarks}
                   onChange={(e) => setHeader((p) => ({ ...p, remarks: e.target.value }))}
                   placeholder="Notes, terms, transport details, lot verification..."
-                  className="w-full text-xs border border-slate-300 rounded px-2 py-1 mt-0.5 font-medium"
+                  className="w-full text-xs border border-surface-input rounded px-2 py-1 mt-0.5 font-medium"
                 />
               </div>
             </div>
@@ -1261,14 +1261,14 @@ export function SupplierBillsPage() {
   return (
     <div className="space-y-4">
       {/* Category Tabs according to Bills Inward Specification */}
-      <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-xs flex flex-wrap items-center gap-1.5 overflow-x-auto">
+      <div className="bg-white border border-surface-border rounded-xl p-2 shadow-xs flex flex-wrap items-center gap-1.5 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab('ALL')}
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
             activeTab === 'ALL'
               ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              : 'text-ink-secondary hover:text-ink hover:bg-surface-header'
           }`}
         >
           All Bills Inward
@@ -1281,7 +1281,7 @@ export function SupplierBillsPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
               activeTab === bt.value
                 ? 'bg-brand-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                : 'text-ink-secondary hover:text-ink hover:bg-surface-header'
             }`}
           >
             <span>{bt.icon}</span>
@@ -1328,26 +1328,26 @@ export function SupplierBillsPage() {
               if (r.po_no || r.grn_no) {
                 return (
                   <div className="text-caption tabular-nums leading-tight space-y-0.5">
-                    {r.po_no && <div><span className="text-slate-400">PO:</span> {r.po_no}</div>}
-                    {r.grn_no && <div><span className="text-slate-400">GRN:</span> {r.grn_no}</div>}
+                    {r.po_no && <div><span className="text-ink-muted">PO:</span> {r.po_no}</div>}
+                    {r.grn_no && <div><span className="text-ink-muted">GRN:</span> {r.grn_no}</div>}
                   </div>
                 );
               }
               if (r.knitting_order_no) {
                 return (
                   <div className="text-caption tabular-nums text-sky-700">
-                    <span className="text-slate-400">Knit Order:</span> {r.knitting_order_no}
+                    <span className="text-ink-muted">Knit Order:</span> {r.knitting_order_no}
                   </div>
                 );
               }
               if (r.fabric_process_order_no) {
                 return (
                   <div className="text-caption tabular-nums text-pink-700">
-                    <span className="text-slate-400">Proc Order:</span> {r.fabric_process_order_no}
+                    <span className="text-ink-muted">Proc Order:</span> {r.fabric_process_order_no}
                   </div>
                 );
               }
-              return <span className="text-slate-400">—</span>;
+              return <span className="text-ink-muted">—</span>;
             },
           },
           {

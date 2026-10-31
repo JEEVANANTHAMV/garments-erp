@@ -109,10 +109,10 @@ export default function TnaListPage() {
   return (
     <div className="space-y-5 pb-12">
       {/* 1. Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="text-xl font-bold text-ink flex items-center gap-2">
               <CalendarClock className="text-brand-600" size={24} />
               Time & Action (T&A) Control
             </h1>
@@ -120,7 +120,7 @@ export default function TnaListPage() {
               Order Lifecycle Management
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-ink-secondary mt-0.5">
             Centralized schedule tracking from order confirmation to export shipment with risk and dependency alerts
           </p>
         </div>
@@ -152,11 +152,11 @@ export default function TnaListPage() {
 
       {/* 2. Top Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <p className="text-caption font-semibold text-slate-500 uppercase tracking-wide">Live Orders</p>
+        <div className="rounded-xl border border-surface-border bg-white p-3.5 shadow-xs">
+          <p className="text-caption font-semibold text-ink-secondary uppercase tracking-wide">Live Orders</p>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-2xl font-bold text-slate-900">{stats.total_orders}</span>
-            <span className="text-xs text-slate-400">Tracked</span>
+            <span className="text-2xl font-bold text-ink">{stats.total_orders}</span>
+            <span className="text-xs text-ink-muted">Tracked</span>
           </div>
         </div>
 
@@ -200,10 +200,10 @@ export default function TnaListPage() {
       </div>
 
       {/* 3. Filters Toolbar */}
-      <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div className="rounded-xl border border-surface-border bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[300px]">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
             <input
               type="text"
               placeholder="Search by T&A no, style, SO, IO..."
@@ -251,7 +251,7 @@ export default function TnaListPage() {
           {(buyerId || status || risk || search) && (
             <button
               type="button"
-              className="btn-ghost btn-xs text-slate-500"
+              className="btn-ghost btn-xs text-ink-secondary"
               onClick={() => {
                 setBuyerId('');
                 setStatus('');
@@ -266,7 +266,7 @@ export default function TnaListPage() {
 
         <button
           type="button"
-          className="btn-ghost btn-sm text-slate-600"
+          className="btn-ghost btn-sm text-ink-secondary"
           onClick={() => tnaListQuery.refetch()}
           title="Refresh table"
         >
@@ -275,10 +275,10 @@ export default function TnaListPage() {
       </div>
 
       {/* 4. T&A Orders Data Table */}
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+      <div className="rounded-xl border border-surface-border bg-white overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+            <thead className="bg-surface-muted border-b border-surface-border text-ink-secondary font-semibold uppercase tracking-wider">
               <tr>
                 <th className="py-2.5 px-3">T&A No</th>
                 <th className="py-2.5 px-3">Buyer & Style</th>
@@ -292,10 +292,10 @@ export default function TnaListPage() {
                 <th className="py-2.5 px-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {list.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-slate-400">
+                  <td colSpan={10} className="py-10 text-center text-ink-muted">
                     {tnaListQuery.isLoading ? 'Loading Time & Action plans…' : 'No Time & Action records found.'}
                   </td>
                 </tr>
@@ -308,7 +308,7 @@ export default function TnaListPage() {
                   return (
                     <tr
                       key={row.id}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                      className="hover:bg-surface-muted/80 transition-colors cursor-pointer"
                       onClick={() => nav(`/tna/${row.id}`)}
                     >
                       <td className="py-3 px-3 tabular-nums font-bold text-brand-700">
@@ -320,29 +320,29 @@ export default function TnaListPage() {
                         )}
                       </td>
                       <td className="py-3 px-3">
-                        <div className="font-semibold text-slate-900">{row.buyer_name || 'Buyer'}</div>
-                        <div className="text-caption text-slate-500 tabular-nums">
+                        <div className="font-semibold text-ink">{row.buyer_name || 'Buyer'}</div>
+                        <div className="text-caption text-ink-secondary tabular-nums">
                           {row.style_code} {row.style_name ? `• ${row.style_name}` : ''}
                         </div>
                       </td>
                       <td className="py-3 px-3">
-                        <div className="font-medium text-slate-800">{row.so_no}</div>
-                        <div className="text-caption text-slate-500 tabular-nums">IO: {row.io_no || '—'}</div>
+                        <div className="font-medium text-ink">{row.so_no}</div>
+                        <div className="text-caption text-ink-secondary tabular-nums">IO: {row.io_no || '—'}</div>
                       </td>
                       <td className="py-3 px-3 text-right tabular-nums font-medium">
                         {fmtNumber(row.order_qty)} pcs
                       </td>
                       <td className="py-3 px-3">
-                        <span className="font-medium text-slate-900">{fmtDate(row.shipment_date)}</span>
+                        <span className="font-medium text-ink">{fmtDate(row.shipment_date)}</span>
                       </td>
-                      <td className="py-3 px-3 text-slate-600">
+                      <td className="py-3 px-3 text-ink-secondary">
                         {row.template_name || 'Basic T-Shirt'}
                       </td>
                       <td className="py-3 px-3 min-w-[120px]">
                         <div className="flex items-center justify-between text-caption font-semibold mb-1">
                           <span>{pct.toFixed(0)}%</span>
                         </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div className="w-full bg-surface-border rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-1.5 rounded-full ${
                               pct === 100 ? 'bg-emerald-500' :
@@ -418,7 +418,7 @@ export default function TnaListPage() {
         <form id="tna-create-form" onSubmit={handleCreateTna}>
           <FormSection cols={2}>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-ink mb-1">
                 Sales Order <span className="text-rose-500">*</span>
               </label>
               <select
@@ -435,7 +435,7 @@ export default function TnaListPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-ink mb-1">
                 T&A Activity Template <span className="text-rose-500">*</span>
               </label>
               <select
@@ -453,7 +453,7 @@ export default function TnaListPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-ink mb-1">
                 Shipment Date <span className="text-rose-500">*</span>
               </label>
               <input
@@ -466,7 +466,7 @@ export default function TnaListPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-ink mb-1">
                 Order Quantity
               </label>
               <input

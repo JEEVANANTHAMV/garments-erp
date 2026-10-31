@@ -292,8 +292,8 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">{TITLE[proc]}</h1>
-          <p className="text-sm text-slate-500">{proc === 'sewing' ? 'Bundle-wise good / rework / reject against the day\'s plan' : 'Input = Good + Rework + Reject · good goes to ironing, rework back to sewing, reject to reject stock'}</p>
+          <h1 className="text-2xl font-bold text-ink">{TITLE[proc]}</h1>
+          <p className="text-sm text-ink-secondary">{proc === 'sewing' ? 'Bundle-wise good / rework / reject against the day\'s plan' : 'Input = Good + Rework + Reject · good goes to ironing, rework back to sewing, reject to reject stock'}</p>
         </div>
         <div className="flex items-center gap-2">
           <DocStatus no={docNo} status={docStatus} />
@@ -325,14 +325,14 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_2fr_1fr]">
         <Card title="Plan Information">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 p-3 text-xs">
-            <dt className="text-slate-500">Plan</dt><dd className="font-medium">{plan ? `${plan.plan_no} · ${fmtDate(plan.plan_date)}` : '—'}</dd>
-            <dt className="text-slate-500">Job / Style</dt><dd className="font-medium">{styleInfo ? `${styleInfo.io_no ?? '—'} · ${styleInfo.style_no ?? '—'}` : '—'}</dd>
-            <dt className="text-slate-500">Style Description</dt><dd>{styleInfo?.style_description || '—'}</dd>
-            <dt className="text-slate-500">Fabric Type</dt><dd>{styleInfo ? [styleInfo.fabric_type, styleInfo.fabric_name].filter(Boolean).join(' · ') || '—' : '—'}</dd>
-            <dt className="text-slate-500">GSM</dt><dd>{styleInfo?.gsm ?? '—'}</dd>
-            <dt className="text-slate-500">Buyer / PO</dt><dd>{styleInfo ? `${styleInfo.buyer || '—'} / ${styleInfo.po_no || '—'}` : '—'}</dd>
-            <dt className="text-slate-500">Allocated Qty</dt><dd>{fmtNumber(totals.plannedTotal)} PCS</dd>
-            <dt className="text-slate-500">UOM</dt><dd>PCS</dd>
+            <dt className="text-ink-secondary">Plan</dt><dd className="font-medium">{plan ? `${plan.plan_no} · ${fmtDate(plan.plan_date)}` : '—'}</dd>
+            <dt className="text-ink-secondary">Job / Style</dt><dd className="font-medium">{styleInfo ? `${styleInfo.io_no ?? '—'} · ${styleInfo.style_no ?? '—'}` : '—'}</dd>
+            <dt className="text-ink-secondary">Style Description</dt><dd>{styleInfo?.style_description || '—'}</dd>
+            <dt className="text-ink-secondary">Fabric Type</dt><dd>{styleInfo ? [styleInfo.fabric_type, styleInfo.fabric_name].filter(Boolean).join(' · ') || '—' : '—'}</dd>
+            <dt className="text-ink-secondary">GSM</dt><dd>{styleInfo?.gsm ?? '—'}</dd>
+            <dt className="text-ink-secondary">Buyer / PO</dt><dd>{styleInfo ? `${styleInfo.buyer || '—'} / ${styleInfo.po_no || '—'}` : '—'}</dd>
+            <dt className="text-ink-secondary">Allocated Qty</dt><dd>{fmtNumber(totals.plannedTotal)} PCS</dd>
+            <dt className="text-ink-secondary">UOM</dt><dd>PCS</dd>
           </dl>
         </Card>
         <Card title={`Daily Plan Summary${line ? ` (${line.code})` : ''}`}>
@@ -350,7 +350,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
             <table className="flex-1 text-xs">
               <tbody>
                 {[['Good', totals.good, 'text-emerald-700'], ['Rework', totals.rework, 'text-amber-700'], ['Reject', totals.reject, 'text-red-700']].map(([k, v, c]) => (
-                  <tr key={k as string}><td className="py-0.5">{k}</td><td className={`py-0.5 text-right font-semibold ${c}`}>{fmtNumber(v)}</td><td className="py-0.5 text-right text-slate-500">{pct(v as number, totals.input)}%</td></tr>
+                  <tr key={k as string}><td className="py-0.5">{k}</td><td className={`py-0.5 text-right font-semibold ${c}`}>{fmtNumber(v)}</td><td className="py-0.5 text-right text-ink-secondary">{pct(v as number, totals.input)}%</td></tr>
                 ))}
                 <tr className="border-t font-semibold"><td className="py-0.5">Total</td><td className="py-0.5 text-right">{fmtNumber(totals.input)}</td><td className="py-0.5 text-right">100%</td></tr>
               </tbody>
@@ -380,7 +380,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
         {tab === 'bundle' && (
           <div className="max-h-[55vh] overflow-auto">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500">
+              <thead className="sticky top-0 z-10 bg-surface-muted text-ink-secondary">
                 <tr>
                   <th className="px-2 py-2 text-left">Bundle ID</th>
                   <th className="px-2 py-2 text-left">Lay No</th>
@@ -404,12 +404,12 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
                   ...g.rows.map((r) => {
                     const bad = good(r) < 0;
                     return (
-                      <tr key={r.bundle_id} className={`border-t border-slate-100 ${bad ? 'bg-red-50' : ''}`}>
+                      <tr key={r.bundle_id} className={`border-t border-surface-divider ${bad ? 'bg-red-50' : ''}`}>
                         <td className="px-2 py-1 tabular-nums font-semibold">
                           {r.bundle_no}{!r.plan_detail_id && <Badge tone="amber" className="ml-1">not planned</Badge>}
                         </td>
-                        <td className="px-2 py-1 text-slate-500">{r.lay_no || '—'}</td>
-                        <td className="px-2 py-1 text-slate-500">{r.cut_no || '—'}</td>
+                        <td className="px-2 py-1 text-ink-secondary">{r.lay_no || '—'}</td>
+                        <td className="px-2 py-1 text-ink-secondary">{r.cut_no || '—'}</td>
                         <td className="px-2 py-1">{r.colour || '—'}</td>
                         <td className="px-2 py-1 font-semibold">{r.size || '—'}</td>
                         <td className="px-2 py-1 text-right"><NumCell v={r.input_qty} disabled={!editable} onChange={(v) => patch(r.bundle_id, { input_qty: v })} /></td>
@@ -434,10 +434,10 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
                     );
                   }),
                 ])}
-                {!shown.length && <tr><td colSpan={14} className="px-4 py-10 text-center text-slate-400">Choose the line, enter the daily plan no and click Load Plan — or scan bundles</td></tr>}
+                {!shown.length && <tr><td colSpan={14} className="px-4 py-10 text-center text-ink-muted">Choose the line, enter the daily plan no and click Load Plan — or scan bundles</td></tr>}
               </tbody>
               {rows.length > 0 && (
-                <tfoot className="sticky bottom-0 border-t border-slate-200 bg-slate-50 font-semibold">
+                <tfoot className="sticky bottom-0 border-t border-surface-border bg-surface-muted font-semibold">
                   <tr>
                     <td className="px-2 py-1.5" colSpan={5}>Total</td>
                     <td className="px-2 py-1.5 text-right">{fmtNumber(totals.input)}</td>
@@ -455,16 +455,16 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
         {tab === 'defect' && <SummaryTable keyLabel="Defect Reason" data={defectSummary} />}
         {tab === 'rework' && (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr><th className="px-3 py-2 text-left">Bundle</th><th className="px-3 py-2 text-left">Job</th><th className="px-3 py-2 text-left">Size</th><th className="px-3 py-2 text-right">Rework</th><th className="px-3 py-2 text-right">Reject</th><th className="px-3 py-2 text-left">Defect</th><th className="px-3 py-2 text-left">Operator</th></tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-3 py-2 text-left">Bundle</th><th className="px-3 py-2 text-left">Job</th><th className="px-3 py-2 text-left">Size</th><th className="px-3 py-2 text-right">Rework</th><th className="px-3 py-2 text-right">Reject</th><th className="px-3 py-2 text-left">Defect</th><th className="px-3 py-2 text-left">Operator</th></tr></thead>
             <tbody>
               {rows.filter((r) => r.rework_qty + r.reject_qty > 0).map((r) => (
-                <tr key={r.bundle_id} className="border-t border-slate-100">
+                <tr key={r.bundle_id} className="border-t border-surface-divider">
                   <td className="px-3 py-1.5 tabular-nums">{r.bundle_no}</td><td className="px-3 py-1.5">{r.io_no}</td><td className="px-3 py-1.5">{r.size}</td>
                   <td className="px-3 py-1.5 text-right text-amber-700">{r.rework_qty}</td><td className="px-3 py-1.5 text-right text-red-700">{r.reject_qty}</td>
                   <td className="px-3 py-1.5">{defectName(r.defect_id) || '—'}</td><td className="px-3 py-1.5">{r.operator_name || '—'}</td>
                 </tr>
               ))}
-              {!rows.some((r) => r.rework_qty + r.reject_qty > 0) && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">No rework or reject entered</td></tr>}
+              {!rows.some((r) => r.rework_qty + r.reject_qty > 0) && <tr><td colSpan={7} className="px-3 py-6 text-center text-ink-muted">No rework or reject entered</td></tr>}
             </tbody>
           </table>
         )}
@@ -482,7 +482,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
           </div>
           <div className="px-3 pb-3">
             <div className="mb-1 flex justify-between text-xs"><b>Achievement vs Target</b><span>{fmtNumber(totals.good)} / {fmtNumber(totals.target)} PCS · <b>{achievement}%</b></span></div>
-            <div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, achievement)}%` }} /></div>
+            <div className="h-3 overflow-hidden rounded-full bg-surface-header"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, achievement)}%` }} /></div>
           </div>
         </Card>
       </div>
@@ -516,7 +516,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
               <JobHeaderRow key={g.key} group={g} colSpan={5} qty={g.rows.reduce((a, r) => a + r.remaining_qty, 0)}
                 extra={<Button size="sm" onClick={() => { setRows((x) => [...x, ...g.rows.map(fromPlanRow)]); }}>Add job</Button>} />,
               ...g.rows.map((p) => (
-                <tr key={p.id} className="border-t border-slate-100">
+                <tr key={p.id} className="border-t border-surface-divider">
                   <td className="px-2 py-1 tabular-nums font-semibold">{p.bundle_no}</td>
                   <td className="px-2 py-1">{p.colour}</td><td className="px-2 py-1 font-semibold">{p.size}</td>
                   <td className="px-2 py-1 text-right">{fmtNumber(p.remaining_qty)} PCS left</td>
@@ -524,7 +524,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
                 </tr>
               )),
             ])}
-            {!addable.length && <tr><td className="px-3 py-8 text-center text-slate-400">All planned bundles are already in the entry</td></tr>}
+            {!addable.length && <tr><td className="px-3 py-8 text-center text-ink-muted">All planned bundles are already in the entry</td></tr>}
           </tbody>
         </table>
       </Modal>
@@ -547,21 +547,21 @@ function SizeTable({ rows }: { rows: { size: string; input: number; good: number
   const t = rows.reduce((a, r) => ({ input: a.input + r.input, good: a.good + r.good, rework: a.rework + r.rework, reject: a.reject + r.reject }), { input: 0, good: 0, rework: 0, reject: 0 });
   return (
     <table className="w-full text-xs">
-      <thead className="bg-slate-50 text-slate-500">
+      <thead className="bg-surface-muted text-ink-secondary">
         <tr><th className="px-3 py-2 text-left">Size</th><th className="px-3 py-2 text-right">Input</th><th className="px-3 py-2 text-right">Good</th><th className="px-3 py-2 text-right">Rework</th><th className="px-3 py-2 text-right">Reject</th><th className="px-3 py-2 text-right">Achievement</th></tr>
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.size} className="border-t border-slate-100">
+          <tr key={r.size} className="border-t border-surface-divider">
             <td className="px-3 py-1.5 font-semibold">{r.size}</td><td className="px-3 py-1.5 text-right">{fmtNumber(r.input)}</td>
             <td className="px-3 py-1.5 text-right text-emerald-700">{fmtNumber(r.good)}</td><td className="px-3 py-1.5 text-right text-amber-700">{fmtNumber(r.rework)}</td>
             <td className="px-3 py-1.5 text-right text-red-700">{fmtNumber(r.reject)}</td><td className="px-3 py-1.5 text-right">{pct(r.good, r.input)}%</td>
           </tr>
         ))}
-        {!rows.length && <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">No data</td></tr>}
+        {!rows.length && <tr><td colSpan={6} className="px-3 py-6 text-center text-ink-muted">No data</td></tr>}
       </tbody>
       {rows.length > 0 && (
-        <tfoot className="border-t bg-slate-50 font-semibold">
+        <tfoot className="border-t bg-surface-muted font-semibold">
           <tr><td className="px-3 py-1.5">Total</td><td className="px-3 py-1.5 text-right">{fmtNumber(t.input)}</td><td className="px-3 py-1.5 text-right">{fmtNumber(t.good)}</td>
             <td className="px-3 py-1.5 text-right">{fmtNumber(t.rework)}</td><td className="px-3 py-1.5 text-right">{fmtNumber(t.reject)}</td><td className="px-3 py-1.5 text-right text-brand-700">{pct(t.good, t.input)}%</td></tr>
         </tfoot>

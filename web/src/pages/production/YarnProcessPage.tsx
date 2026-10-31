@@ -249,9 +249,9 @@ export default function YarnProcessPage() {
           message="Create a dyeing, winding or twisting process to begin." />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-lg border border-surface-border bg-white">
             <table className="w-full text-small">
-              <thead className="bg-slate-50">
+              <thead className="bg-surface-muted">
                 <tr>
                   <th className="th text-left">Process No</th>
                   <th className="th text-left">Type</th>
@@ -267,13 +267,13 @@ export default function YarnProcessPage() {
               </thead>
               <tbody>
                 {rows.map((r: any) => (
-                  <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                  <tr key={r.id} className="border-t border-surface-divider hover:bg-surface-muted/60">
                     <td className="td tabular-nums font-semibold text-brand-700">{r.process_no}</td>
                     <td className="td">{PROC_LABEL[r.process_type as ProcType] ?? r.process_type}</td>
-                    <td className="td text-slate-500">{fmtDate(r.process_date)}</td>
+                    <td className="td text-ink-secondary">{fmtDate(r.process_date)}</td>
                     <td className="td">{r.yarn_code ? `${r.yarn_code} — ${r.yarn_name}` : '—'}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.input_qty_kg, 3)}</td>
-                    <td className="td text-right tabular-nums text-slate-500">{fmtDecimal(r.expected_output, 3)}</td>
+                    <td className="td text-right tabular-nums text-ink-secondary">{fmtDecimal(r.expected_output, 3)}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.issued_kg, 3)}</td>
                     <td className="td text-right tabular-nums font-semibold text-emerald-700">
                       {fmtDecimal(r.received_qty, 3)}
@@ -522,7 +522,7 @@ export default function YarnProcessPage() {
               {(detail.receipts ?? []).length === 0 ? <Muted>No output received yet</Muted> : (
                 <div className="space-y-2">
                   {(detail.receipts ?? []).map((r: any) => (
-                    <div key={r.id} className="rounded border border-slate-200 p-2">
+                    <div key={r.id} className="rounded border border-surface-border p-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="tabular-nums font-semibold text-brand-700">{r.receipt_no}</span>
                         <Badge tone={r.qc_status === 'PASSED' ? 'emerald' : r.qc_status === 'REJECTED' ? 'rose' : 'amber'}>
@@ -538,7 +538,7 @@ export default function YarnProcessPage() {
                       </div>
                       {(r.cones ?? []).length > 0 && (
                         <div className="mt-2">
-                          <p className="mb-1 text-micro font-bold uppercase tracking-wide text-slate-400">
+                          <p className="mb-1 text-micro font-bold uppercase tracking-wide text-ink-muted">
                             Cones ({r.cones.length})
                           </p>
                           <SimpleTable head={['Cone', 'Source Lot', 'KG', 'Status']}
@@ -557,7 +557,7 @@ export default function YarnProcessPage() {
               {(detail.qc ?? []).length === 0 ? <Muted>No QC recorded</Muted> : (
                 <div className="space-y-2">
                   {(detail.qc ?? []).map((q: any) => (
-                    <div key={q.id} className="rounded border border-slate-200 p-2">
+                    <div key={q.id} className="rounded border border-surface-border p-2">
                       <div className="flex items-center justify-between">
                         <span>{fmtDate(q.qc_date)}</span>
                         <Badge tone={q.overall_status === 'PASSED' ? 'emerald' : 'amber'}>{q.overall_status}</Badge>
@@ -583,32 +583,32 @@ export default function YarnProcessPage() {
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-micro font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 text-small text-slate-800">{value}</p>
+      <p className="text-micro font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
+      <p className="mt-0.5 text-small text-ink">{value}</p>
     </div>
   );
 }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="mb-2 border-b border-slate-100 pb-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">{title}</h4>
+      <h4 className="mb-2 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">{title}</h4>
       {children}
     </div>
   );
 }
 function Muted({ children }: { children: React.ReactNode }) {
-  return <p className="py-3 text-center text-small text-slate-400">{children}</p>;
+  return <p className="py-3 text-center text-small text-ink-muted">{children}</p>;
 }
 function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   return (
-    <div className="overflow-x-auto rounded border border-slate-200">
+    <div className="overflow-x-auto rounded border border-surface-border">
       <table className="w-full text-caption">
-        <thead className="bg-slate-50">
+        <thead className="bg-surface-muted">
           <tr>{head.map((h) => <th key={h} className="th text-left">{h}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="border-t border-slate-100">
+            <tr key={i} className="border-t border-surface-divider">
               {r.map((c, j) => <td key={j} className="td">{c}</td>)}
             </tr>
           ))}

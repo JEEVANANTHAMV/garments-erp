@@ -76,7 +76,7 @@ export function PackingOrderDetailPage() {
         <Stat label="Cartons act / exp" value={`${o.variance?.cartons.actual ?? 0} / ${o.variance?.cartons.expected ?? 0}`} hint={`${n(o.cartons_total)} incl. unposted`} />
       </div>
       {o.variance_needs_approval && <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-body text-amber-800">Packaging variance is beyond the {o.variance?.tolerance_pct}% tolerance — a supervisor must approve it before more cartons post.</div>}
-      {o.variance_approved_at && <div className="mb-3 text-small text-slate-500">Variance approved {fmtDateTime(o.variance_approved_at)}: {o.variance_note}</div>}
+      {o.variance_approved_at && <div className="mb-3 text-small text-ink-secondary">Variance approved {fmtDateTime(o.variance_approved_at)}: {o.variance_note}</div>}
 
       <Tabs active={tab} onChange={setTab} tabs={[
         { key: 'plan', label: 'Plan & balance' }, { key: 'cartons', label: 'Cartons', count: (o.cartons ?? []).filter((c) => c.carton_status !== 'VOID').length },
@@ -127,7 +127,7 @@ export function PackingOrderDetailPage() {
                   <td className="td"><PkStatus value={c.carton_status} posted={c.is_posted} /></td>
                   <td className="td whitespace-nowrap text-right">
                     <Link className="mr-2 inline-flex items-center gap-1 text-brand-700 hover:underline" to={`/logistics/packing/verify?code=${encodeURIComponent(c.carton_no)}`}><ScanLine size={13} />Open</Link>
-                    {c.carton_status !== 'VOID' && <button className="inline-flex items-center gap-1 text-slate-600 hover:underline" onClick={() => printCartonLabel(c.id)}><Printer size={13} />Label</button>}
+                    {c.carton_status !== 'VOID' && <button className="inline-flex items-center gap-1 text-ink-secondary hover:underline" onClick={() => printCartonLabel(c.id)}><Printer size={13} />Label</button>}
                   </td>
                 </tr>
               ))}</tbody>
@@ -206,9 +206,9 @@ function Reconciliation({ orderId }: { orderId: number }) {
           ))}</tbody></table>
         <div className="p-3">
           <TableHead title="Packaging consumed (posted)" />
-          {!r.consumption.length ? <p className="text-small text-slate-400">Nothing posted yet.</p> : (
+          {!r.consumption.length ? <p className="text-small text-ink-muted">Nothing posted yet.</p> : (
             <table className="w-full text-body"><tbody>{r.consumption.map((c: any) => (
-              <tr key={`${c.material_kind}${c.trim_code}`}><td className="td">{c.material_kind}</td><td className="td">{c.trim_name}</td><td className="td text-right">{fmtNumber(c.qty, 2)}</td><td className="td text-right text-slate-400">{n(c.reversed_qty) ? `${fmtNumber(c.reversed_qty, 2)} reversed` : ''}</td></tr>
+              <tr key={`${c.material_kind}${c.trim_code}`}><td className="td">{c.material_kind}</td><td className="td">{c.trim_name}</td><td className="td text-right">{fmtNumber(c.qty, 2)}</td><td className="td text-right text-ink-muted">{n(c.reversed_qty) ? `${fmtNumber(c.reversed_qty, 2)} reversed` : ''}</td></tr>
             ))}</tbody></table>
           )}
         </div>
@@ -240,7 +240,7 @@ function RatioCard({ o, onSaved }: { o: Order; onSaved: () => void }) {
   return (
     <Card className="mb-4"><div className="p-4 text-body" id="order-ratio">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold uppercase tracking-wider text-slate-500 text-small">Size ratio per carton{o.packing_unit === 'MASTER_POLYBAG' ? ' / master polybag' : ''}</div>
+        <div className="font-semibold uppercase tracking-wider text-ink-secondary text-small">Size ratio per carton{o.packing_unit === 'MASTER_POLYBAG' ? ' / master polybag' : ''}</div>
         {canEdit && edit === null && <Button size="sm" variant="secondary" id="ratio-edit" onClick={() => setEdit(Object.fromEntries(ra.map((x) => [x.size_id, String(x.ratio)])))}>{ra.length ? 'Change ratio' : 'Set size ratio'}</Button>}
       </div>
       {edit !== null ? (
@@ -252,12 +252,12 @@ function RatioCard({ o, onSaved }: { o: Order; onSaved: () => void }) {
       ) : ra.length ? (
         <div id="ratio-show">
           <b>{ra.map((x) => `${x.size_code} ${x.ratio}`).join(' : ')}</b>
-          <span className="ml-3 text-slate-600">full carton ({rule.standard_pieces_per_carton} pcs): {ra.map((x) => `${x.size_code} ${x.per_carton}`).join(' · ')}</span>
-          {ra[0]?.per_master_bag ? <span className="ml-3 text-slate-600">master polybag ({o.pieces_per_master_bag} pcs): {ra.map((x) => `${x.size_code} ${x.per_master_bag}`).join(' · ')}</span> : null}
-          <span className="ml-3 text-slate-500">→ {o.planned_cartons} carton(s) expected</span>
-          {live > 0 && <span className="ml-3 text-small text-slate-400">(fixed — cartons are packed)</span>}
+          <span className="ml-3 text-ink-secondary">full carton ({rule.standard_pieces_per_carton} pcs): {ra.map((x) => `${x.size_code} ${x.per_carton}`).join(' · ')}</span>
+          {ra[0]?.per_master_bag ? <span className="ml-3 text-ink-secondary">master polybag ({o.pieces_per_master_bag} pcs): {ra.map((x) => `${x.size_code} ${x.per_master_bag}`).join(' · ')}</span> : null}
+          <span className="ml-3 text-ink-secondary">→ {o.planned_cartons} carton(s) expected</span>
+          {live > 0 && <span className="ml-3 text-small text-ink-muted">(fixed — cartons are packed)</span>}
         </div>
-      ) : <p className="text-slate-400">No size ratio — cartons are filled by hand. Set one if the buyer gives an assortment (e.g. S 1 : M 2 : L 2 : XL 1).</p>}
+      ) : <p className="text-ink-muted">No size ratio — cartons are filled by hand. Set one if the buyer gives an assortment (e.g. S 1 : M 2 : L 2 : XL 1).</p>}
     </div></Card>
   );
 }

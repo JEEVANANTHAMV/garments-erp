@@ -181,7 +181,7 @@ export default function CuttingReportsPage() {
   };
 
   function renderCell(c: Col, v: any) {
-    if (v == null || v === '') return <span className="text-slate-300">—</span>;
+    if (v == null || v === '') return <span className="text-ink-disabled">—</span>;
     if (c.link) {
       const parts = String(v).split(', ').filter(Boolean);
       return (
@@ -194,7 +194,7 @@ export default function CuttingReportsPage() {
                 : <Link className="text-brand-700 hover:underline"
                     to={`/production/traceability?${c.link}=${encodeURIComponent(p)}`}
                     title={`Trace this ${c.link}`}>{p}</Link>}
-              {i < parts.length - 1 && <span className="text-slate-300">,</span>}
+              {i < parts.length - 1 && <span className="text-ink-disabled">,</span>}
             </Fragment>
           ))}
         </span>
@@ -241,12 +241,12 @@ export default function CuttingReportsPage() {
         <div className="card space-y-3 p-3 lg:self-start">
           {GROUPS.map((g) => (
             <div key={g}>
-              <p className="mb-1 text-micro font-bold uppercase tracking-wider text-slate-400">{g}</p>
+              <p className="mb-1 text-micro font-bold uppercase tracking-wider text-ink-muted">{g}</p>
               <div className="space-y-0.5">
                 {REPORTS.filter((r) => r.group === g).map((r) => (
                   <button key={r.key} id={`cr-${r.key}`}
                     className={`block w-full rounded px-2 py-1.5 text-left text-small transition ${
-                      active.key === r.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                      active.key === r.key ? 'bg-brand-50 font-semibold text-brand-700' : 'text-ink-secondary hover:bg-surface-muted'}`}
                     onClick={() => pick(r)}>
                     {r.label}
                   </button>
@@ -259,8 +259,8 @@ export default function CuttingReportsPage() {
         <div className="min-w-0 space-y-3">
           {/* Filters */}
           <div className="card p-3">
-            <h3 className="text-body font-bold text-slate-800">{active.label}</h3>
-            <p className="mt-0.5 text-caption text-slate-500">{active.hint}</p>
+            <h3 className="text-body font-bold text-ink">{active.label}</h3>
+            <p className="mt-0.5 text-caption text-ink-secondary">{active.hint}</p>
             <form className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
               onSubmit={(e) => { e.preventDefault(); apply(); }}>
               {has('dates') && <>
@@ -298,16 +298,16 @@ export default function CuttingReportsPage() {
                 message="This report returned no rows for the current filters." />
             ) : (
               <div className="card p-0">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
-                  <span className="text-caption font-semibold text-slate-500">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-divider px-3 py-2">
+                  <span className="text-caption font-semibold text-ink-secondary">
                     {data.meta.total.toLocaleString('en-IN')} row{data.meta.total === 1 ? '' : 's'}
                     {data.meta.truncated && ` (first ${data.meta.max_rows.toLocaleString('en-IN')} — narrow the filters)`}
                   </span>
-                  {isFetching && <span className="text-caption text-slate-400">Updating…</span>}
+                  {isFetching && <span className="text-caption text-ink-muted">Updating…</span>}
                 </div>
                 <div className="max-h-[65vh] overflow-auto">
                   <table className="w-full text-small">
-                    <thead className="sticky top-0 z-10 bg-slate-50">
+                    <thead className="sticky top-0 z-10 bg-surface-muted">
                       <tr>
                         {columns.map((c) => (
                           <th key={c.key} className={`th whitespace-nowrap ${isNumeric(c.type) ? 'text-right' : 'text-left'}`}>
@@ -318,7 +318,7 @@ export default function CuttingReportsPage() {
                     </thead>
                     <tbody>
                       {rows.map((r, i) => (
-                        <tr key={i} className="border-t border-slate-100 hover:bg-slate-50/60">
+                        <tr key={i} className="border-t border-surface-divider hover:bg-surface-muted/60">
                           {columns.map((c) => (
                             <td key={c.key} className={`td whitespace-nowrap ${isNumeric(c.type) ? 'text-right tabular-nums' : ''}`}>
                               {renderCell(c, r[c.key])}
@@ -328,8 +328,8 @@ export default function CuttingReportsPage() {
                       ))}
                     </tbody>
                     {hasTotals && (
-                      <tfoot className="sticky bottom-0 bg-slate-100 font-semibold">
-                        <tr className="border-t-2 border-slate-300">
+                      <tfoot className="sticky bottom-0 bg-surface-header font-semibold">
+                        <tr className="border-t-2 border-surface-input">
                           {columns.map((c, i) => (
                             <td key={c.key} className={`td whitespace-nowrap ${isNumeric(c.type) ? 'text-right tabular-nums' : ''}`}>
                               {i === 0 ? `Total${data.meta.total > rows.length ? ' (all pages)' : ''}`
@@ -344,7 +344,7 @@ export default function CuttingReportsPage() {
                 <Pager page={page} pageSize={pageSize} total={data.meta.total}
                   totalPages={Math.ceil(data.meta.total / pageSize)} onPage={setPage} />
                 {data.notes.length > 0 && (
-                  <div className="space-y-0.5 border-t border-slate-100 px-3 py-2 text-caption text-slate-500">
+                  <div className="space-y-0.5 border-t border-surface-divider px-3 py-2 text-caption text-ink-secondary">
                     {data.notes.map((nt) => <p key={nt}>{nt}</p>)}
                   </div>
                 )}

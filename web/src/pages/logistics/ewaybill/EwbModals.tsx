@@ -53,7 +53,7 @@ export function SourcePickerModal({ open, onClose, meta }: { open: boolean; onCl
         {(meta?.source_types ?? []).map((t) => (
           <button key={t.value} type="button" data-src-type={t.value} onClick={() => { setType(t.value); setQ(''); }}
             className={clsx('rounded-lg border px-3 py-1.5 text-body font-medium transition-colors',
-              type === t.value ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border text-slate-600 hover:bg-slate-50')}>
+              type === t.value ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-surface-border text-ink-secondary hover:bg-surface-muted')}>
             {t.label}
           </button>
         ))}
@@ -97,7 +97,7 @@ export function GenerateModal({ open, onClose, meta, run, total }: { open: boole
       footer={<><Button variant="secondary" onClick={onClose} disabled={a.busy}>Cancel</Button>
         <Button id="ewb-confirm-generate" loading={a.busy} onClick={submit}>{meta.online ? 'Generate' : 'Record e-way bill'}</Button></>}>
       <ErrorBox err={a.err} id="ewb-gen-error" />
-      {meta.online ? <p className="text-body text-slate-600">The e-way bill is generated on the portal and cannot be edited afterwards — only the vehicle updated, the validity extended or (within 24 h) cancelled.</p> : (
+      {meta.online ? <p className="text-body text-ink-secondary">The e-way bill is generated on the portal and cannot be edited afterwards — only the vehicle updated, the validity extended or (within 24 h) cancelled.</p> : (
         <div className="grid gap-3">
           <Input label="E-way bill no" required id="ewb-no-input" inputMode="numeric" maxLength={12} placeholder="12 digits" value={f.ewb_no}
             onChange={(e) => setF({ ...f, ewb_no: e.target.value.replace(/\D/g, '').slice(0, 12) })} />

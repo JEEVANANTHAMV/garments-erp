@@ -67,8 +67,8 @@ function TypesTab() {
               <span className="tabular-nums font-bold text-brand-700">{t.code}</span><span className="text-body font-semibold">{t.name}</span>
               <span className="rounded bg-purple-100 px-1.5 py-0.5 text-caption font-bold text-purple-800">→ {t.output_state}</span>
               {yes(t.requires_qc) && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-caption font-bold text-orange-800">QC required before posting</span>}
-              {yes(t.is_reprocess) && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-caption font-bold text-slate-700">Reprocess</span>}
-              {yes(t.changes_colour) && <span className="text-slate-500">changes colour</span>}
+              {yes(t.is_reprocess) && <span className="rounded bg-surface-header px-1.5 py-0.5 text-caption font-bold text-ink">Reprocess</span>}
+              {yes(t.changes_colour) && <span className="text-ink-secondary">changes colour</span>}
               {!yes(t.is_active) && <span className="text-red-600">inactive</span>}
               {master && <span className="ml-auto flex gap-1">
                 <Button size="sm" variant="secondary" onClick={() => setType({ ...t, changes_colour: yes(t.changes_colour), allow_reprocess: yes(t.allow_reprocess), allow_split: yes(t.allow_split), is_reprocess: yes(t.is_reprocess), requires_qc: yes(t.requires_qc), is_active: yes(t.is_active) })}><Pencil size={12} className="mr-1" /> Edit</Button>
@@ -77,15 +77,15 @@ function TypesTab() {
             </div>
             {t.qc_params?.length ? (
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500"><tr>{['QC parameter', 'UOM', 'Min', 'Target', 'Max', 'Mandatory', 'Active', ''].map((h) => <th key={h} className="px-3 py-1.5 text-left">{h}</th>)}</tr></thead>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>{['QC parameter', 'UOM', 'Min', 'Target', 'Max', 'Mandatory', 'Active', ''].map((h) => <th key={h} className="px-3 py-1.5 text-left">{h}</th>)}</tr></thead>
                 <tbody>{t.qc_params.map((p: any) => (
-                  <tr key={p.id} className="border-t border-slate-100"><td className="px-3 py-1.5 font-semibold">{p.param_name}</td><td className="px-3 py-1.5">{p.uom || '—'}</td>
+                  <tr key={p.id} className="border-t border-surface-divider"><td className="px-3 py-1.5 font-semibold">{p.param_name}</td><td className="px-3 py-1.5">{p.uom || '—'}</td>
                     <td className="px-3 py-1.5">{p.min_value ?? '—'}</td><td className="px-3 py-1.5">{p.target_value ?? '—'}</td><td className="px-3 py-1.5">{p.max_value ?? '—'}</td>
                     <td className="px-3 py-1.5">{yes(p.is_mandatory) ? 'Yes' : 'No'}</td><td className="px-3 py-1.5">{yes(p.is_active) ? 'Yes' : 'No'}</td>
-                    <td className="px-3 py-1.5 text-right">{master && <button className="p-1 text-slate-400 hover:text-brand-700" title="Edit" onClick={() => setParam({ ...p, uom: p.uom ?? '', min_value: p.min_value ?? '', max_value: p.max_value ?? '', target_value: p.target_value ?? '', is_mandatory: yes(p.is_mandatory), is_active: yes(p.is_active) })}><Pencil size={13} /></button>}</td></tr>
+                    <td className="px-3 py-1.5 text-right">{master && <button className="p-1 text-ink-muted hover:text-brand-700" title="Edit" onClick={() => setParam({ ...p, uom: p.uom ?? '', min_value: p.min_value ?? '', max_value: p.max_value ?? '', target_value: p.target_value ?? '', is_mandatory: yes(p.is_mandatory), is_active: yes(p.is_active) })}><Pencil size={13} /></button>}</td></tr>
                 ))}</tbody>
               </table>
-            ) : <div className="px-4 py-2 text-small text-slate-400">No QC parameters</div>}
+            ) : <div className="px-4 py-2 text-small text-ink-muted">No QC parameters</div>}
           </div>
         ))}
       </div>
@@ -150,11 +150,11 @@ function ReasonsTab() {
       {master && <div className="mb-3 flex justify-end"><Button onClick={() => setR({ code: '', reason: '', kind: 'BOTH', default_billing: '', is_active: true })}><Plus size={14} className="mr-1" /> New reason</Button></div>}
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Code', 'Reason', 'Used for', 'Default billing', 'Active', ''].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['Code', 'Reason', 'Used for', 'Default billing', 'Active', ''].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
           <tbody>{(q.data ?? []).map((x) => (
-            <tr key={x.id} className="border-t border-slate-100"><td className="px-3 py-1.5 tabular-nums">{x.code}</td><td className="px-3 py-1.5 font-semibold">{x.reason}</td><td className="px-3 py-1.5">{x.kind}</td>
+            <tr key={x.id} className="border-t border-surface-divider"><td className="px-3 py-1.5 tabular-nums">{x.code}</td><td className="px-3 py-1.5 font-semibold">{x.reason}</td><td className="px-3 py-1.5">{x.kind}</td>
               <td className="px-3 py-1.5">{x.default_billing || '—'}</td><td className="px-3 py-1.5">{yes(x.is_active) ? 'Yes' : 'No'}</td>
-              <td className="px-3 py-1.5 text-right">{master && <button className="p-1 text-slate-400 hover:text-brand-700" onClick={() => setR({ ...x, default_billing: x.default_billing ?? '', is_active: yes(x.is_active) })}><Pencil size={13} /></button>}</td></tr>
+              <td className="px-3 py-1.5 text-right">{master && <button className="p-1 text-ink-muted hover:text-brand-700" onClick={() => setR({ ...x, default_billing: x.default_billing ?? '', is_active: yes(x.is_active) })}><Pencil size={13} /></button>}</td></tr>
           ))}</tbody>
         </table>
       </div>
@@ -217,15 +217,15 @@ export function FabricProcessReportsPage() {
       <div className="card overflow-x-auto">
         {q.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{rep.cols.map((c) => <th key={c[0]} className={`px-3 py-2 ${c[2] && c[2] !== 'date' && c[2] !== 'status' ? 'text-right' : 'text-left'}`}>{c[1]}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{rep.cols.map((c) => <th key={c[0]} className={`px-3 py-2 ${c[2] && c[2] !== 'date' && c[2] !== 'status' ? 'text-right' : 'text-left'}`}>{c[1]}</th>)}</tr></thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={i} className="border-t border-slate-100">{rep.cols.map((c) => <td key={c[0]} className={`px-3 py-1.5 ${c[2] && c[2] !== 'date' && c[2] !== 'status' ? 'text-right tabular-nums' : ''}`}>{c[2] === 'status' ? <FpStatus value={r[c[0]]} /> : fmt(r[c[0]], c[2])}</td>)}</tr>
+                <tr key={i} className="border-t border-surface-divider">{rep.cols.map((c) => <td key={c[0]} className={`px-3 py-1.5 ${c[2] && c[2] !== 'date' && c[2] !== 'status' ? 'text-right tabular-nums' : ''}`}>{c[2] === 'status' ? <FpStatus value={r[c[0]]} /> : fmt(r[c[0]], c[2])}</td>)}</tr>
               ))}
-              {!rows.length && <tr><td colSpan={rep.cols.length} className="px-3 py-10 text-center text-slate-400">Nothing to show</td></tr>}
+              {!rows.length && <tr><td colSpan={rep.cols.length} className="px-3 py-10 text-center text-ink-muted">Nothing to show</td></tr>}
             </tbody>
             {rows.length > 0 && sumCols.length > 0 && (
-              <tfoot className="bg-slate-100 font-bold"><tr>{rep.cols.map((c, i) => <td key={c[0]} className={`px-3 py-2 ${c[2] === 'kg' || c[2] === 'amt' ? 'text-right' : ''}`}>{c[2] === 'kg' || c[2] === 'amt' ? fmt(total(c[0]), c[2]) : i === 0 ? 'Total' : ''}</td>)}</tr></tfoot>
+              <tfoot className="bg-surface-header font-bold"><tr>{rep.cols.map((c, i) => <td key={c[0]} className={`px-3 py-2 ${c[2] === 'kg' || c[2] === 'amt' ? 'text-right' : ''}`}>{c[2] === 'kg' || c[2] === 'amt' ? fmt(total(c[0]), c[2]) : i === 0 ? 'Total' : ''}</td>)}</tr></tfoot>
             )}
           </table>
         )}

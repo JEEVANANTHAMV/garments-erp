@@ -124,7 +124,7 @@ function RequestView({ id, onClose }: { id: number; onClose: () => void }) {
             ['Rate', fmtDecimal(r.rate, 2)], ['Amount', `₹${fmtDecimal(r.amount, 2)}`], ['Requested by', r.requested_by],
             ['Raise job allowance', Number(r.raise_allowance) ? (r.allowance_applied_qty ? `Yes · +${qtyFmt(r.allowance_applied_qty)} applied` : 'Yes, on approval') : 'No'],
             ['Decided', r.decided_at ? `${fmtDate(r.decided_at)} · ${r.decided_by_name ?? ''}` : '—'], ['Decision remarks', r.decision_remarks]]} />
-          <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-body text-slate-700"><b>Reason:</b> {r.reason}</p>
+          <p className="mb-3 rounded-lg bg-surface-muted px-3 py-2 text-body text-ink"><b>Reason:</b> {r.reason}</p>
           {r.status === 'PENDING' && can('PURCHASE.APPROVE') && <Input label="Approval remarks (optional)" value={remarks} onChange={(e) => setRemarks(e.target.value)} />}
         </>
       )}

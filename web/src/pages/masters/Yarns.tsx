@@ -126,14 +126,14 @@ export function YarnsPage() {
 
       {/* View Switcher Tabs & Filters */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
-        <div className="inline-flex rounded-lg bg-slate-100 p-1">
+        <div className="inline-flex rounded-lg bg-surface-header p-1">
           <button
             type="button"
             onClick={() => { setView('bases'); setPage(1); }}
             className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-bold transition-all ${
               view === 'bases'
                 ? 'bg-white text-brand-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                : 'text-ink-secondary hover:text-ink'
             }`}
           >
             <Layers size={14} />
@@ -145,7 +145,7 @@ export function YarnsPage() {
             className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-bold transition-all ${
               view === 'variants'
                 ? 'bg-white text-brand-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                : 'text-ink-secondary hover:text-ink'
             }`}
           >
             <SlidersHorizontal size={14} />
@@ -222,7 +222,7 @@ export function YarnsPage() {
               sortable: true,
               render: (r: any) => (
                 <div>
-                  <span className="font-medium text-slate-800">{r.base_name}</span>
+                  <span className="font-medium text-ink">{r.base_name}</span>
                   {r.certification && r.certification !== 'NONE' && (
                     <span className="ml-2 inline-block rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.2 text-micro font-bold text-emerald-700">
                       {r.certification}
@@ -235,7 +235,7 @@ export function YarnsPage() {
               key: 'composition_desc',
               header: 'Fibre Composition',
               render: (r: any) => (
-                <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                <span className="inline-flex items-center gap-1.5 font-medium text-ink">
                   <span className="h-2 w-2 rounded-full bg-emerald-500" />
                   {r.composition_desc || '100% Cotton'}
                 </span>
@@ -253,7 +253,7 @@ export function YarnsPage() {
               header: 'Std Rate (₹)',
               align: 'right',
               render: (r: any) => (
-                <span className="tabular-nums text-xs font-semibold text-slate-800">
+                <span className="tabular-nums text-xs font-semibold text-ink">
                   {Number(r.std_rate) > 0 ? `₹${fmtDecimal(r.std_rate, 2)}` : '—'}
                 </span>
               ),
@@ -311,9 +311,9 @@ export function YarnsPage() {
               sortable: true,
               render: (r: any) => (
                 <div>
-                  <span className="font-medium text-slate-800">{r.yarn_name}</span>
+                  <span className="font-medium text-ink">{r.yarn_name}</span>
                   {r.base_name && (
-                    <span className="block text-caption text-slate-400 font-normal">
+                    <span className="block text-caption text-ink-muted font-normal">
                       Base: {r.base_name} ({r.base_code})
                     </span>
                   )}
@@ -324,7 +324,7 @@ export function YarnsPage() {
               key: 'count_value',
               header: 'Count / Spec',
               render: (r: any) => (
-                <span className="tabular-nums font-semibold text-slate-800">
+                <span className="tabular-nums font-semibold text-ink">
                   {r.count_value || '—'} {r.count_type || 'Ne'}
                   {Number(r.ply) > 1 ? `/${r.ply}` : ''} {r.twist ? `(${r.twist})` : ''}
                 </span>
@@ -334,7 +334,7 @@ export function YarnsPage() {
               key: 'composition_desc',
               header: 'Fibre Composition',
               render: (r: any) => (
-                <span className="text-slate-700 text-xs">
+                <span className="text-ink text-xs">
                   {r.composition_desc || '100% Cotton'}
                 </span>
               ),
@@ -344,7 +344,7 @@ export function YarnsPage() {
               header: 'Std Rate (₹/Kg)',
               align: 'right',
               render: (r: any) => (
-                <span className="tabular-nums font-bold text-slate-900">
+                <span className="tabular-nums font-bold text-ink">
                   {r.std_rate ? `₹${fmtDecimal(r.std_rate, 2)}` : '—'}
                 </span>
               ),
@@ -662,11 +662,11 @@ export function YarnDetailPage() {
         <div className="flex items-center justify-between border-b border-surface-border pb-2.5">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-brand-600" />
-            <h3 className="text-body font-bold uppercase tracking-wider text-slate-800">
+            <h3 className="text-body font-bold uppercase tracking-wider text-ink">
               1. Yarn Base Specifications (Parent Identity)
             </h3>
           </div>
-          <span className="text-caption text-slate-400 font-medium">
+          <span className="text-caption text-ink-muted font-medium">
             Single master entry for this yarn category &amp; fibre identity
           </span>
         </div>
@@ -774,7 +774,7 @@ export function YarnDetailPage() {
                 Formula: Composition + Cert + Yarn Type
               </span>
             </div>
-            <div className="tabular-nums text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
+            <div className="tabular-nums text-xs font-bold text-ink bg-white border border-brand-200 rounded p-2 shadow-xs">
               {liveYarnAutoDescription || '(Configure attributes to generate standardized description)'}
             </div>
           </div>
@@ -786,10 +786,10 @@ export function YarnDetailPage() {
         {/* Left 7 Cols: Interactive Fibre Table */}
         <div className="lg:col-span-7 space-y-4">
           <div className="card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-surface-border bg-surface-muted/70 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <Layers size={15} className="text-brand-600" />
-                <h3 className="text-body font-bold uppercase tracking-wider text-slate-800">
+                <h3 className="text-body font-bold uppercase tracking-wider text-ink">
                   2. Fibre Composition Breakdown
                 </h3>
               </div>
@@ -803,17 +803,17 @@ export function YarnDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-surface-border bg-slate-100/60 text-caption font-bold uppercase text-slate-600">
+                  <tr className="border-b border-surface-border bg-surface-header/60 text-caption font-bold uppercase text-ink-secondary">
                     <th className="py-2 px-2.5 w-8">#</th>
                     <th className="py-2 px-2 min-w-[200px]">Fibre Type</th>
                     <th className="py-2 px-2 w-28 text-right">Share (%)</th>
                     {editable && <th className="py-2 px-2 w-8 text-center" />}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-surface-divider">
                   {fibreLines.map((f, idx) => (
-                    <tr key={f._key} className="hover:bg-slate-50/70">
-                      <td className="py-2 px-2.5 font-bold text-slate-400">
+                    <tr key={f._key} className="hover:bg-surface-muted/70">
+                      <td className="py-2 px-2.5 font-bold text-ink-muted">
                         <span
                           className="inline-block w-2 h-2 rounded-full mr-1.5"
                           style={{ backgroundColor: FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length] }}
@@ -833,7 +833,7 @@ export function YarnDetailPage() {
                           value={f.percentage}
                           disabled={!editable}
                           onChange={(e) => handleUpdateFibre(f._key, 'percentage', e.target.value === '' ? '' : Number(e.target.value))}
-                          className="input py-1 px-2 text-right tabular-nums font-bold text-slate-900 text-xs w-full"
+                          className="input py-1 px-2 text-right tabular-nums font-bold text-ink text-xs w-full"
                         >
                         </input>
                       </td>
@@ -843,7 +843,7 @@ export function YarnDetailPage() {
                             type="button"
                             onClick={() => handleRemoveFibre(f._key)}
                             disabled={fibreLines.length <= 1}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                            className="p-1 text-ink-muted hover:text-rose-600 rounded"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -853,8 +853,8 @@ export function YarnDetailPage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-xs">
-                    <td colSpan={2} className="py-2.5 px-3 text-slate-800 uppercase tracking-wider">
+                  <tr className="border-t-2 border-surface-border bg-surface-muted font-bold text-xs">
+                    <td colSpan={2} className="py-2.5 px-3 text-ink uppercase tracking-wider">
                       Total Composition
                     </td>
                     <td className={`py-2.5 px-2 text-right tabular-nums font-bold text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
@@ -870,9 +870,9 @@ export function YarnDetailPage() {
 
         {/* Right 5 Cols: Live Composition Donut Chart */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="card p-4 overflow-hidden border border-slate-200">
+          <div className="card p-4 overflow-hidden border border-surface-border">
             <div className="flex items-center justify-between border-b border-surface-border pb-2.5 mb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
                 <PieIcon size={14} className="text-brand-600" /> Live Composition Visualizer
               </h3>
               {isValid100 ? (
@@ -918,8 +918,8 @@ export function YarnDetailPage() {
                   })()}
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-2xl font-bold text-slate-800 tabular-nums">{totalPercentage.toFixed(0)}%</span>
-                  <span className="text-micro font-bold uppercase tracking-wider text-slate-400">Total</span>
+                  <span className="text-2xl font-bold text-ink tabular-nums">{totalPercentage.toFixed(0)}%</span>
+                  <span className="text-micro font-bold uppercase tracking-wider text-ink-muted">Total</span>
                 </div>
               </div>
 
@@ -932,9 +932,9 @@ export function YarnDetailPage() {
                         className="w-2.5 h-2.5 rounded-full"
                         style={{ backgroundColor: FIBRE_COLOR_PALETTE[idx % FIBRE_COLOR_PALETTE.length] }}
                       />
-                      <span className="font-semibold text-slate-700">{f.fibre_name}</span>
+                      <span className="font-semibold text-ink">{f.fibre_name}</span>
                     </div>
-                    <span className="tabular-nums font-bold text-slate-900">{f.percentage}%</span>
+                    <span className="tabular-nums font-bold text-ink">{f.percentage}%</span>
                   </div>
                 ))}
               </div>
@@ -950,10 +950,10 @@ export function YarnDetailPage() {
             <SlidersHorizontal size={20} />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-slate-900">
+            <h4 className="text-sm font-bold text-ink">
               Yarn Counts Managed in Dedicated Master
             </h4>
-            <p className="text-xs text-slate-600 max-w-2xl mt-0.5">
+            <p className="text-xs text-ink-secondary max-w-2xl mt-0.5">
               Yarn counts (e.g. 20s, 30s, 40s, 2/50s, 75D, 30s/30s/10s) are maintained separately in the <strong>Yarn Count Master</strong>.
               When generating Quotations, Purchase Orders, or Knitting requirements, select the required count directly from the count dropdown.
             </p>

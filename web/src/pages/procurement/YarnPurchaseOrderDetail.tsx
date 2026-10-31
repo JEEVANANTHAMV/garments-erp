@@ -657,7 +657,7 @@ export default function YarnPurchaseOrderDetailPage() {
 
   if (!isNew && isLoading) {
     return (
-      <div className="py-20 text-center text-slate-400">
+      <div className="py-20 text-center text-ink-muted">
         Loading yarn purchase order #{id}...
       </div>
     );
@@ -666,11 +666,11 @@ export default function YarnPurchaseOrderDetailPage() {
   return (
     <div className="space-y-5 pb-16">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => nav('/procurement/yarn/orders')}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 transition"
+            className="p-1.5 rounded-lg border border-surface-input hover:bg-surface-header text-ink-secondary transition"
             title="Back to Yarn POs"
           >
             <ArrowLeft size={16} />
@@ -680,7 +680,7 @@ export default function YarnPurchaseOrderDetailPage() {
               <span className="p-1.5 rounded-md bg-amber-100 text-amber-700">
                 <Disc size={18} />
               </span>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl font-bold text-ink tracking-tight">
                 {isNew ? 'New Yarn Purchase Order' : `Yarn PO: ${header.po_no}`}
               </h1>
               {!isNew && <StatusBadge value={header.approval_state} />}
@@ -690,7 +690,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-ink-secondary mt-0.5">
               Unified procurement for Grey & Dyed yarn, Direct KG & Bag/Pack weights
             </p>
           </div>
@@ -710,7 +710,7 @@ export default function YarnPurchaseOrderDetailPage() {
           {!isNew && (
             <button
               onClick={() => nav(`/procurement/yarn/grn/new?po_id=${id}`)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
             >
               <PackageCheck size={14} className="text-amber-600" />
               <span>Inward Yarn GRN</span>
@@ -729,20 +729,20 @@ export default function YarnPurchaseOrderDetailPage() {
       </div>
 
       {/* Header Fields Card */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-100">
+      <div className="bg-white p-4 rounded-xl border border-surface-border/80 shadow-sm space-y-4">
+        <div className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center justify-between pb-2 border-b border-surface-divider">
           <div className="flex items-center gap-1.5">
             <Disc size={14} className="text-amber-600" />
             <span>Purchase Order Details</span>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-amber-50/60 px-2.5 py-1 rounded-md border border-amber-200">
+          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-ink bg-amber-50/60 px-2.5 py-1 rounded-md border border-amber-200">
             <input
               type="checkbox"
               checked={header.is_interstate}
               onChange={(e) => handleToggleInterstate(e.target.checked)}
               className="h-3.5 w-3.5 rounded text-amber-600 focus:ring-amber-500"
             />
-            <span className="font-semibold text-slate-800">Inter-state PO (IGST Calculation)</span>
+            <span className="font-semibold text-ink">Inter-state PO (IGST Calculation)</span>
           </label>
         </div>
 
@@ -871,7 +871,7 @@ export default function YarnPurchaseOrderDetailPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-caption text-slate-600 mt-0.5">
+                <p className="text-caption text-ink-secondary mt-0.5">
                   {bomLoading
                     ? 'Loading the BOM of this job…'
                     : bomData
@@ -882,12 +882,12 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
             <div className="flex items-center gap-3">
               {bomYarns.length > 0 && (
-                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-ink cursor-pointer">
                   <input
                     type="checkbox"
                     checked={filterBomOnly}
                     onChange={(e) => setFilterBomOnly(e.target.checked)}
-                    className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                    className="rounded border-surface-input text-amber-600 focus:ring-amber-500"
                   />
                   <span>Show BOM Items Only</span>
                 </label>
@@ -908,10 +908,10 @@ export default function YarnPurchaseOrderDetailPage() {
       {/* Billing and Shipping Addresses */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Billing Address Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+              <div className="flex items-center gap-2 text-ink font-semibold text-xs">
                 <span className="p-1 rounded bg-blue-100 text-blue-700">
                   <Building2 size={13} />
                 </span>
@@ -926,7 +926,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 <RotateCcw size={11} /> Reset Default
               </button>
             </div>
-            <p className="text-caption text-slate-500 mb-2.5">
+            <p className="text-caption text-ink-secondary mb-2.5">
               Buyer company legal entity billed by the spinning mill
             </p>
           </div>
@@ -940,10 +940,10 @@ export default function YarnPurchaseOrderDetailPage() {
         </div>
 
         {/* Shipping Address Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+              <div className="flex items-center gap-2 text-ink font-semibold text-xs">
                 <span className="p-1 rounded bg-emerald-100 text-emerald-700">
                   <Truck size={13} />
                 </span>
@@ -952,7 +952,7 @@ export default function YarnPurchaseOrderDetailPage() {
               <button
                 type="button"
                 onClick={() => setHeader((h) => ({ ...h, shipping_to_party_id: '', shipping_address: header.billing_address }))}
-                className="text-caption text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
+                className="text-caption text-ink-secondary hover:text-ink font-medium flex items-center gap-1"
                 title="Copy from Billing Address"
               >
                 Same as Billing
@@ -979,20 +979,20 @@ export default function YarnPurchaseOrderDetailPage() {
       </div>
 
       {/* Multi-Item Yarn Grid Cockpit */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden space-y-3 p-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm overflow-hidden space-y-3 p-4">
+        <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
           <div>
-            <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <Disc size={14} className="text-amber-600" />
               <span>Yarn Line Items ({lines.length})</span>
             </h2>
-            <p className="text-caption text-slate-400">
+            <p className="text-caption text-ink-muted">
               Select Grey or Dyed Yarn, specify Direct KG or Pack/Bag basis (auto-multiplies Total KG)
             </p>
           </div>
           <button
             onClick={() => setLines((p) => [...p, emptyYarnLine()])}
-            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <Plus size={13} />
             <span>Add Yarn Item</span>
@@ -1002,7 +1002,7 @@ export default function YarnPurchaseOrderDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-caption uppercase tracking-wider">
+              <tr className="bg-surface-muted text-ink-secondary font-semibold border-b border-surface-border text-caption uppercase tracking-wider">
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
                 <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
                 <th className="py-2.5 px-2 min-w-[110px]">Style</th>
@@ -1032,23 +1032,23 @@ export default function YarnPurchaseOrderDetailPage() {
                 <th className="py-2.5 px-2 w-8 text-center"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {lines.map((l, idx) => {
                 const isDyed = l.yarn_type === 'Dyed Yarn';
                 const isPack = l.purchase_basis === 'PACK_BAG';
                 const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['YARN']).filter((it) => it.yarn_id);
 
                 return (
-                  <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
+                  <tr key={l._key || idx} className="hover:bg-surface-muted/70 transition">
                     {/* # S NO */}
-                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-caption">{idx + 1}</td>
+                    <td className="py-2.5 px-2 text-center text-ink-muted tabular-nums text-caption">{idx + 1}</td>
 
                     {/* I/O Num (Sales Order / Job) */}
                     <td className="py-2.5 px-2 min-w-[130px]">
                       <select
                         value={l.so_id || ''}
                         onChange={(e) => updateLine(idx, { so_id: e.target.value, _bom: undefined })}
-                        className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        className="w-full text-xs rounded border border-surface-input py-1 px-1 bg-white"
                       >
                         <option value="">Stock / General</option>
                         {jobs.map((j) => (
@@ -1064,7 +1064,7 @@ export default function YarnPurchaseOrderDetailPage() {
                       <select
                         value={l.style_id || ''}
                         onChange={(e) => updateLine(idx, { style_id: e.target.value, _bom: undefined })}
-                        className="w-full text-xs rounded border border-slate-300 py-1 px-1 bg-white"
+                        className="w-full text-xs rounded border border-surface-input py-1 px-1 bg-white"
                       >
                         <option value="">—</option>
                         {(() => {
@@ -1112,7 +1112,7 @@ export default function YarnPurchaseOrderDetailPage() {
                             })(),
                           });
                         }}
-                        className="w-full text-xs rounded border border-slate-300 py-1 px-1.5 focus:border-amber-500 bg-white"
+                        className="w-full text-xs rounded border border-surface-input py-1 px-1.5 focus:border-amber-500 bg-white"
                       >
                         <option value="">{jobBoms.statusFor(l.so_id, lineStyle(l)) === 'loading' ? 'Loading BOM…' : 'Select Yarn'}</option>
                         {lineBom.length > 0 && (
@@ -1173,7 +1173,7 @@ export default function YarnPurchaseOrderDetailPage() {
                           placeholder="Shade / Color"
                         />
                       ) : (
-                        <span className="text-slate-400 text-caption block text-center">—</span>
+                        <span className="text-ink-muted text-caption block text-center">—</span>
                       )}
                     </td>
 
@@ -1189,7 +1189,7 @@ export default function YarnPurchaseOrderDetailPage() {
                           const c: any = (yarnCounts.data || []).find((x: any) => String(x.id) === cnt);
                           updateLine(idx, { yarn_count_str: c ? String(c.count_value) : '' });
                         }}
-                        className="w-20 text-xs tabular-nums font-medium border border-slate-300 rounded px-1 py-1"
+                        className="w-20 text-xs tabular-nums font-medium border border-surface-input rounded px-1 py-1"
                         title="The count is part of the yarn item: changing it switches to that base's item for the count"
                       >
                         <option value="">{l.yarn_count_str || '—'}</option>
@@ -1203,7 +1203,7 @@ export default function YarnPurchaseOrderDetailPage() {
                         type="text"
                         value={l.composition}
                         onChange={(e) => updateLine(idx, { composition: e.target.value })}
-                        className="w-full text-xs border border-slate-300 rounded px-1.5 py-1"
+                        className="w-full text-xs border border-surface-input rounded px-1.5 py-1"
                         placeholder="100% Cotton"
                       />
                     </td>
@@ -1214,7 +1214,7 @@ export default function YarnPurchaseOrderDetailPage() {
                         type="text"
                         value={l.hsn_code}
                         onChange={(e) => updateLine(idx, { hsn_code: e.target.value })}
-                        className="w-14 text-xs tabular-nums border border-slate-300 rounded px-1 py-1"
+                        className="w-14 text-xs tabular-nums border border-surface-input rounded px-1 py-1"
                         placeholder="5205"
                       />
                     </td>
@@ -1226,7 +1226,7 @@ export default function YarnPurchaseOrderDetailPage() {
                         onChange={(e) =>
                           updateLine(idx, { purchase_basis: e.target.value as any })
                         }
-                        className="text-xs rounded border border-slate-300 py-1 px-1 font-medium text-slate-700 bg-white"
+                        className="text-xs rounded border border-surface-input py-1 px-1 font-medium text-ink bg-white"
                       >
                         <option value="DIRECT_KG">Direct KG</option>
                         <option value="PACK_BAG">Pack / Bag</option>
@@ -1243,22 +1243,22 @@ export default function YarnPurchaseOrderDetailPage() {
                             onChange={(e) =>
                               updateLine(idx, { packs: parseInt(e.target.value) || 0 })
                             }
-                            className="w-12 text-xs text-center border border-slate-300 rounded px-1 py-1 font-semibold"
+                            className="w-12 text-xs text-center border border-surface-input rounded px-1 py-1 font-semibold"
                             placeholder="Bags"
                           />
-                          <span className="text-slate-400">×</span>
+                          <span className="text-ink-muted">×</span>
                           <input
                             type="number"
                             value={l.pack_weight_kg}
                             onChange={(e) =>
                               updateLine(idx, { pack_weight_kg: parseFloat(e.target.value) || 0 })
                             }
-                            className="w-14 text-xs text-center border border-slate-300 rounded px-1 py-1"
+                            className="w-14 text-xs text-center border border-surface-input rounded px-1 py-1"
                             placeholder="kg"
                           />
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-caption">—</span>
+                        <span className="text-ink-muted text-caption">—</span>
                       )}
                     </td>
 
@@ -1273,7 +1273,7 @@ export default function YarnPurchaseOrderDetailPage() {
                           onChange={(e) =>
                             updateLine(idx, { qty: parseFloat(e.target.value) || 0 })
                           }
-                          className="w-20 text-xs text-right font-bold text-amber-700 border border-slate-300 rounded px-1.5 py-1"
+                          className="w-20 text-xs text-right font-bold text-amber-700 border border-surface-input rounded px-1.5 py-1"
                         />
                       )}
                     </td>
@@ -1286,12 +1286,12 @@ export default function YarnPurchaseOrderDetailPage() {
                         onChange={(e) =>
                           updateLine(idx, { rate: parseFloat(e.target.value) || 0 })
                         }
-                        className="w-16 text-xs text-right font-medium border border-slate-300 rounded px-1.5 py-1"
+                        className="w-16 text-xs text-right font-medium border border-surface-input rounded px-1.5 py-1"
                       />
                     </td>
 
                     {/* Taxable Amount */}
-                    <td className="py-2.5 px-2 text-right font-medium text-slate-800">
+                    <td className="py-2.5 px-2 text-right font-medium text-ink">
                       ₹{fmtDecimal(l.taxable_amount || l.amount)}
                     </td>
 
@@ -1324,7 +1324,7 @@ export default function YarnPurchaseOrderDetailPage() {
                             onChange={(e) =>
                               updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })
                             }
-                            className="text-xs rounded border border-slate-300 py-1 px-1 text-center bg-white"
+                            className="text-xs rounded border border-surface-input py-1 px-1 text-center bg-white"
                           >
                             <option value="5">5%</option>
                             <option value="12">12%</option>
@@ -1332,14 +1332,14 @@ export default function YarnPurchaseOrderDetailPage() {
                             <option value="0">0%</option>
                           </select>
                         </td>
-                        <td className="py-2.5 px-2 text-right font-medium text-slate-700">
+                        <td className="py-2.5 px-2 text-right font-medium text-ink">
                           ₹{fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}
                         </td>
                       </>
                     )}
 
                     {/* Net Amount */}
-                    <td className="py-2.5 px-2 text-right font-bold text-slate-900">
+                    <td className="py-2.5 px-2 text-right font-bold text-ink">
                       ₹{fmtDecimal(l.net_amount)}
                     </td>
 
@@ -1347,7 +1347,7 @@ export default function YarnPurchaseOrderDetailPage() {
                     <td className="py-2.5 px-2 text-center">
                       <button
                         onClick={() => removeLine(idx)}
-                        className="p-1 text-slate-400 hover:text-red-600 rounded transition"
+                        className="p-1 text-ink-muted hover:text-red-600 rounded transition"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -1360,28 +1360,28 @@ export default function YarnPurchaseOrderDetailPage() {
         </div>
 
         {/* Footer Financial Cockpit */}
-        <div className="pt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 text-xs pb-3 border-b border-slate-200">
+        <div className="pt-4 border-t border-surface-border bg-surface-muted/70 p-4 rounded-xl space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 text-xs pb-3 border-b border-surface-border">
             <div>
-              <span className="text-slate-500 block">Total Yarn Weight</span>
+              <span className="text-ink-secondary block">Total Yarn Weight</span>
               <span className="font-bold text-amber-700 text-sm">{fmtDecimal(totals.totalKg)} KG</span>
             </div>
             <div>
-              <span className="text-slate-500 block">Grey / Dyed Split</span>
-              <span className="font-medium text-slate-800">
+              <span className="text-ink-secondary block">Grey / Dyed Split</span>
+              <span className="font-medium text-ink">
                 {fmtDecimal(totals.greyKg)} / {fmtDecimal(totals.dyedKg)} KG
               </span>
             </div>
             <div>
-              <span className="text-slate-500 block">Total Bags</span>
-              <span className="font-bold text-slate-800 text-sm">{totals.totalPacks} Bags</span>
+              <span className="text-ink-secondary block">Total Bags</span>
+              <span className="font-bold text-ink text-sm">{totals.totalPacks} Bags</span>
             </div>
             <div>
-              <span className="text-slate-500 block">Taxable Amount</span>
-              <span className="font-bold text-slate-800 text-sm">₹{fmtDecimal(totals.taxableAmount)}</span>
+              <span className="text-ink-secondary block">Taxable Amount</span>
+              <span className="font-bold text-ink text-sm">₹{fmtDecimal(totals.taxableAmount)}</span>
             </div>
             <div>
-              <span className="text-slate-500 block">
+              <span className="text-ink-secondary block">
                 {header.is_interstate ? 'IGST (Inter-state)' : 'CGST + SGST'}
               </span>
               <span className="font-bold text-purple-700 text-sm">
@@ -1391,7 +1391,7 @@ export default function YarnPurchaseOrderDetailPage() {
               </span>
             </div>
             <div className="text-right sm:text-left">
-              <span className="text-slate-500 block">Net PO Value</span>
+              <span className="text-ink-secondary block">Net PO Value</span>
               <span className="font-bold text-emerald-700 text-sm">₹{fmtDecimal(totals.grandTotal)}</span>
             </div>
           </div>
@@ -1399,7 +1399,7 @@ export default function YarnPurchaseOrderDetailPage() {
           {/* Footer Financial Adjustments & TCS */}
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
             <div>
-              <label className="label text-caption font-bold text-slate-700">Freight / Transport Charges (₹)</label>
+              <label className="label text-caption font-bold text-ink">Freight / Transport Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1411,7 +1411,7 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-caption font-bold text-slate-700">Other / Unloading Charges (₹)</label>
+              <label className="label text-caption font-bold text-ink">Other / Unloading Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1423,7 +1423,7 @@ export default function YarnPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-caption font-bold text-slate-700">Round Off (₹)</label>
+              <label className="label text-caption font-bold text-ink">Round Off (₹)</label>
               <input
                 type="number"
                 step="0.01"
@@ -1469,13 +1469,13 @@ export default function YarnPurchaseOrderDetailPage() {
                     className="input py-0.5 px-1.5 text-micro text-right tabular-nums w-16"
                     placeholder="0.10"
                   />
-                  <span className="text-slate-500">%</span>
+                  <span className="text-ink-secondary">%</span>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-              <span className="text-caption text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
+            <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-surface-border shadow-sm">
+              <span className="text-caption text-ink-secondary font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
               <span className="text-xl font-bold text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
               {isForeignCurrency && (
                 <span className="text-xs font-bold text-amber-900 mt-0.5">
@@ -1503,8 +1503,8 @@ export default function YarnPurchaseOrderDetailPage() {
           </>}
         >
           <div className="space-y-3 text-xs">
-            <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 pb-1.5">
-              <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-slate-500">Approved quotations</h3>
+            <div className="flex flex-wrap items-end gap-2 border-b border-surface-divider pb-1.5">
+              <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-ink-secondary">Approved quotations</h3>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1522,16 +1522,16 @@ export default function YarnPurchaseOrderDetailPage() {
               </div>
             </div>
 
-            <div className="max-h-72 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+            <div className="max-h-72 overflow-y-auto border border-surface-border rounded-lg divide-y divide-surface-divider">
               {approvedQuotes.length === 0 ? (
-                <div className="p-4 text-center text-slate-500">No approved yarn quotations found</div>
+                <div className="p-4 text-center text-ink-secondary">No approved yarn quotations found</div>
               ) : (
                 approvedQuotes.map((q: any) => {
                   const isChecked = selectedQuoteIds.includes(String(q.id));
                   return (
                     <label
                       key={q.id}
-                      className={`flex items-start gap-3 p-3 cursor-pointer hover:bg-slate-50 transition ${
+                      className={`flex items-start gap-3 p-3 cursor-pointer hover:bg-surface-muted transition ${
                         isChecked ? 'bg-amber-50/50' : ''
                       }`}
                     >
@@ -1549,15 +1549,15 @@ export default function YarnPurchaseOrderDetailPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-900 tabular-nums">{q.quotation_no}</span>
-                          <span className="font-bold text-slate-900">₹{fmtDecimal(q.total_amount || 0)}</span>
+                          <span className="font-bold text-ink tabular-nums">{q.quotation_no}</span>
+                          <span className="font-bold text-ink">₹{fmtDecimal(q.total_amount || 0)}</span>
                         </div>
-                        <div className="text-caption text-slate-500 flex items-center justify-between mt-0.5">
+                        <div className="text-caption text-ink-secondary flex items-center justify-between mt-0.5">
                           <span>{q.supplier_name || q.buyer_name || 'Spinning Mill'}</span>
                           <span>{q.quotation_date?.slice(0, 10)}</span>
                         </div>
                         {q.remarks && (
-                          <div className="text-caption text-slate-400 truncate mt-0.5 italic">{q.remarks}</div>
+                          <div className="text-caption text-ink-muted truncate mt-0.5 italic">{q.remarks}</div>
                         )}
                       </div>
                     </label>

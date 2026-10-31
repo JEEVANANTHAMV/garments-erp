@@ -108,15 +108,15 @@ export function ContractorBillEditor({ kind, title, onBack, onDone }: { kind: 'f
             <>
               <div className="card mb-3 overflow-x-auto">
                 <table className="w-full text-xs" id={`${px}-lines`}>
-                  <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'GRN / doc', 'Date', 'Our DC', 'Party challan', 'Vehicle', 'Gate', 'Job', 'Process', kind === 'fabric' ? 'Colour · rolls' : 'Lots', 'Sent KG', 'Good KG', 'Reject', 'Loss', 'Quotation', 'Rate / KG', 'Amount', ''].map((x, i) =>
+                  <thead className="bg-surface-muted text-ink-secondary"><tr>{['Type', 'GRN / doc', 'Date', 'Our DC', 'Party challan', 'Vehicle', 'Gate', 'Job', 'Process', kind === 'fabric' ? 'Colour · rolls' : 'Lots', 'Sent KG', 'Good KG', 'Reject', 'Loss', 'Quotation', 'Rate / KG', 'Amount', ''].map((x, i) =>
                     <th key={i} className={`px-2 py-2 ${/KG|Reject|Loss|Rate|Amount/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
                   <tbody>
                     {lines.map((l) => {
                       const diff = l.line_type === 'GRN' && l.quotation_rate != null && Math.abs(n(l.quotation_rate) - n(rates[l.key])) > 0.005;
                       return (
-                        <tr key={l.key} className="border-t border-slate-100" data-key={l.key}>
+                        <tr key={l.key} className="border-t border-surface-divider" data-key={l.key}>
                           <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-caption font-semibold ${l.line_type === 'GRN' ? 'bg-sky-100 text-sky-800' : l.line_type === 'RECOVERY' ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{l.line_type === 'REPROCESS' ? 'Reprocess' : l.line_type === 'RECOVERY' ? 'Recovery' : 'GRN'}</span></td>
-                          <td className="px-2 py-1 tabular-nums">{l.doc_no}{l.grn_no && <span className="block text-micro text-slate-400">{l.grn_no}</span>}</td>
+                          <td className="px-2 py-1 tabular-nums">{l.doc_no}{l.grn_no && <span className="block text-micro text-ink-muted">{l.grn_no}</span>}</td>
                           <td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 tabular-nums">{l.dc_no ?? '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td>
                           <td className="px-2 py-1">{l.gate_entry_no || '—'}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.process_name || l.sub_process || l.process_code}</td>
                           <td className="px-2 py-1">{kind === 'fabric' ? [l.colours, l.rolls ? `${l.rolls} rolls` : null].filter(Boolean).join(' · ') || '—' : l.lots || '—'}</td>
@@ -128,16 +128,16 @@ export function ContractorBillEditor({ kind, title, onBack, onDone }: { kind: 'f
                                 onChange={(e) => setRates((x) => ({ ...x, [l.key]: Number(e.target.value) }))} />
                             : money(l.rate)}</td>
                           <td className={`px-2 py-1 text-right font-semibold ${amountOf(l) < 0 ? 'text-red-700' : ''}`}>{money(amountOf(l))}</td>
-                          <td className="px-1"><button type="button" className="text-slate-400 hover:text-rose-600" title="Remove" onClick={() => remove(l.key)}>✕</button></td>
+                          <td className="px-1"><button type="button" className="text-ink-muted hover:text-rose-600" title="Remove" onClick={() => remove(l.key)}>✕</button></td>
                         </tr>
                       );
                     })}
                   </tbody>
-                  <tfoot className="bg-slate-50 font-semibold"><tr><td colSpan={11} className="px-2 py-1 text-right">Total</td><td className="px-2 py-1 text-right">{kg(lines.filter((l) => l.line_type === 'GRN').reduce((a, l) => a + n(l.qty_kg), 0))}</td><td colSpan={4} /><td className="px-2 py-1 text-right">{money(gross - recovery)}</td><td /></tr></tfoot>
+                  <tfoot className="bg-surface-muted font-semibold"><tr><td colSpan={11} className="px-2 py-1 text-right">Total</td><td className="px-2 py-1 text-right">{kg(lines.filter((l) => l.line_type === 'GRN').reduce((a, l) => a + n(l.qty_kg), 0))}</td><td colSpan={4} /><td className="px-2 py-1 text-right">{money(gross - recovery)}</td><td /></tr></tfoot>
                 </table>
               </div>
               {src.data && (src.data.excluded.length > 0 || src.data.pending_approval.length > 0) && (
-                <div className="mb-3 text-small text-slate-600">
+                <div className="mb-3 text-small text-ink-secondary">
                   {src.data.excluded.length > 0 && <div>Excluded (non-billable / internal / free): {src.data.excluded.map((x: any) => `${x.doc_no} ${kg(x.qty_kg)} KG`).join(' · ')}</div>}
                   {src.data.pending_approval.length > 0 && <div className="text-amber-700">Billable, waiting for billing approval: {src.data.pending_approval.map((x: any) => `${x.doc_no} (${money(x.bill_amount)})`).join(' · ')}</div>}
                 </div>

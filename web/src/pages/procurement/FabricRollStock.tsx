@@ -106,15 +106,15 @@ export default function FabricRollStockPage() {
   return (
     <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-lg bg-sky-100 text-sky-700">
               <Boxes size={20} />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Fabric Roll Stock Ledger</h1>
-              <p className="text-xs text-slate-500">
+              <h1 className="text-xl font-bold text-ink tracking-tight">Fabric Roll Stock Ledger</h1>
+              <p className="text-xs text-ink-secondary">
                 Individual physical roll inventory, barcode tracking, location bins, and cutting floor allocations
               </p>
             </div>
@@ -124,14 +124,14 @@ export default function FabricRollStockPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => nav('/procurement/fabric/orders')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <Layers size={14} className="text-emerald-600" />
             <span>Fabric Orders</span>
           </button>
           <button
             onClick={() => nav('/procurement/fabric/grn')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <PackageCheck size={14} className="text-emerald-600" />
             <span>Fabric GRNs</span>
@@ -148,52 +148,52 @@ export default function FabricRollStockPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Total Rolls in Store</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{fmtNumber(kpis.totalRolls)}</div>
-          <div className="text-caption text-slate-400 mt-0.5">Physical roll units</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Total Rolls in Store</div>
+          <div className="text-2xl font-bold text-ink mt-1">{fmtNumber(kpis.totalRolls)}</div>
+          <div className="text-caption text-ink-muted mt-0.5">Physical roll units</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Available Rolls</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Available Rolls</div>
           <div className="text-2xl font-bold text-emerald-600 mt-1">{fmtNumber(kpis.availableRolls)}</div>
-          <div className="text-caption text-slate-400 mt-0.5">Ready for issue</div>
+          <div className="text-caption text-ink-muted mt-0.5">Ready for issue</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Reserved for Cutting</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Reserved for Cutting</div>
           <div className="text-2xl font-bold text-amber-600 mt-1">{fmtNumber(kpis.reservedRolls)}</div>
-          <div className="text-caption text-slate-400 mt-0.5">Allocated to jobs</div>
+          <div className="text-caption text-ink-muted mt-0.5">Allocated to jobs</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Total Stocked Meters</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Total Stocked Meters</div>
           <div className="text-2xl font-bold text-sky-600 mt-1">{fmtDecimal(kpis.totalMeters)} m</div>
-          <div className="text-caption text-slate-400 mt-0.5">Cumulative length</div>
+          <div className="text-caption text-ink-muted mt-0.5">Cumulative length</div>
         </div>
-        <div className="p-4 rounded-xl bg-white border border-slate-200/80 shadow-sm">
-          <div className="text-xs font-medium text-slate-500">Total Stocked Weight</div>
+        <div className="p-4 rounded-xl bg-white border border-surface-border/80 shadow-sm">
+          <div className="text-xs font-medium text-ink-secondary">Total Stocked Weight</div>
           <div className="text-2xl font-bold text-indigo-600 mt-1">{fmtDecimal(kpis.totalWeight)} kg</div>
-          <div className="text-caption text-slate-400 mt-0.5">Physical gross weight</div>
+          <div className="text-caption text-ink-muted mt-0.5">Physical gross weight</div>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white p-3 rounded-xl border border-surface-border/80 shadow-sm">
         <div className="relative w-full sm:w-80">
-          <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-2.5 text-ink-muted" />
           <input
             type="text"
             placeholder="Search Roll No, Lot, Fabric, Shade, GRN, IO No, Style..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-surface-input focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-          <Filter size={15} className="text-slate-400" />
+          <Filter size={15} className="text-ink-muted" />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+            className="text-xs rounded-lg border border-surface-input py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           >
             <option value="">All Stock Status</option>
             <option value="AVAILABLE">Available</option>
@@ -206,7 +206,7 @@ export default function FabricRollStockPage() {
           <select
             value={qcFilter}
             onChange={(e) => setQcFilter(e.target.value)}
-            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+            className="text-xs rounded-lg border border-surface-input py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           >
             <option value="">All QC Status</option>
             <option value="ACCEPTED">Accepted</option>
@@ -219,7 +219,7 @@ export default function FabricRollStockPage() {
             value={ioFilter}
             onChange={(e) => setIoFilter(e.target.value)}
             title="Internal Order No"
-            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+            className="text-xs rounded-lg border border-surface-input py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           >
             <option value="">All IO No</option>
             {facets.io_nos.map((io) => <option key={io} value={io}>{io}</option>)}
@@ -229,7 +229,7 @@ export default function FabricRollStockPage() {
             value={styleFilter}
             onChange={(e) => setStyleFilter(e.target.value)}
             title="Style"
-            className="text-xs rounded-lg border border-slate-300 py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+            className="text-xs rounded-lg border border-surface-input py-1.5 px-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
           >
             <option value="">All Styles</option>
             {facets.styles.map((st) => (
@@ -238,14 +238,14 @@ export default function FabricRollStockPage() {
           </select>
 
           {hasFilters && (
-            <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 px-2 py-1">
+            <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-ink-secondary hover:text-ink px-2 py-1">
               <X size={13} /> Clear
             </button>
           )}
 
           <button
             onClick={() => refetch()}
-            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-600 transition"
+            className="p-1.5 rounded-lg border border-surface-input hover:bg-surface-muted text-ink-secondary transition"
             title="Refresh list"
           >
             <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
@@ -254,11 +254,11 @@ export default function FabricRollStockPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-200">
+              <tr className="bg-surface-muted/80 text-ink-secondary font-semibold border-b border-surface-border">
                 <th className="py-3 px-4">Roll No</th>
                 <th className="py-3 px-3">Fabric Item</th>
                 <th className="py-3 px-3">Lot No</th>
@@ -274,10 +274,10 @@ export default function FabricRollStockPage() {
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {isLoading ? (
                 <tr>
-                  <td colSpan={13} className="py-10 text-center text-slate-400">
+                  <td colSpan={13} className="py-10 text-center text-ink-muted">
                     Loading fabric roll stock...
                   </td>
                 </tr>
@@ -285,34 +285,34 @@ export default function FabricRollStockPage() {
                 <tr>
                   <td colSpan={13} className="py-12 text-center">
                     <AlertCircle size={32} className="mx-auto text-red-400 mb-2" />
-                    <p className="text-sm font-medium text-slate-700">Unable to load fabric rolls</p>
+                    <p className="text-sm font-medium text-ink">Unable to load fabric rolls</p>
                     <p className="text-xs text-red-600 mt-1">{errorMessage}</p>
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-slate-400">
-                    <Boxes size={36} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-sm font-medium text-slate-600">No fabric rolls found</p>
-                    <p className="text-xs text-slate-400 mt-1">
+                  <td colSpan={13} className="py-12 text-center text-ink-muted">
+                    <Boxes size={36} className="mx-auto text-ink-disabled mb-2" />
+                    <p className="text-sm font-medium text-ink-secondary">No fabric rolls found</p>
+                    <p className="text-xs text-ink-muted mt-1">
                       {hasFilters ? 'No roll matches these filters.' : 'Rolls are created when fabric GRNs are inwarded'}
                     </p>
                   </td>
                 </tr>
               ) : (
                 filtered.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/70 transition">
+                  <tr key={r.id} className="hover:bg-surface-muted/70 transition">
                     <td className="py-3 px-4">
                       <div className="tabular-nums font-bold text-sky-700">{r.roll_no}</div>
-                      <div className="text-micro text-slate-400">ID #{r.id}</div>
+                      <div className="text-micro text-ink-muted">ID #{r.id}</div>
                     </td>
-                    <td className="py-3 px-3 font-semibold text-slate-900">
+                    <td className="py-3 px-3 font-semibold text-ink">
                       {r.fabric_name || 'Fabric Item'}
-                      <div className="text-micro text-slate-400 font-normal">{r.fabric_code || ''}</div>
+                      <div className="text-micro text-ink-muted font-normal">{r.fabric_code || ''}</div>
                     </td>
-                    <td className="py-3 px-3 tabular-nums text-slate-700 text-caption">{r.lot_no || '—'}</td>
-                    <td className="py-3 px-3 font-medium text-slate-800">{r.shade || '—'}</td>
-                    <td className="py-3 px-3 text-center text-slate-600 text-caption">
+                    <td className="py-3 px-3 tabular-nums text-ink text-caption">{r.lot_no || '—'}</td>
+                    <td className="py-3 px-3 font-medium text-ink">{r.shade || '—'}</td>
+                    <td className="py-3 px-3 text-center text-ink-secondary text-caption">
                       {r.gsm} gsm / {r.dia || '30"'}
                     </td>
                     <td className="py-3 px-3 text-right font-medium text-emerald-700">
@@ -321,12 +321,12 @@ export default function FabricRollStockPage() {
                     <td className="py-3 px-3 text-right font-medium text-indigo-700">
                       {fmtDecimal(r.weight_kg)} kg
                       {Number(r.issued_kg) > 0 && (
-                        <div className="text-micro text-slate-500 font-normal">Bal {fmtDecimal(r.balance_kg)} kg</div>
+                        <div className="text-micro text-ink-secondary font-normal">Bal {fmtDecimal(r.balance_kg)} kg</div>
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      <div className="text-slate-800 font-medium">{r.warehouse_name || 'Main Fabric Store'}</div>
-                      <span className="tabular-nums text-micro bg-slate-100 px-1 py-0.5 rounded text-slate-600">
+                      <div className="text-ink font-medium">{r.warehouse_name || 'Main Fabric Store'}</div>
+                      <span className="tabular-nums text-micro bg-surface-header px-1 py-0.5 rounded text-ink-secondary">
                         Bin: {r.location_bin || 'Unassigned'}
                       </span>
                     </td>
@@ -335,12 +335,12 @@ export default function FabricRollStockPage() {
                         <button onClick={() => setIoFilter(r.internal_ir_no)} title="Filter by this IO"
                           className="tabular-nums font-semibold text-indigo-700 hover:underline">{r.internal_ir_no}</button>
                       ) : (
-                        <span className="text-slate-300">No IO</span>
+                        <span className="text-ink-disabled">No IO</span>
                       )}
                       {r.style_code && (
-                        <div className="text-micro text-slate-500 mt-0.5" title={r.style_name ?? ''}>{r.style_code}</div>
+                        <div className="text-micro text-ink-secondary mt-0.5" title={r.style_name ?? ''}>{r.style_code}</div>
                       )}
-                      {r.so_no && <div className="text-micro text-slate-400">{r.so_no}</div>}
+                      {r.so_no && <div className="text-micro text-ink-muted">{r.so_no}</div>}
                     </td>
                     <td className="py-3 px-3 text-caption">
                       {r.grn_no && (
@@ -351,7 +351,7 @@ export default function FabricRollStockPage() {
                           {r.grn_no}
                         </div>
                       )}
-                      {r.po_no && <div className="text-slate-400 text-micro">{r.po_no}</div>}
+                      {r.po_no && <div className="text-ink-muted text-micro">{r.po_no}</div>}
                     </td>
                     <td className="py-3 px-3 text-center">
                       <span
@@ -370,7 +370,7 @@ export default function FabricRollStockPage() {
                     <td className="py-3 px-4 text-center">
                       <button
                         onClick={() => handleOpenEdit(r)}
-                        className="p-1 text-slate-500 hover:text-sky-700 hover:bg-sky-50 rounded transition"
+                        className="p-1 text-ink-secondary hover:text-sky-700 hover:bg-sky-50 rounded transition"
                         title="Update Roll Status & Location"
                       >
                         <Edit3 size={14} />
@@ -400,7 +400,7 @@ export default function FabricRollStockPage() {
           </>}
         >
           <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-50 rounded-lg text-slate-700 grid grid-cols-2 gap-2 text-caption">
+            <div className="p-3 bg-surface-muted rounded-lg text-ink grid grid-cols-2 gap-2 text-caption">
               <div>Fabric: <strong>{editRoll.fabric_name}</strong></div>
               <div>Lot No: <strong>{editRoll.lot_no}</strong></div>
               <div>Length: <strong>{editRoll.meters} m</strong></div>
@@ -409,13 +409,13 @@ export default function FabricRollStockPage() {
 
             <div className="space-y-3">
               <div>
-                <label className="block text-caption font-medium text-slate-600 mb-1">
+                <label className="block text-caption font-medium text-ink-secondary mb-1">
                   Stock Status
                 </label>
                 <select
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 font-medium"
+                  className="w-full text-xs rounded-lg border border-surface-input py-1.5 px-2 font-medium"
                 >
                   <option value="AVAILABLE">AVAILABLE (In Store, Ready for Issue)</option>
                   <option value="RESERVED">RESERVED (Allocated to Cutting Order)</option>
@@ -426,13 +426,13 @@ export default function FabricRollStockPage() {
               </div>
 
               <div>
-                <label className="block text-caption font-medium text-slate-600 mb-1">
+                <label className="block text-caption font-medium text-ink-secondary mb-1">
                   QC Status
                 </label>
                 <select
                   value={editQc}
                   onChange={(e) => setEditQc(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-slate-300 py-1.5 px-2 font-medium"
+                  className="w-full text-xs rounded-lg border border-surface-input py-1.5 px-2 font-medium"
                 >
                   <option value="ACCEPTED">ACCEPTED</option>
                   <option value="PENDING">PENDING</option>

@@ -39,7 +39,7 @@ export function JobsTab({ kind, onNewProduction, onOpenProduction }: { kind: Kin
         columns={[
           { key: 'job_no', header: 'Job', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700" id={`mp-job-${r.job_no}`}>{r.job_no}</span> },
           { key: 'job_date', header: 'Date', render: (r: any) => fmtDate(r.job_date) },
-          { key: 'io', header: 'IO / style', render: (r: any) => <span>{r.io_no ?? '—'}{r.style_code ? <span className="text-slate-500"> · {r.style_code}</span> : null}{r.color_name ? <span className="text-slate-400"> · {r.color_name}</span> : null}</span> },
+          { key: 'io', header: 'IO / style', render: (r: any) => <span>{r.io_no ?? '—'}{r.style_code ? <span className="text-ink-secondary"> · {r.style_code}</span> : null}{r.color_name ? <span className="text-ink-muted"> · {r.color_name}</span> : null}</span> },
           { key: 'buyer_name', header: 'Buyer' },
           { key: 'design', header: kind === 'EMBROIDERY' ? 'Design' : 'Artwork', render: (r: any) => r.design_code ? `${r.design_code} v${r.design_version}` : '—' },
           { key: 'recipe', header: 'Recipe', render: (r: any) => r.recipe_no ? `${r.recipe_no} v${r.recipe_version}` : '—' },
@@ -167,7 +167,7 @@ export function JobDetail({ kind, id, onClose, onEdit, onNewProduction, onOpenPr
         {p.submit && j.status === 'DRAFT' && <Button loading={busy} id="mp-job-plan" onClick={() => act('plan', {}, 'Job planned — released to the floor')}><Play size={13} className="mr-1 inline" />Plan / release</Button>}
         {(p.create || p.submit) && ['PLANNED', 'RUNNING'].includes(j.status) && <Button id="mp-job-new-prod" onClick={() => onNewProduction(j.id)}><Factory size={13} className="mr-1 inline" />New production entry</Button>}
       </>}>
-      {!j ? (d.error ? <p className="text-sm text-slate-500">{d.error}</p> : <LoadingBlock />) : (
+      {!j ? (d.error ? <p className="text-sm text-ink-secondary">{d.error}</p> : <LoadingBlock />) : (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
             <Section title="Job">
@@ -195,7 +195,7 @@ export function JobDetail({ kind, id, onClose, onEdit, onNewProduction, onOpenPr
               <Kv label="Balance to produce" value={qty(j.output.balance_to_produce)} />
               <Kv label="Entries waiting" value={j.output.pending_entries} />
               {j.cost && <>
-                <div className="my-1 border-t border-slate-100" />
+                <div className="my-1 border-t border-surface-divider" />
                 <Kv label="Total cost" value={money(j.cost.total)} strong />
                 <Kv label="Cost / good pc" value={money(j.cost.cost_per_good)} strong />
                 {kind === 'EMBROIDERY' && <Kv label="Cost / 1,000 stitches" value={money(j.cost.cost_per_1000_stitches)} />}

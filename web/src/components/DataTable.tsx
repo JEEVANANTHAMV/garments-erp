@@ -56,7 +56,7 @@ export function DataTable<T>({
                     stickyFirst && i === 0 && 'sticky left-0 z-10 bg-surface-muted')}>
                   {c.sortable && onSort ? (
                     <button onClick={() => onSort(c.key)}
-                      className="inline-flex items-center gap-1 hover:text-slate-700">
+                      className="inline-flex items-center gap-1 hover:text-ink">
                       {c.header}
                       {sort?.key === c.key
                         ? (sort.dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
@@ -99,8 +99,8 @@ export function DataTable<T>({
 }
 
 function renderValue(v: unknown): ReactNode {
-  if (v === null || v === undefined || v === '') return <span className="text-slate-300">—</span>;
+  if (v === null || v === undefined || v === '') return <span className="text-ink-disabled">—</span>;
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
-  if (typeof v === 'object') return <span className="text-slate-500 text-xs font-mono">{JSON.stringify(v)}</span>;
+  if (typeof v === 'object') return <span className="text-ink-secondary text-xs font-mono">{JSON.stringify(v)}</span>;
   return String(v);
 }

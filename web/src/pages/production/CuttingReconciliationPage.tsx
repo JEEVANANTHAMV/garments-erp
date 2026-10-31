@@ -61,8 +61,8 @@ export function CuttingReconciliationPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Cutting Reconciliation & Close</h1>
-          <p className="text-sm text-slate-500">Issued KG − Lay consumption − Losses = Unaccounted. Cutting cannot be closed while fabric is unaccounted beyond tolerance.</p>
+          <h1 className="text-2xl font-bold text-ink">Cutting Reconciliation & Close</h1>
+          <p className="text-sm text-ink-secondary">Issued KG − Lay consumption − Losses = Unaccounted. Cutting cannot be closed while fabric is unaccounted beyond tolerance.</p>
         </div>
       </div>
 
@@ -110,8 +110,8 @@ export function CuttingReconciliationPage() {
                     ['Less: end loss', -f.end_loss_kg], ['Less: selvedge loss', -f.selvedge_kg],
                     ['Less: remnant', -f.remnant_kg], ['Less: other approved loss', -f.other_loss_kg],
                   ].map(([l, v]) => (
-                    <tr key={String(l)} className="border-b border-slate-100">
-                      <td className="px-4 py-1.5 text-slate-600">{l}</td>
+                    <tr key={String(l)} className="border-b border-surface-divider">
+                      <td className="px-4 py-1.5 text-ink-secondary">{l}</td>
                       <td className="px-4 py-1.5 text-right"><Qty v={v} uom="KG" dp={3} /></td>
                     </tr>
                   ))}
@@ -121,7 +121,7 @@ export function CuttingReconciliationPage() {
                   </tr>
                 </tbody>
               </table>
-              {rec?.variance_reason && <p className="px-4 py-2 text-xs text-slate-600">Variance approved by {rec.approved_by_name} on {fmtDateTime(rec.approved_at)}: {rec.variance_reason}</p>}
+              {rec?.variance_reason && <p className="px-4 py-2 text-xs text-ink-secondary">Variance approved by {rec.approved_by_name} on {fmtDateTime(rec.approved_at)}: {rec.variance_reason}</p>}
               {rec?.reopen_reason && <p className="px-4 pb-2 text-xs text-violet-700">Last reopened: {rec.reopen_reason}</p>}
             </Card>
 
@@ -135,7 +135,7 @@ export function CuttingReconciliationPage() {
                     <MetricTile label="Final actual" value={cons.final_actual.kg_per_pc != null ? fmtNumber(cons.final_actual.kg_per_pc, 4) : '—'} uom="KG/PC" tone={cons.final_actual.is_final ? 'indigo' : 'slate'} sub={cons.final_actual.is_final ? 'final (closed)' : 'provisional'} />
                   </div>
                   <table className="w-full text-xs">
-                    <thead><tr className="text-left text-slate-500"><th>Variance</th><th className="text-right">KG/PC</th><th className="text-right">%</th></tr></thead>
+                    <thead><tr className="text-left text-ink-secondary"><th>Variance</th><th className="text-right">KG/PC</th><th className="text-right">%</th></tr></thead>
                     <tbody>
                       {[['Marker − Planned', cons.variances.marker_vs_planned], ['Actual − Planned', cons.variances.actual_vs_planned],
                         ['Actual − Marker', cons.variances.actual_vs_marker], ['Final − Planned', cons.variances.final_vs_planned]].map(([l, v]: any) => (
@@ -171,7 +171,7 @@ export function CuttingReconciliationPage() {
             </Card>
             <Card title="Losses">
               <DataTable data={data.losses} columns={[
-                { key: 'loss_type', header: 'Type', render: (r: any) => <span className={r.is_reversed ? 'text-slate-400 line-through' : ''}>{r.loss_type.replace(/_/g, ' ')}</span> },
+                { key: 'loss_type', header: 'Type', render: (r: any) => <span className={r.is_reversed ? 'text-ink-muted line-through' : ''}>{r.loss_type.replace(/_/g, ' ')}</span> },
                 { key: 'lay_no', header: 'Lay', render: (r: any) => r.lay_no || '—' },
                 { key: 'qty_kg', header: 'Qty', align: 'right' as const, render: (r: any) => <Qty v={r.qty_kg} uom="KG" dp={3} /> },
                 { key: 'reason', header: 'Reason', render: (r: any) => <span className="text-xs">{r.is_reversed ? `Reversed: ${r.reversal_reason}` : r.reason}</span> },
@@ -223,7 +223,7 @@ export function CuttingReconciliationPage() {
               if (dialog === 'approve') run(async () => { const id = await ensureRecon(); await api.post(`/cutting-reconciliation/${id}/approve-variance`, { reason }); }, 'Variance approved');
               else run(() => api.post(`/cutting-reconciliation/${rec.id}/reopen`, { reason }), 'Cut order reopened');
             }}>{dialog === 'approve' ? 'Approve variance' : 'Reopen'}</Button></>}>
-          <p className="mb-2 text-xs text-slate-600">{dialog === 'approve'
+          <p className="mb-2 text-xs text-ink-secondary">{dialog === 'approve'
             ? `Approving accepts ${fmtNumber(f?.unaccounted_kg, 3)} KG unaccounted fabric. Needs PRODUCTION.APPROVE; any later change to the figures voids the approval.`
             : 'Reopening makes the cut order editable again. Needs PRODUCTION.APPROVE.'}</p>
           <Textarea label="Reason" required rows={3} value={reason} onChange={e => setReason(e.target.value)} />

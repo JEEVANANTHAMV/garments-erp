@@ -214,3 +214,40 @@ dashboardRouter.get('/tna-alerts', requirePermission('PRODUCTION.VIEW'), ah(asyn
       ORDER BY m.planned_date`, [req.user!.companyId]);
   res.json({ data: rows });
 }));
+
+/**
+ * Good pieces by day, stage and style from the screens the floor actually uses (C-ONE dashboard charts):
+ * Cutting = cut output · Sewing = bundle sewing output + confirmed line daily output ·
+ * Finishing = finishing output + confirmed checking daily output · Packing = polybagged pieces.
+ * Reversed / void / draft entries are left out.
+ */
+dashboardRouter.get('/output', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const q = z.object({ dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(req.query);
+  const cid = req.user!.companyId;
+  const rows = await query(
+    `SELECT DATE_FORMAT(x.d, '%Y-%m-%d') AS output_date, x.stage, st.style_code, SUM(x.qty) AS qty
+       FROM (
+         SELECT DATE(created_at) d, 'CUTTING' stage, style_id, good_qty qty FROM trx_cut_output
+          WHERE company_id = ? AND status <> 'REVERSED' AND created_at >= ? AND created_at < ? + INTERVAL 1 DAY
+         UNION ALL
+         SELECT output_date, 'SEWING', style_id, output_qty FROM trx_sewing_output
+          WHERE company_id = ? AND output_date BETWEEN ? AND ?
+         UNION ALL
+         SELECT h.output_date, 'SEWING', l.style_id, l.good_qty FROM trx_sewing_daily_output h JOIN trx_sewing_daily_output_line l ON l.output_id = h.id
+          WHERE h.company_id = ? AND h.status = 'CONFIRMED' AND h.output_date BETWEEN ? AND ?
+         UNION ALL
+         SELECT output_date, 'FINISHING', style_id, output_qty FROM trx_finishing_output
+          WHERE company_id = ? AND output_date BETWEEN ? AND ?
+         UNION ALL
+         SELECT h.output_date, 'FINISHING', l.style_id, l.good_qty FROM trx_checking_daily_output h JOIN trx_checking_daily_output_line l ON l.output_id = h.id
+          WHERE h.company_id = ? AND h.status = 'CONFIRMED' AND h.output_date BETWEEN ? AND ?
+         UNION ALL
+         SELECT DATE(created_at), 'PACKING', style_id, pieces FROM trx_packing_polybag
+          WHERE company_id = ? AND status <> 'VOID' AND created_at >= ? AND created_at < ? + INTERVAL 1 DAY
+       ) x
+       LEFT JOIN mst_style st ON st.id = x.style_id
+      GROUP BY x.d, x.stage, st.style_code
+      ORDER BY x.d`,
+    Array(6).fill([cid, q.dateFrom, q.dateTo]).flat());
+  res.json({ data: rows });
+}));

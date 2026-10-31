@@ -58,15 +58,15 @@ export default function TrimGRNsPage() {
   return (
     <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-lg bg-indigo-100 text-indigo-700">
               <PackageCheck size={20} />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Trim Goods Receipt (GRN) & Stock</h1>
-              <p className="text-xs text-slate-500">
+              <h1 className="text-xl font-bold text-ink tracking-tight">Trim Goods Receipt (GRN) & Stock</h1>
+              <p className="text-xs text-ink-secondary">
                 Inward receiving, accepted vs rejected QC split, internal lot tracking, and unrestricted inventory
               </p>
             </div>
@@ -91,13 +91,13 @@ export default function TrimGRNsPage() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 gap-4 text-xs font-semibold">
+      <div className="flex border-b border-surface-border gap-4 text-xs font-semibold">
         <button
           onClick={() => setActiveTab('grns')}
           className={`pb-2.5 flex items-center gap-1.5 border-b-2 transition ${
             activeTab === 'grns'
               ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              : 'border-transparent text-ink-secondary hover:text-ink'
           }`}
         >
           <PackageCheck size={15} /> Goods Receipt Notes ({grns.length})
@@ -107,7 +107,7 @@ export default function TrimGRNsPage() {
           className={`pb-2.5 flex items-center gap-1.5 border-b-2 transition ${
             activeTab === 'stock'
               ? 'border-emerald-600 text-emerald-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              : 'border-transparent text-ink-secondary hover:text-ink'
           }`}
         >
           <Boxes size={15} /> Current Unrestricted Trim Stock
@@ -117,7 +117,7 @@ export default function TrimGRNsPage() {
       {/* Search Bar */}
       <div className="card p-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" size={16} />
           <input
             type="text"
             placeholder={
@@ -137,7 +137,7 @@ export default function TrimGRNsPage() {
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="table w-full text-xs">
-              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-semibold">
+              <thead className="bg-surface-muted text-ink-secondary border-b border-surface-border uppercase font-semibold">
                 <tr>
                   <th className="py-3 px-4 text-left">GRN No</th>
                   <th className="py-3 px-4 text-left">Date</th>
@@ -152,24 +152,24 @@ export default function TrimGRNsPage() {
                   <th className="py-3 px-4 text-center">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-surface-divider text-ink">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={11} className="py-8 text-center text-slate-400">Loading trim GRNs...</td>
+                    <td colSpan={11} className="py-8 text-center text-ink-muted">Loading trim GRNs...</td>
                   </tr>
                 ) : filteredGrns.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-8 text-center text-slate-400">No trim goods receipts found</td>
+                    <td colSpan={11} className="py-8 text-center text-ink-muted">No trim goods receipts found</td>
                   </tr>
                 ) : (
                   filteredGrns.map((g) => (
-                    <tr key={g.id} className="hover:bg-slate-50/70 transition">
+                    <tr key={g.id} className="hover:bg-surface-muted/70 transition">
                       <td className="py-3 px-4 font-semibold text-indigo-700">{g.grn_no}</td>
-                      <td className="py-3 px-4 text-slate-500">{fmtDate(g.grn_date)}</td>
-                      <td className="py-3 px-4 font-medium text-slate-800">{g.po_no || '-'}</td>
-                      <td className="py-3 px-4 font-semibold text-slate-900">{g.io_no}</td>
+                      <td className="py-3 px-4 text-ink-secondary">{fmtDate(g.grn_date)}</td>
+                      <td className="py-3 px-4 font-medium text-ink">{g.po_no || '-'}</td>
+                      <td className="py-3 px-4 font-semibold text-ink">{g.io_no}</td>
                       <td className="py-3 px-4">{g.supplier_name}</td>
-                      <td className="py-3 px-4 text-slate-600">{g.warehouse_name || 'Main Trims Store'}</td>
+                      <td className="py-3 px-4 text-ink-secondary">{g.warehouse_name || 'Main Trims Store'}</td>
                       <td className="py-3 px-4 text-right font-medium">{fmtDecimal(g.total_received_qty)}</td>
                       <td className="py-3 px-4 text-right font-bold text-emerald-700">{fmtDecimal(g.total_accepted_qty)}</td>
                       <td className="py-3 px-4 text-right font-medium text-red-600">{fmtDecimal(g.total_rejected_qty)}</td>
@@ -196,7 +196,7 @@ export default function TrimGRNsPage() {
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="table w-full text-xs">
-              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-semibold">
+              <thead className="bg-surface-muted text-ink-secondary border-b border-surface-border uppercase font-semibold">
                 <tr>
                   <th className="py-3 px-4 text-left">Trim Item</th>
                   <th className="py-3 px-4 text-left">Category / Type</th>
@@ -209,31 +209,31 @@ export default function TrimGRNsPage() {
                   <th className="py-3 px-4 text-left">UOM</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-surface-divider text-ink">
                 {isStockLoading ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-slate-400">Loading trim stock...</td>
+                    <td colSpan={9} className="py-8 text-center text-ink-muted">Loading trim stock...</td>
                   </tr>
                 ) : filteredStock.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-slate-400">No active trim stock found</td>
+                    <td colSpan={9} className="py-8 text-center text-ink-muted">No active trim stock found</td>
                   </tr>
                 ) : (
                   filteredStock.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50/70 transition">
-                      <td className="py-3 px-4 font-semibold text-slate-900">{s.trim_name}</td>
+                    <tr key={s.id} className="hover:bg-surface-muted/70 transition">
+                      <td className="py-3 px-4 font-semibold text-ink">{s.trim_name}</td>
                       <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-micro bg-slate-100 font-medium text-slate-700">
+                        <span className="px-2 py-0.5 rounded-full text-micro bg-surface-header font-medium text-ink">
                           {s.trim_type || s.trim_code}
                         </span>
                       </td>
                       <td className="py-3 px-4 tabular-nums font-semibold text-indigo-700">{s.internal_lot_no}</td>
-                      <td className="py-3 px-4 text-slate-600">{s.color_name || '-'} / {s.trim_size || '-'}</td>
+                      <td className="py-3 px-4 text-ink-secondary">{s.color_name || '-'} / {s.trim_size || '-'}</td>
                       <td className="py-3 px-4">{s.warehouse_name}</td>
-                      <td className="py-3 px-4 tabular-nums text-slate-500">{s.bin_location || '-'}</td>
-                      <td className="py-3 px-4 text-right font-bold text-slate-900">{fmtDecimal(s.stock_qty)}</td>
+                      <td className="py-3 px-4 tabular-nums text-ink-secondary">{s.bin_location || '-'}</td>
+                      <td className="py-3 px-4 text-right font-bold text-ink">{fmtDecimal(s.stock_qty)}</td>
                       <td className="py-3 px-4 text-right font-bold text-emerald-700">{fmtDecimal(s.available_qty)}</td>
-                      <td className="py-3 px-4 font-medium text-slate-500">{s.uom_code || 'PCS'}</td>
+                      <td className="py-3 px-4 font-medium text-ink-secondary">{s.uom_code || 'PCS'}</td>
                     </tr>
                   ))
                 )}

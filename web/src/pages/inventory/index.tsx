@@ -57,19 +57,19 @@ export function StockPage() {
           { key: 'warehouse_name', header: 'Warehouse' },
           { key: 'location', header: 'Rack / Bin',
             render: (r: any) => r.bin_code
-              ? <span className="tabular-nums text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+              ? <span className="tabular-nums text-xs font-semibold px-2 py-0.5 rounded bg-surface-header text-ink">
                   {r.rack ? `Rack ${r.rack} / ` : ''}{r.bin_code}
                 </span>
-              : <span className="text-slate-400">—</span> },
+              : <span className="text-ink-muted">—</span> },
           { key: 'batch_no', header: 'Batch / Lot',
             render: (r: any) => r.batch_no
               ? <span className="tabular-nums text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
-              : <span className="text-slate-400">—</span> },
+              : <span className="text-ink-muted">—</span> },
           { key: 'total_in', header: 'In', align: 'right', render: (r: any) => fmtDecimal(r.total_in, 3) },
           { key: 'total_out', header: 'Out', align: 'right', render: (r: any) => fmtDecimal(r.total_out, 3) },
           { key: 'balance', header: 'Balance', align: 'right', render: (r: any) => {
             const b = Number(r.balance);
-            return <span className={`font-semibold tabular-nums ${b <= 0 ? 'text-red-600' : 'text-slate-800'}`}>
+            return <span className={`font-semibold tabular-nums ${b <= 0 ? 'text-red-600' : 'text-ink'}`}>
               {fmtDecimal(b, 3)} {r.uom_code ?? ''}</span>; } },
         ]}
         rows={stock.data ?? []}
@@ -180,17 +180,17 @@ export function StockLedgerPage() {
           { key: 'txn_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.txn_type)}</Badge> },
           { key: 'item_name', header: 'Item', render: (r: any) => <span className="font-medium">{r.item_name}</span> },
           { key: 'warehouse_name', header: 'Warehouse' },
-          { key: 'job_no', header: 'Job', render: (r: any) => r.job_no ? <span className="font-semibold">{r.job_no}</span> : <span className="text-slate-400">{r.txn_type?.startsWith('TRANSFER') ? 'General' : '—'}</span> },
+          { key: 'job_no', header: 'Job', render: (r: any) => r.job_no ? <span className="font-semibold">{r.job_no}</span> : <span className="text-ink-muted">{r.txn_type?.startsWith('TRANSFER') ? 'General' : '—'}</span> },
           { key: 'location', header: 'Rack / Bin',
             render: (r: any) => r.bin_code
-              ? <span className="tabular-nums text-xs text-slate-700">{r.rack ? `R-${r.rack} / ` : ''}{r.bin_code}</span>
-              : <span className="text-slate-400">—</span> },
+              ? <span className="tabular-nums text-xs text-ink">{r.rack ? `R-${r.rack} / ` : ''}{r.bin_code}</span>
+              : <span className="text-ink-muted">—</span> },
           { key: 'batch_no', header: 'Batch / Lot',
             render: (r: any) => r.batch_no
               ? <span className="tabular-nums text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
-              : <span className="text-slate-400">—</span> },
+              : <span className="text-ink-muted">—</span> },
           { key: 'ref', header: 'Reference',
-            render: (r: any) => <span className="text-small text-slate-500">{r.ref_type} #{r.ref_id}</span> },
+            render: (r: any) => <span className="text-small text-ink-secondary">{r.ref_type} #{r.ref_id}</span> },
           { key: 'qty_in', header: 'In', align: 'right',
             render: (r: any) => Number(r.qty_in) > 0
               ? <span className="font-medium text-emerald-600">+{fmtDecimal(r.qty_in, 3)}</span> : '—' },

@@ -268,7 +268,7 @@ function TrimMatrixModal({
           </div>
         )}
         {/* Mode Selector & Quick Fill Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-surface-muted rounded-xl border border-surface-border">
           <div className="flex items-center gap-1">
             {[
               { id: 'SIZE_WISE', label: 'Size-wise Breakdown' },
@@ -281,8 +281,8 @@ function TrimMatrixModal({
                 onClick={() => setCurrentMode(m.id as any)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                   currentMode === m.id
-                    ? 'bg-white text-indigo-700 shadow-sm border border-slate-200'
-                    : 'text-slate-600 hover:bg-white/60'
+                    ? 'bg-white text-indigo-700 shadow-sm border border-surface-border'
+                    : 'text-ink-secondary hover:bg-white/60'
                 }`}
               >
                 {m.label}
@@ -292,13 +292,13 @@ function TrimMatrixModal({
 
           {/* Quick-fill controls */}
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-500 font-medium">Quick Fill:</span>
+            <span className="text-ink-secondary font-medium">Quick Fill:</span>
             <input
               type="number"
               step="0.01"
               value={defaultCons}
               onChange={(e) => setDefaultCons(parseFloat(e.target.value) || 0)}
-              className="w-16 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white tabular-nums"
+              className="w-16 text-xs text-right border border-surface-input rounded px-1.5 py-1 bg-white tabular-nums"
               placeholder="Cons"
               title="Default consumption"
             />
@@ -307,7 +307,7 @@ function TrimMatrixModal({
               step="0.5"
               value={defaultWaste}
               onChange={(e) => setDefaultWaste(parseFloat(e.target.value) || 0)}
-              className="w-14 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white tabular-nums"
+              className="w-14 text-xs text-right border border-surface-input rounded px-1.5 py-1 bg-white tabular-nums"
               placeholder="Waste %"
               title="Wastage %"
             />
@@ -323,10 +323,10 @@ function TrimMatrixModal({
 
         {/* 1. SIZE-WISE BREAKDOWN */}
         {currentMode === 'SIZE_WISE' && (
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <div className="overflow-x-auto border border-surface-border rounded-xl">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                <tr className="bg-surface-muted text-ink font-bold border-b border-surface-border">
                   <th className="py-2.5 px-3 w-12 text-center">Active</th>
                   <th className="py-2.5 px-3">Garment Size</th>
                   <th className="py-2.5 px-3 w-36 text-right">Consumption / Pc *</th>
@@ -334,11 +334,11 @@ function TrimMatrixModal({
                   <th className="py-2.5 px-3 w-28 text-right">Addl Qty</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {activeSizes.map((s: any) => {
                   const r = sizeMap[s.id] || { active: true, consumption: defaultCons, wastage_pct: defaultWaste, additional_qty: 0 };
                   return (
-                    <tr key={s.id} className="hover:bg-slate-50/60">
+                    <tr key={s.id} className="hover:bg-surface-muted/60">
                       <td className="py-2 px-3 text-center">
                         <input
                           type="checkbox"
@@ -347,10 +347,10 @@ function TrimMatrixModal({
                           className="rounded text-indigo-600"
                         />
                       </td>
-                      <td className="py-2 px-3 font-semibold text-slate-900">
+                      <td className="py-2 px-3 font-semibold text-ink">
                         <span>{s.label || s.code}</span>
                         {s.code && s.label && s.code !== s.label && (
-                          <span className="text-slate-400 font-normal ml-1">({s.code})</span>
+                          <span className="text-ink-muted font-normal ml-1">({s.code})</span>
                         )}
                       </td>
                       <td className="py-2 px-3 text-right">
@@ -365,7 +365,7 @@ function TrimMatrixModal({
                               [s.id]: { ...r, consumption: parseFloat(e.target.value) || 0 },
                             }))
                           }
-                          className="w-28 text-xs text-right font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1"
+                          className="w-28 text-xs text-right font-bold text-indigo-700 border border-surface-input rounded px-2 py-1"
                         />
                       </td>
                       <td className="py-2 px-3 text-right">
@@ -380,7 +380,7 @@ function TrimMatrixModal({
                               [s.id]: { ...r, wastage_pct: parseFloat(e.target.value) || 0 },
                             }))
                           }
-                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                          className="w-20 text-xs text-right border border-surface-input rounded px-2 py-1"
                         />
                       </td>
                       <td className="py-2 px-3 text-right">
@@ -395,7 +395,7 @@ function TrimMatrixModal({
                               [s.id]: { ...r, additional_qty: parseFloat(e.target.value) || 0 },
                             }))
                           }
-                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                          className="w-20 text-xs text-right border border-surface-input rounded px-2 py-1"
                         />
                       </td>
                     </tr>
@@ -408,10 +408,10 @@ function TrimMatrixModal({
 
         {/* 2. COLOUR-WISE BREAKDOWN */}
         {currentMode === 'COLOUR_WISE' && (
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <div className="overflow-x-auto border border-surface-border rounded-xl">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                <tr className="bg-surface-muted text-ink font-bold border-b border-surface-border">
                   <th className="py-2.5 px-3 w-12 text-center">Active</th>
                   <th className="py-2.5 px-3">Garment Colour</th>
                   <th className="py-2.5 px-3 w-36 text-right">Consumption / Pc *</th>
@@ -419,11 +419,11 @@ function TrimMatrixModal({
                   <th className="py-2.5 px-3 w-28 text-right">Addl Qty</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {activeColors.map((c: any) => {
                   const r = colorMap[c.id] || { active: true, consumption: defaultCons, wastage_pct: defaultWaste, additional_qty: 0 };
                   return (
-                    <tr key={c.id} className="hover:bg-slate-50/60">
+                    <tr key={c.id} className="hover:bg-surface-muted/60">
                       <td className="py-2 px-3 text-center">
                         <input
                           type="checkbox"
@@ -432,7 +432,7 @@ function TrimMatrixModal({
                           className="rounded text-indigo-600"
                         />
                       </td>
-                      <td className="py-2 px-3 font-semibold text-slate-900">
+                      <td className="py-2 px-3 font-semibold text-ink">
                         <span>{c.label || c.code}</span>
                       </td>
                       <td className="py-2 px-3 text-right">
@@ -447,7 +447,7 @@ function TrimMatrixModal({
                               [c.id]: { ...r, consumption: parseFloat(e.target.value) || 0 },
                             }))
                           }
-                          className="w-28 text-xs text-right font-bold text-indigo-700 border border-slate-300 rounded px-2 py-1"
+                          className="w-28 text-xs text-right font-bold text-indigo-700 border border-surface-input rounded px-2 py-1"
                         />
                       </td>
                       <td className="py-2 px-3 text-right">
@@ -462,7 +462,7 @@ function TrimMatrixModal({
                               [c.id]: { ...r, wastage_pct: parseFloat(e.target.value) || 0 },
                             }))
                           }
-                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                          className="w-20 text-xs text-right border border-surface-input rounded px-2 py-1"
                         />
                       </td>
                       <td className="py-2 px-3 text-right">
@@ -477,7 +477,7 @@ function TrimMatrixModal({
                               [c.id]: { ...r, additional_qty: parseFloat(e.target.value) || 0 },
                             }))
                           }
-                          className="w-20 text-xs text-right border border-slate-300 rounded px-2 py-1"
+                          className="w-20 text-xs text-right border border-surface-input rounded px-2 py-1"
                         />
                       </td>
                     </tr>
@@ -490,10 +490,10 @@ function TrimMatrixModal({
 
         {/* 3. COLOUR × SIZE 2D MATRIX */}
         {currentMode === 'COLOUR_SIZE_WISE' && (
-          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+          <div className="overflow-x-auto border border-surface-border rounded-xl">
             <table className="w-full text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                <tr className="bg-surface-muted text-ink font-bold border-b border-surface-border">
                   <th className="py-2.5 px-3 min-w-[140px]">Colour \ Size</th>
                   {activeSizes.map((s: any) => (
                     <th key={s.id} className="py-2.5 px-2 text-center min-w-[90px]">
@@ -503,15 +503,15 @@ function TrimMatrixModal({
                   <th className="py-2.5 px-3 text-right w-24">Row Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {activeColors.map((c: any) => {
                   const rowSum = activeSizes.reduce(
                     (acc: number, s: any) => acc + (gridMap[`${c.id}_${s.id}`] || 0),
                     0
                   );
                   return (
-                    <tr key={c.id} className="hover:bg-slate-50/60">
-                      <td className="py-2 px-3 font-semibold text-slate-900 bg-slate-50/30">
+                    <tr key={c.id} className="hover:bg-surface-muted/60">
+                      <td className="py-2 px-3 font-semibold text-ink bg-surface-muted/30">
                         {c.label || c.code}
                       </td>
                       {activeSizes.map((s: any) => {
@@ -526,12 +526,12 @@ function TrimMatrixModal({
                                 const num = parseFloat(e.target.value) || 0;
                                 setGridMap((p) => ({ ...p, [`${c.id}_${s.id}`]: num }));
                               }}
-                              className="w-20 text-center text-xs font-bold text-indigo-700 border border-slate-300 rounded px-1.5 py-1"
+                              className="w-20 text-center text-xs font-bold text-indigo-700 border border-surface-input rounded px-1.5 py-1"
                             />
                           </td>
                         );
                       })}
-                      <td className="py-2 px-3 text-right tabular-nums font-bold text-slate-700">
+                      <td className="py-2 px-3 text-right tabular-nums font-bold text-ink">
                         {fmtDecimal(rowSum, 2)}
                       </td>
                     </tr>
@@ -571,17 +571,17 @@ export function BomsPage() {
           { key: 'version', header: 'Version', render: (r: any) => `v${r.version}` },
           { key: 'style_code', header: 'Style',
             render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
-              <p className="text-caption text-slate-500">{r.style_name}</p></div> },
+              <p className="text-caption text-ink-secondary">{r.style_name}</p></div> },
           { key: 'so_no', header: 'Mapped Order',
             render: (r: any) => r.so_no ? (
               <div>
                 <span className="inline-flex items-center gap-1 tabular-nums text-small font-semibold text-brand-800 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                   {r.so_no}
                 </span>
-                {r.buyer_po_no && <p className="text-caption text-slate-400">PO: {r.buyer_po_no}</p>}
+                {r.buyer_po_no && <p className="text-caption text-ink-muted">PO: {r.buyer_po_no}</p>}
               </div>
             ) : (
-              <span className="inline-flex items-center text-caption font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              <span className="inline-flex items-center text-caption font-medium text-ink-secondary bg-surface-header px-2 py-0.5 rounded border border-surface-border">
                 Master (All Orders)
               </span>
             ) },
@@ -1042,12 +1042,12 @@ export function BomDetailPage() {
         <div className={`mb-4 rounded-xl border p-4 shadow-xs transition-all ${
           latestCad?.has_approved_cad
             ? 'border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-white to-emerald-50/40 text-emerald-950'
-            : 'border-slate-200 bg-slate-50/70 text-slate-700'
+            : 'border-surface-border bg-surface-muted/70 text-ink'
         }`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <span className={`p-2 rounded-lg mt-0.5 ${
-                latestCad?.has_approved_cad ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                latestCad?.has_approved_cad ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-border text-ink-secondary'
               }`}>
                 <Zap size={17} />
               </span>
@@ -1061,12 +1061,12 @@ export function BomDetailPage() {
                       Approved Marker: {latestCad.marker_name || 'CAD-MKR'} ({latestCad.efficiency_pct}% Eff)
                     </span>
                   ) : (
-                    <span className="bg-slate-200 text-slate-700 text-caption font-medium px-2 py-0.5 rounded">
+                    <span className="bg-surface-border text-ink text-caption font-medium px-2 py-0.5 rounded">
                       No Approved CAD Requirement
                     </span>
                   )}
                 </div>
-                <p className="text-small mt-0.5 text-slate-600">
+                <p className="text-small mt-0.5 text-ink-secondary">
                   {latestCad?.has_approved_cad
                     ? `Per Garment Fabric: ${fmtDecimal(latestCad.fabric_consumption_per_pc, 4)} kg | Derived Yarn: ${fmtDecimal(latestCad.yarn_req_per_pc, 4)} kg.`
                     : 'Once CAD marker consumption is approved in CAD module, Yarn and Fabric will automatically link to this BOM.'}
@@ -1127,17 +1127,17 @@ export function BomDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-border px-4 py-3 gap-2">
           <div className="flex items-center gap-2">
             <Layers size={15} className="text-brand-600" />
-            <h3 className="text-body-lg font-semibold text-slate-800">Components & Tech Pack Materials</h3>
-            <span className="text-small text-slate-500">· consumption per garment</span>
+            <h3 className="text-body-lg font-semibold text-ink">Components & Tech Pack Materials</h3>
+            <span className="text-small text-ink-secondary">· consumption per garment</span>
           </div>
 
           {/* Component Tabs */}
-          <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
+          <div className="flex flex-wrap items-center gap-1 bg-surface-header p-0.5 rounded-lg text-xs">
             <button
               type="button"
               onClick={() => setActiveTab('ALL')}
               className={`px-2.5 py-1 rounded-md font-medium transition ${
-                activeTab === 'ALL' ? 'bg-white shadow-xs text-brand-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'ALL' ? 'bg-white shadow-xs text-brand-700 font-bold' : 'text-ink-secondary hover:text-ink'
               }`}
             >
               All ({counts.all})
@@ -1146,7 +1146,7 @@ export function BomDetailPage() {
               type="button"
               onClick={() => setActiveTab('FABRIC')}
               className={`px-2.5 py-1 rounded-md font-medium transition ${
-                activeTab === 'FABRIC' ? 'bg-white shadow-xs text-emerald-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'FABRIC' ? 'bg-white shadow-xs text-emerald-700 font-bold' : 'text-ink-secondary hover:text-ink'
               }`}
             >
               Fabric ({counts.fabric})
@@ -1155,7 +1155,7 @@ export function BomDetailPage() {
               type="button"
               onClick={() => setActiveTab('YARN')}
               className={`px-2.5 py-1 rounded-md font-medium transition ${
-                activeTab === 'YARN' ? 'bg-white shadow-xs text-amber-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'YARN' ? 'bg-white shadow-xs text-amber-700 font-bold' : 'text-ink-secondary hover:text-ink'
               }`}
             >
               Yarn ({counts.yarn})
@@ -1164,7 +1164,7 @@ export function BomDetailPage() {
               type="button"
               onClick={() => setActiveTab('TRIM')}
               className={`px-2.5 py-1 rounded-md font-medium transition ${
-                activeTab === 'TRIM' ? 'bg-white shadow-xs text-indigo-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'TRIM' ? 'bg-white shadow-xs text-indigo-700 font-bold' : 'text-ink-secondary hover:text-ink'
               }`}
             >
               Trims ({counts.trim})
@@ -1173,7 +1173,7 @@ export function BomDetailPage() {
               type="button"
               onClick={() => setActiveTab('ACCESSORY')}
               className={`px-2.5 py-1 rounded-md font-medium transition ${
-                activeTab === 'ACCESSORY' ? 'bg-white shadow-xs text-purple-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'ACCESSORY' ? 'bg-white shadow-xs text-purple-700 font-bold' : 'text-ink-secondary hover:text-ink'
               }`}
             >
               Accessories ({counts.accessory})
@@ -1182,7 +1182,7 @@ export function BomDetailPage() {
               type="button"
               onClick={() => setActiveTab('PACKING')}
               className={`px-2.5 py-1 rounded-md font-medium transition ${
-                activeTab === 'PACKING' ? 'bg-white shadow-xs text-sky-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'PACKING' ? 'bg-white shadow-xs text-sky-700 font-bold' : 'text-ink-secondary hover:text-ink'
               }`}
             >
               Packing ({counts.packing})
@@ -1191,7 +1191,7 @@ export function BomDetailPage() {
               type="button"
               onClick={() => setActiveTab('GENERAL')}
               className={`px-2.5 py-1 rounded-md font-medium transition ${
-                activeTab === 'GENERAL' ? 'bg-white shadow-xs text-teal-700 font-bold' : 'text-slate-600 hover:text-slate-900'
+                activeTab === 'GENERAL' ? 'bg-white shadow-xs text-teal-700 font-bold' : 'text-ink-secondary hover:text-ink'
               }`}
             >
               General ({counts.general})
@@ -1358,7 +1358,7 @@ export function BomDetailPage() {
                           <option value="">Count —</option>
                           {(yarnCounts.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
-                      ) : <span className="text-slate-300">—</span>}
+                      ) : <span className="text-ink-disabled">—</span>}
                     </td>
                     {/* GSM (fabric) — GSM master */}
                     <td className="td p-1.5">
@@ -1369,12 +1369,12 @@ export function BomDetailPage() {
                           {l.gsm && !(gsms.data ?? []).some((g: any) => Number(g.code) === Number(l.gsm)) && <option value={l.gsm}>{l.gsm}</option>}
                           {(gsms.data ?? []).map((g: any) => <option key={g.id} value={Number(g.code)}>{Number(g.code)}</option>)}
                         </select>
-                      ) : <span className="text-slate-300">—</span>}
+                      ) : <span className="text-ink-disabled">—</span>}
                     </td>
                     {/* Grey / Dyed (fabric + yarn) */}
                     <td className="td p-1.5">
                       {fabricOrYarn ? (
-                        <select className={`input py-1 text-caption font-semibold ${l.dye_type === 'DYED' ? 'text-purple-700' : l.dye_type === 'GREY' ? 'text-slate-600' : ''}`}
+                        <select className={`input py-1 text-caption font-semibold ${l.dye_type === 'DYED' ? 'text-purple-700' : l.dye_type === 'GREY' ? 'text-ink-secondary' : ''}`}
                           value={l.dye_type || ''} disabled={!editable}
                           onChange={(e) => {
                             const v = e.target.value as BomLine['dye_type'];
@@ -1384,7 +1384,7 @@ export function BomDetailPage() {
                           <option value="GREY">Kora / Raw</option>
                           <option value="DYED">Dyed</option>
                         </select>
-                      ) : <span className="text-slate-300">—</span>}
+                      ) : <span className="text-ink-disabled">—</span>}
                     </td>
                     {/* Colour of the dyed fabric / yarn — only when Dyed */}
                     <td className="td p-1.5">
@@ -1394,7 +1394,7 @@ export function BomDetailPage() {
                           <option value="">— Colour —</option>
                           {(allColors.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
-                      ) : <span className="text-slate-300">{fabricOrYarn && l.dye_type === 'GREY' ? 'Kora / Raw — no colour' : '—'}</span>}
+                      ) : <span className="text-ink-disabled">{fabricOrYarn && l.dye_type === 'GREY' ? 'Kora / Raw — no colour' : '—'}</span>}
                     </td>
                     {/* Applicability */}
                     <td className="td p-1.5">
@@ -1514,7 +1514,7 @@ export function BomDetailPage() {
                         placeholder="0"
                         onChange={(e) => setLine(l._key, { wastage_pct: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
-                    <td className="td text-right tabular-nums text-slate-700" title={rateTitle(l)}>
+                    <td className="td text-right tabular-nums text-ink" title={rateTitle(l)}>
                       {l.material_type === 'FABRIC' && (l.source_type || 'PRODUCTION') === 'PRODUCTION' ? (
                         <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-micro font-bold text-indigo-800" title="Knitted from Yarn in-house — Raw material purchase cost is captured in Yarn line">
                           In-House Knit
@@ -1530,7 +1530,7 @@ export function BomDetailPage() {
                       <td className="td p-1.5 text-right">
                         <button onClick={() => setLines((s) => s.filter((x) => x._key !== l._key))}
                           disabled={lines.length === 1}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30">
+                          className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600 disabled:opacity-30">
                           <Trash2 size={14} />
                         </button>
                       </td>
@@ -1543,7 +1543,7 @@ export function BomDetailPage() {
         </div>
 
         {editable && (
-          <div className="border-t border-surface-border p-2.5 flex flex-wrap items-center justify-between gap-2 bg-slate-50/60">
+          <div className="border-t border-surface-border p-2.5 flex flex-wrap items-center justify-between gap-2 bg-surface-muted/60">
             <div className="flex flex-wrap items-center gap-2">
               <button className="btn-secondary btn-sm"
                 onClick={() => setLines((s) => [...s, emptyLine('FABRIC')])}>
@@ -1570,7 +1570,7 @@ export function BomDetailPage() {
                 <Plus size={13} /> Add General
               </button>
             </div>
-            <span className="text-caption text-slate-400">
+            <span className="text-caption text-ink-muted">
               CAD feeds Fabric/Yarn; Merchandiser enters Trims, Accessories, Packing & General Materials
             </span>
           </div>
@@ -1580,7 +1580,7 @@ export function BomDetailPage() {
       {orderInfo.data ? (
         <BomRequirementTable lines={lines} info={orderInfo.data} materialName={materialName} uomCode={(id: unknown) => String(uomCode(id) ?? "")} />
       ) : (
-        <p className="mb-4 text-small text-slate-500">Select the sales order to see the size-wise order qty and the total requirement of every material.</p>
+        <p className="mb-4 text-small text-ink-secondary">Select the sales order to see the size-wise order qty and the total requirement of every material.</p>
       )}
 
       {/* Cost roll-up */}
@@ -1588,8 +1588,8 @@ export function BomDetailPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="label">Material cost per garment</p>
-            <p className="text-page font-semibold tabular-nums text-slate-900">₹{fmtDecimal(costPerGarment, 4)}</p>
-            <p className="mt-0.5 text-small text-slate-500">Standard rates · wastage & additional qty included · fixed-qty items spread over {costPcs.toLocaleString('en-IN')} PCS{orderPcs > 0 ? ' (job plan cut)' : (orderInfo.data as any)?.so_order_qty ? ' (job order qty)' : ' (explode qty)'} · size / colour lines by their share</p>
+            <p className="text-page font-semibold tabular-nums text-ink">₹{fmtDecimal(costPerGarment, 4)}</p>
+            <p className="mt-0.5 text-small text-ink-secondary">Standard rates · wastage & additional qty included · fixed-qty items spread over {costPcs.toLocaleString('en-IN')} PCS{orderPcs > 0 ? ' (job plan cut)' : (orderInfo.data as any)?.so_order_qty ? ' (job order qty)' : ' (explode qty)'} · size / colour lines by their share</p>
           </div>
           <div className="flex items-end gap-3">
             <div>
@@ -1643,7 +1643,7 @@ export function BomDetailPage() {
               className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
                 cadSourcingPlan === 'YARN_PURCHASE'
                   ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                  : 'border-surface-border hover:border-surface-input bg-white'
               }`}
             >
               <input
@@ -1655,13 +1655,13 @@ export function BomDetailPage() {
                 className="mt-1"
               />
               <div className="text-xs">
-                <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                <div className="font-bold text-sm text-ink flex items-center gap-1.5">
                   🧶 Yarn Purchase + Knitting (In-House &amp; Job Work DC)
                   <span className="text-micro font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
                     Standard / Recommended (95%+)
                   </span>
                 </div>
-                <p className="text-slate-600 mt-1 leading-relaxed">
+                <p className="text-ink-secondary mt-1 leading-relaxed">
                   • <b>Yarn is Purchased (PO)</b>: {fmtDecimal(latestCad?.yarn_req_per_pc, 4)} kg/pc demand generated.<br/>
                   • <b>Fabric is Produced (Knitting)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc routed to Knitting Program &amp; Delivery Challan (DC) for In-House or Outside Job Work, NOT direct purchase.<br/>
                   • <b>Zero Double-Costing</b>: Fabric purchase rate is excluded from garment material cost (captured via Yarn).
@@ -1673,7 +1673,7 @@ export function BomDetailPage() {
               className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
                 cadSourcingPlan === 'FABRIC_PURCHASE'
                   ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                  : 'border-surface-border hover:border-surface-input bg-white'
               }`}
             >
               <input
@@ -1685,10 +1685,10 @@ export function BomDetailPage() {
                 className="mt-1"
               />
               <div className="text-xs">
-                <div className="font-bold text-sm text-slate-900">
+                <div className="font-bold text-sm text-ink">
                   🧵 Direct Fabric Purchase (Buy Finished Fabric)
                 </div>
-                <p className="text-slate-600 mt-1 leading-relaxed">
+                <p className="text-ink-secondary mt-1 leading-relaxed">
                   • <b>Finished Fabric is Purchased (PO)</b>: {fmtDecimal(latestCad?.fabric_consumption_per_pc, 4)} kg/pc.<br/>
                   • <b>Raw Yarn is NOT Purchased</b>: Eliminates unused yarn purchase demand and mismatches.
                 </p>
@@ -1699,7 +1699,7 @@ export function BomDetailPage() {
               className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition ${
                 cadSourcingPlan === 'BOTH'
                   ? 'border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
+                  : 'border-surface-border hover:border-surface-input bg-white'
               }`}
             >
               <input
@@ -1711,10 +1711,10 @@ export function BomDetailPage() {
                 className="mt-1"
               />
               <div className="text-xs">
-                <div className="font-bold text-sm text-slate-900">
+                <div className="font-bold text-sm text-ink">
                   📦 Both Fabric & Yarn Purchase (Custom / Mixed)
                 </div>
-                <p className="text-slate-600 mt-1 leading-relaxed">
+                <p className="text-ink-secondary mt-1 leading-relaxed">
                   • Both Fabric and Yarn purchase requirements are generated for procurement.
                 </p>
               </div>
@@ -1725,15 +1725,15 @@ export function BomDetailPage() {
             const pv = latestCad.bom_preview;
             const shown = pv.lines.filter((l: any) => l.material_type === 'FABRIC' || cadSourcingPlan !== 'FABRIC_PURCHASE');
             return (
-              <div className="mt-4 rounded-lg border border-slate-200 p-3 text-xs" data-cad-preview>
-                <div className="mb-2 font-semibold text-slate-800">
+              <div className="mt-4 rounded-lg border border-surface-border p-3 text-xs" data-cad-preview>
+                <div className="mb-2 font-semibold text-ink">
                   From {pv.req_no} {pv.cad_version} — for {fmtNumber(pv.plan_cut_pcs)} pcs ({pv.pcs_source})
                 </div>
                 <table className="w-full">
-                  <thead><tr className="text-left text-slate-500"><th className="py-1">Line</th><th className="py-1 text-right">CAD total</th><th className="py-1 text-right">Per pc</th></tr></thead>
+                  <thead><tr className="text-left text-ink-secondary"><th className="py-1">Line</th><th className="py-1 text-right">CAD total</th><th className="py-1 text-right">Per pc</th></tr></thead>
                   <tbody>
                     {shown.map((l: any, i: number) => (
-                      <tr key={i} className="border-t border-slate-100">
+                      <tr key={i} className="border-t border-surface-divider">
                         <td className="py-1">{l.material_type === 'YARN' ? 'Yarn' : 'Fabric'} · {l.name}{l.gsm ? ` · ${l.gsm} GSM` : ''}{l.dia ? ` · ${l.dia}"` : ''}{l.color_name ? ` · ${l.color_name}` : ''}</td>
                         <td className="py-1 text-right tabular-nums">{fmtDecimal(l.total_kg, 2)} {l.uom}</td>
                         <td className="py-1 text-right tabular-nums">{fmtDecimal(l.consumption, 5)}</td>
@@ -1741,7 +1741,7 @@ export function BomDetailPage() {
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t border-slate-300 font-semibold">
+                    <tr className="border-t border-surface-input font-semibold">
                       <td className="py-1">Total fabric{cadSourcingPlan !== 'FABRIC_PURCHASE' ? ' / yarn' : ''}</td>
                       <td className="py-1 text-right tabular-nums" data-cad-preview-total>
                         {fmtDecimal(pv.fabric_kg, 2)} KG{pv.fabric_mtr ? ` + ${fmtDecimal(pv.fabric_mtr, 2)} MTR` : ''}{cadSourcingPlan !== 'FABRIC_PURCHASE' ? ` / ${fmtDecimal(pv.yarn_kg, 2)} KG` : ''}
@@ -1750,7 +1750,7 @@ export function BomDetailPage() {
                     </tr>
                   </tfoot>
                 </table>
-                <p className="mt-2 text-slate-500">No wastage is added — the CAD total already has the cut excess, buffer and samples. Lines you added by hand are kept.</p>
+                <p className="mt-2 text-ink-secondary">No wastage is added — the CAD total already has the cut excess, buffer and samples. Lines you added by hand are kept.</p>
                 {pv.problems.length > 0 && (
                   <ul className="mt-2 list-disc pl-4 text-red-600" data-cad-problems>{pv.problems.map((x: string) => <li key={x}>{x}</li>)}</ul>
                 )}

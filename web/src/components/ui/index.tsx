@@ -13,16 +13,16 @@ export function PageHeader({ title, subtitle, actions, breadcrumb }: {
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         {breadcrumb?.length ? (
-          <nav className="mb-1.5 flex items-center gap-1.5 text-small font-semibold text-slate-600">
+          <nav className="mb-1.5 flex items-center gap-1.5 text-small font-semibold text-ink-secondary">
             {breadcrumb.map((b, i) => (
               <span key={i} className="flex items-center gap-1.5">
-                {i > 0 && <span className="text-slate-400">/</span>}<span className="hover:text-slate-900 transition-colors">{b}</span>
+                {i > 0 && <span className="text-ink-muted">/</span>}<span className="hover:text-ink transition-colors">{b}</span>
               </span>
             ))}
           </nav>
         ) : null}
         <h1 className="text-page font-semibold tracking-tight text-ink-heading">{title}</h1>
-        {subtitle && <p className="mt-1 text-body font-medium text-slate-600 leading-normal">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-body font-medium text-ink-secondary leading-normal">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -41,7 +41,7 @@ export function Field({ label, error, required, hint, children, className }: Fie
         </label>
       )}
       {children}
-      {hint && !error && <p className="mt-1 text-caption text-slate-400">{hint}</p>}
+      {hint && !error && <p className="mt-1 text-caption text-ink-muted">{hint}</p>}
       {error && <p className="help-error">{typeof error === 'string' ? error : (typeof error === 'object' ? JSON.stringify(error) : String(error))}</p>}
     </div>
   );
@@ -84,11 +84,11 @@ export function Checkbox({ label, checked, onChange, disabled }: {
   label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean;
 }) {
   return (
-    <label className={clsx('flex cursor-pointer select-none items-center gap-2 text-body text-slate-700',
+    <label className={clsx('flex cursor-pointer select-none items-center gap-2 text-body text-ink',
       disabled && 'cursor-not-allowed opacity-60')}>
       <input type="checkbox" checked={checked} disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/30" />
+        className="h-4 w-4 rounded border-surface-input text-brand-600 focus:ring-brand-500/30" />
       {label}
     </label>
   );
@@ -129,7 +129,7 @@ export function Badge({
       className={clsx(
         'badge',
         variant === 'outline'
-          ? 'border border-slate-300 bg-transparent text-slate-700'
+          ? 'border border-surface-input bg-transparent text-ink'
           : toneClass,
         size === 'lg' && 'px-2.5 py-1 text-xs',
         className
@@ -164,7 +164,7 @@ export function Card({
             ) : (
               title
             )}
-            {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-ink-secondary mt-0.5">{subtitle}</p>}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
@@ -191,8 +191,8 @@ export function Button({
     primary: 'btn-primary',
     secondary: 'btn-secondary',
     danger: 'btn-danger',
-    ghost: 'hover:bg-slate-100 text-slate-700 font-medium px-3 py-1.5 rounded-lg text-xs transition-colors',
-    outline: 'border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium px-3 py-1.5 rounded-lg text-xs transition-colors',
+    ghost: 'hover:bg-surface-header text-ink font-medium px-3 py-1.5 rounded-lg text-xs transition-colors',
+    outline: 'border border-surface-input hover:bg-surface-muted text-ink font-medium px-3 py-1.5 rounded-lg text-xs transition-colors',
   }[variant];
 
   const sizeClass = {
@@ -236,7 +236,7 @@ export type { Column };
 /** Maps common ERP state words onto a colour tone. */
 export function StatusBadge({ value }: { value: unknown }) {
   const v = String(value ?? '').toUpperCase();
-  if (!v) return <span className="text-slate-400">—</span>;
+  if (!v) return <span className="text-ink-muted">—</span>;
   const tone =
     /^(APPROVED|PASS|COMPLETED|DELIVERED|CREDITED|DONE|ACTIVE|REALIZED|ISSUED|POSTED|ACCEPTED|RECEIVED|ON_TRACK)$/.test(v) ? 'green' :
     /PENDING|IN_REVIEW|BOOKED|REQUESTED|CLAIMED|NEW/.test(v) ? 'amber' :
@@ -268,9 +268,9 @@ export function EmptyState({ title, message, action, icon }: {
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="mb-3 rounded-full bg-slate-100 p-3.5 text-slate-400">{icon ?? <Inbox size={24} />}</div>
-      <h3 className="text-title font-semibold text-slate-800">{title}</h3>
-      {message && <p className="mt-1 max-w-md text-body text-slate-500">{message}</p>}
+      <div className="mb-3 rounded-full bg-surface-header p-3.5 text-ink-muted">{icon ?? <Inbox size={24} />}</div>
+      <h3 className="text-title font-semibold text-ink">{title}</h3>
+      {message && <p className="mt-1 max-w-md text-body text-ink-secondary">{message}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -281,8 +281,8 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
       <div className="mb-3 rounded-full bg-red-50 p-3.5 text-red-500"><AlertCircle size={24} /></div>
-      <h3 className="text-title font-semibold text-slate-800">Unable to load this data</h3>
-      <p className="mt-1 max-w-md text-body text-slate-500">{message}</p>
+      <h3 className="text-title font-semibold text-ink">Unable to load this data</h3>
+      <p className="mt-1 max-w-md text-body text-ink-secondary">{message}</p>
       {onRetry && <button onClick={onRetry} className="btn-secondary mt-4">Try again</button>}
     </div>
   );
@@ -330,10 +330,10 @@ export function Modal({ open, onClose, title, subtitle, icon, children, footer, 
         <div className="flex shrink-0 items-start gap-3 border-b border-surface-border px-5 py-3.5">
           {icon && <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600">{icon}</div>}
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-title font-semibold text-slate-900">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-small text-slate-500">{subtitle}</p>}
+            <h2 className="truncate text-title font-semibold text-ink">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-small text-ink-secondary">{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="-mr-1 rounded-lg p-1 text-slate-400 hover:bg-surface-hover hover:text-slate-600"
+          <button onClick={onClose} className="-mr-1 rounded-lg p-1 text-ink-muted hover:bg-surface-hover hover:text-ink-secondary"
             aria-label="Close">
             <X size={18} />
           </button>
@@ -341,7 +341,7 @@ export function Modal({ open, onClose, title, subtitle, icon, children, footer, 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {(footer || footerStart) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 rounded-b-xl border-t border-surface-border bg-surface-muted/60 px-5 py-3">
-            {footerStart && <div className="mr-auto text-body text-slate-600">{footerStart}</div>}
+            {footerStart && <div className="mr-auto text-body text-ink-secondary">{footerStart}</div>}
             {footer}
           </div>
         )}
@@ -367,10 +367,10 @@ export function FormSection({ title, description, actions, cols = 4, children, c
   return (
     <section className={clsx('mb-4 last:mb-0', className)}>
       {(title || actions) && (
-        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-1.5">
+        <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2 border-b border-surface-divider pb-1.5">
           <div>
-            {title && <h3 className="text-small font-semibold uppercase tracking-wider text-slate-500">{title}</h3>}
-            {description && <p className="mt-0.5 text-small text-slate-400">{description}</p>}
+            {title && <h3 className="text-small font-semibold uppercase tracking-wider text-ink-secondary">{title}</h3>}
+            {description && <p className="mt-0.5 text-small text-ink-muted">{description}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
@@ -392,7 +392,7 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', o
           {busy && <Spinner size={14} />}{confirmLabel}
         </button>
       </>}>
-      <p className="text-body leading-relaxed text-slate-600">{message}</p>
+      <p className="text-body leading-relaxed text-ink-secondary">{message}</p>
     </Modal>
   );
 }
@@ -403,12 +403,12 @@ export function SearchInput({ value, onChange, placeholder = 'Search…', classN
 }) {
   return (
     <div className={clsx('relative', className)}>
-      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         className="input pl-9" />
       {value && (
         <button onClick={() => onChange('')} aria-label="Clear search"
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600">
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink-muted hover:text-ink-secondary">
           <X size={14} />
         </button>
       )}
@@ -435,15 +435,15 @@ export function Pager({ page, totalPages, total, pageSize, onPage }: {
   const to = Math.min(page * pageSize, total);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-surface-border px-3.5 py-2.5">
-      <p className="text-xs text-slate-500">
-        Showing <span className="font-medium text-slate-700">{from}–{to}</span> of{' '}
-        <span className="font-medium text-slate-700">{total.toLocaleString('en-IN')}</span>
+      <p className="text-xs text-ink-secondary">
+        Showing <span className="font-medium text-ink">{from}–{to}</span> of{' '}
+        <span className="font-medium text-ink">{total.toLocaleString('en-IN')}</span>
       </p>
       <div className="flex items-center gap-1">
         <button className="btn-secondary btn-sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
           <ChevronLeft size={14} /> Prev
         </button>
-        <span className="px-2 text-xs text-slate-600">Page {page} of {Math.max(totalPages, 1)}</span>
+        <span className="px-2 text-xs text-ink-secondary">Page {page} of {Math.max(totalPages, 1)}</span>
         <button className="btn-secondary btn-sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
           Next <ChevronRight size={14} />
         </button>
@@ -462,11 +462,11 @@ export function Tabs({ tabs, active, onChange }: {
       {tabs.map((t) => (
         <button key={t.key} onClick={() => onChange(t.key)}
           className={clsx('relative whitespace-nowrap px-3.5 py-2.5 text-body font-medium transition-colors',
-            active === t.key ? 'text-brand-700' : 'text-slate-500 hover:text-slate-800')}>
+            active === t.key ? 'text-brand-700' : 'text-ink-secondary hover:text-ink')}>
           {t.label}
           {t.count !== undefined && (
             <span className={clsx('ml-1.5 rounded-full px-1.5 py-0.5 text-micro',
-              active === t.key ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500')}>
+              active === t.key ? 'bg-brand-100 text-brand-700' : 'bg-surface-header text-ink-secondary')}>
               {t.count}
             </span>
           )}

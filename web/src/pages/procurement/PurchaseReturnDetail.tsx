@@ -405,18 +405,18 @@ export function PurchaseReturnDetailPage() {
   return (
     <div className="space-y-6 pb-20">
       {/* Top Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-surface-border pb-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => nav('/procurement/returns')}
-            className="rounded-lg border border-slate-300 p-2 hover:bg-slate-100 transition-colors"
+            className="rounded-lg border border-surface-input p-2 hover:bg-surface-header transition-colors"
           >
-            <ArrowLeft className="h-4 w-4 text-slate-600" />
+            <ArrowLeft className="h-4 w-4 text-ink-secondary" />
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900">
+              <h1 className="text-xl font-bold text-ink">
                 {isNew ? 'New Purchase Return' : `Purchase Return ${head.return_no}`}
               </h1>
               <Badge tone={head.status === 'APPROVED' ? 'emerald' : head.status === 'DRAFT' ? 'slate' : 'indigo'}>
@@ -426,7 +426,7 @@ export function PurchaseReturnDetailPage() {
                 <Badge tone="emerald">Stock Reversed</Badge>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-secondary">
               Supplier Material &amp; Job-Work Return Reversal per Developer Specification
             </p>
           </div>
@@ -505,8 +505,8 @@ export function PurchaseReturnDetailPage() {
       </div>
 
       {/* Return Header Card */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 flex items-center gap-2">
+      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-ink mb-4 flex items-center gap-2">
           <FileText className="h-4 w-4 text-brand-600" />
           <span>Return Header Information</span>
         </h3>
@@ -515,7 +515,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Return No</label>
             <input
-              className="input tabular-nums font-semibold text-brand-700 bg-slate-50"
+              className="input tabular-nums font-semibold text-brand-700 bg-surface-muted"
               value={head.return_no || 'Auto-generated on save'}
               readOnly
             />
@@ -651,11 +651,11 @@ export function PurchaseReturnDetailPage() {
       </div>
 
       {/* Return Item Grid with Returnable Qty Calculation */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="flex items-center justify-between p-4 bg-slate-50 border-b border-slate-200">
+      <div className="rounded-xl border border-surface-border bg-white shadow-xs overflow-hidden">
+        <div className="flex items-center justify-between p-4 bg-surface-muted border-b border-surface-border">
           <div>
-            <h3 className="text-sm font-bold text-slate-800">Return Items Grid</h3>
-            <p className="text-caption text-slate-500">
+            <h3 className="text-sm font-bold text-ink">Return Items Grid</h3>
+            <p className="text-caption text-ink-secondary">
               Returnable Qty = GRN Received Qty − Previous Returned Qty − Issued Qty
             </p>
           </div>
@@ -672,8 +672,8 @@ export function PurchaseReturnDetailPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-100/70 text-slate-700 font-semibold border-b border-slate-200 text-caption uppercase tracking-wider">
+          <table className="w-full text-left text-xs text-ink-secondary">
+            <thead className="bg-surface-header/70 text-ink font-semibold border-b border-surface-border text-caption uppercase tracking-wider">
               <tr>
                 <th className="py-2.5 px-3">#</th>
                 <th className="py-2.5 px-3">Item / Description</th>
@@ -691,23 +691,23 @@ export function PurchaseReturnDetailPage() {
                 {isDraft && <th className="py-2.5 px-3 text-center">Action</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-sans">
+            <tbody className="divide-y divide-surface-divider font-sans">
               {lines.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-8 text-center text-slate-400">
+                  <td colSpan={14} className="py-8 text-center text-ink-muted">
                     No items selected. Select a Source GRN above or click &quot;Add Custom Item&quot;.
                   </td>
                 </tr>
               ) : (
                 lines.map((l, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-2 px-3 tabular-nums font-bold text-slate-400">{idx + 1}</td>
-                    <td className="py-2 px-3 font-medium text-slate-900 max-w-xs truncate">
+                  <tr key={idx} className="hover:bg-surface-muted/60 transition-colors">
+                    <td className="py-2 px-3 tabular-nums font-bold text-ink-muted">{idx + 1}</td>
+                    <td className="py-2 px-3 font-medium text-ink max-w-xs truncate">
                       {l.item_name || 'Material Item'}
                     </td>
-                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{fmtDecimal(l.grn_qty, 2)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{fmtDecimal(l.prev_returned_qty, 2)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{fmtDecimal(l.issued_qty, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-ink-secondary">{fmtDecimal(l.grn_qty, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-ink-secondary">{fmtDecimal(l.prev_returned_qty, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-ink-secondary">{fmtDecimal(l.issued_qty, 2)}</td>
                     <td className="py-2 px-3 text-right tabular-nums font-bold text-emerald-700 bg-emerald-50/30">
                       {fmtDecimal(l.returnable_qty, 2)}
                     </td>
@@ -721,7 +721,7 @@ export function PurchaseReturnDetailPage() {
                         disabled={!isDraft}
                       />
                     </td>
-                    <td className="py-2 px-3 tabular-nums text-slate-600">{l.uom_code || 'KG'}</td>
+                    <td className="py-2 px-3 tabular-nums text-ink-secondary">{l.uom_code || 'KG'}</td>
                     <td className="py-2 px-3 text-right tabular-nums">
                       <input
                         type="number"
@@ -732,9 +732,9 @@ export function PurchaseReturnDetailPage() {
                         disabled={!isDraft}
                       />
                     </td>
-                    <td className="py-2 px-3 text-right tabular-nums text-slate-700">{fmtDecimal(l.basic_amount, 2)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{l.gst_percent}%</td>
-                    <td className="py-2 px-3 text-right tabular-nums font-bold text-slate-900">{fmtDecimal(l.total_amount, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-ink">{fmtDecimal(l.basic_amount, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-ink-secondary">{l.gst_percent}%</td>
+                    <td className="py-2 px-3 text-right tabular-nums font-bold text-ink">{fmtDecimal(l.total_amount, 2)}</td>
                     <td className="py-2 px-3 max-w-[140px]">
                       <select
                         className="input text-caption h-8 py-0 px-1"
@@ -767,23 +767,23 @@ export function PurchaseReturnDetailPage() {
 
         {/* Dynamic Category Tracking Fields Section */}
         {lines.length > 0 && (
-          <div className="p-4 bg-slate-50/50 border-t border-slate-200">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-2">
+          <div className="p-4 bg-surface-muted/50 border-t border-surface-border">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink mb-3 flex items-center gap-2">
               <Layers className="h-3.5 w-3.5 text-brand-600" />
               <span>Category Tracking Specifics ({head.material_category})</span>
             </h4>
 
             <div className="space-y-3">
               {lines.map((l, idx) => (
-                <div key={idx} className="p-3 bg-white border border-slate-200 rounded-lg text-xs space-y-2">
-                  <div className="font-semibold text-slate-800">
+                <div key={idx} className="p-3 bg-white border border-surface-border rounded-lg text-xs space-y-2">
+                  <div className="font-semibold text-ink">
                     Line #{idx + 1}: {l.item_name}
                   </div>
 
                   {head.material_category === 'YARN' && (
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                       <div>
-                        <label className="text-caption text-slate-500">Lot No</label>
+                        <label className="text-caption text-ink-secondary">Lot No</label>
                         <input
                           className="input h-8 text-xs tabular-nums"
                           value={l.lot_no || ''}
@@ -793,7 +793,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Dye Lot No</label>
+                        <label className="text-caption text-ink-secondary">Dye Lot No</label>
                         <input
                           className="input h-8 text-xs tabular-nums"
                           value={l.dye_lot_no || ''}
@@ -803,7 +803,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Bags</label>
+                        <label className="text-caption text-ink-secondary">Bags</label>
                         <input
                           type="number"
                           className="input h-8 text-xs"
@@ -814,7 +814,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Cones / Packages</label>
+                        <label className="text-caption text-ink-secondary">Cones / Packages</label>
                         <input
                           type="number"
                           className="input h-8 text-xs"
@@ -825,7 +825,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Return Weight (Kg)</label>
+                        <label className="text-caption text-ink-secondary">Return Weight (Kg)</label>
                         <input
                           type="number"
                           step="0.01"
@@ -841,7 +841,7 @@ export function PurchaseReturnDetailPage() {
                   {head.material_category === 'FABRIC' && (
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                       <div>
-                        <label className="text-caption text-slate-500">Roll No / Barcode</label>
+                        <label className="text-caption text-ink-secondary">Roll No / Barcode</label>
                         <input
                           className="input h-8 text-xs tabular-nums"
                           value={l.roll_no || ''}
@@ -851,7 +851,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Batch / Dye Lot</label>
+                        <label className="text-caption text-ink-secondary">Batch / Dye Lot</label>
                         <input
                           className="input h-8 text-xs tabular-nums"
                           value={l.dye_lot_no || l.batch_no || ''}
@@ -861,7 +861,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">GSM</label>
+                        <label className="text-caption text-ink-secondary">GSM</label>
                         <input
                           className="input h-8 text-xs"
                           value={l.gsm || ''}
@@ -871,7 +871,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Dia / Width</label>
+                        <label className="text-caption text-ink-secondary">Dia / Width</label>
                         <input
                           className="input h-8 text-xs"
                           value={l.dia || ''}
@@ -881,7 +881,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Return Weight (Kg)</label>
+                        <label className="text-caption text-ink-secondary">Return Weight (Kg)</label>
                         <input
                           type="number"
                           step="0.01"
@@ -897,7 +897,7 @@ export function PurchaseReturnDetailPage() {
                   {head.material_category === 'TRIM' && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div>
-                        <label className="text-caption text-slate-500">Batch No</label>
+                        <label className="text-caption text-ink-secondary">Batch No</label>
                         <input
                           className="input h-8 text-xs tabular-nums"
                           value={l.batch_no || ''}
@@ -906,7 +906,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Size / Dimension</label>
+                        <label className="text-caption text-ink-secondary">Size / Dimension</label>
                         <input
                           className="input h-8 text-xs"
                           value={l.size || ''}
@@ -915,7 +915,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Colour / Shade</label>
+                        <label className="text-caption text-ink-secondary">Colour / Shade</label>
                         <input
                           className="input h-8 text-xs"
                           value={l.dye_lot_no || ''}
@@ -924,7 +924,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Return Qty</label>
+                        <label className="text-caption text-ink-secondary">Return Qty</label>
                         <input
                           type="number"
                           className="input h-8 text-xs tabular-nums font-bold text-brand-700"
@@ -939,7 +939,7 @@ export function PurchaseReturnDetailPage() {
                   {head.material_category === 'GENERAL' && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div>
-                        <label className="text-caption text-slate-500">Batch / Serial No</label>
+                        <label className="text-caption text-ink-secondary">Batch / Serial No</label>
                         <input
                           className="input h-8 text-xs tabular-nums"
                           value={l.batch_no || ''}
@@ -948,7 +948,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Department</label>
+                        <label className="text-caption text-ink-secondary">Department</label>
                         <input
                           className="input h-8 text-xs"
                           value={l.department || ''}
@@ -957,7 +957,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Expiry Date</label>
+                        <label className="text-caption text-ink-secondary">Expiry Date</label>
                         <input
                           type="date"
                           className="input h-8 text-xs"
@@ -967,7 +967,7 @@ export function PurchaseReturnDetailPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-caption text-slate-500">Return Qty</label>
+                        <label className="text-caption text-ink-secondary">Return Qty</label>
                         <input
                           type="number"
                           className="input h-8 text-xs tabular-nums font-bold text-brand-700"
@@ -985,14 +985,14 @@ export function PurchaseReturnDetailPage() {
         )}
 
         {/* Financial Footer */}
-        <div className="p-4 bg-slate-100/60 border-t border-slate-200 flex flex-wrap justify-between items-center gap-4">
-          <div className="text-xs text-slate-600">
-            Total Items: <span className="font-bold text-slate-900">{lines.length}</span> | Total Return Quantity: <span className="font-bold text-brand-700">{fmtDecimal(totalReturnQty, 2)}</span>
+        <div className="p-4 bg-surface-header/60 border-t border-surface-border flex flex-wrap justify-between items-center gap-4">
+          <div className="text-xs text-ink-secondary">
+            Total Items: <span className="font-bold text-ink">{lines.length}</span> | Total Return Quantity: <span className="font-bold text-brand-700">{fmtDecimal(totalReturnQty, 2)}</span>
           </div>
           <div className="flex items-center gap-6 text-xs">
-            <div>Taxable Basic: <span className="tabular-nums font-bold text-slate-800">₹{fmtDecimal(totalBasic, 2)}</span></div>
-            <div>GST: <span className="tabular-nums font-bold text-slate-800">₹{fmtDecimal(totalGst, 2)}</span></div>
-            <div className="text-sm bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+            <div>Taxable Basic: <span className="tabular-nums font-bold text-ink">₹{fmtDecimal(totalBasic, 2)}</span></div>
+            <div>GST: <span className="tabular-nums font-bold text-ink">₹{fmtDecimal(totalGst, 2)}</span></div>
+            <div className="text-sm bg-white px-3 py-1.5 rounded-lg border border-surface-border">
               Net Return Value: <span className="tabular-nums font-bold text-brand-700">₹{fmtDecimal(grandTotal, 2)}</span>
             </div>
           </div>
@@ -1000,14 +1000,14 @@ export function PurchaseReturnDetailPage() {
       </div>
 
       {/* Multiple Job + Multiple Style Allocation Section (Section 12 & 13) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-ink flex items-center gap-2">
               <Building2 className="h-4 w-4 text-brand-600" />
               <span>Job No &amp; Style Allocation (Section 13)</span>
             </h3>
-            <p className="text-xs text-slate-500">Allocate returned quantities against specific factory Jobs and Styles.</p>
+            <p className="text-xs text-ink-secondary">Allocate returned quantities against specific factory Jobs and Styles.</p>
           </div>
           {isDraft && lines.length > 0 && (
             <button
@@ -1022,11 +1022,11 @@ export function PurchaseReturnDetailPage() {
         </div>
 
         {allocations.length === 0 ? (
-          <p className="text-xs text-slate-400 italic py-2">No Job/Style allocations added.</p>
+          <p className="text-xs text-ink-muted italic py-2">No Job/Style allocations added.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+              <thead className="bg-surface-muted text-ink-secondary border-b border-surface-border">
                 <tr>
                   <th className="py-2 px-3">Target Line Item</th>
                   <th className="py-2 px-3">Job No</th>
@@ -1036,7 +1036,7 @@ export function PurchaseReturnDetailPage() {
                   {isDraft && <th className="py-2 px-3 text-center">Action</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {allocations.map((a, idx) => (
                   <tr key={idx}>
                     <td className="py-2 px-3">
@@ -1115,8 +1115,8 @@ export function PurchaseReturnDetailPage() {
       </div>
 
       {/* Return DC & Outward Gate Pass Section (Section 16) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 mb-4 flex items-center gap-2">
+      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-ink mb-4 flex items-center gap-2">
           <Truck className="h-4 w-4 text-brand-600" />
           <span>Return DC (Delivery Challan) &amp; Logistics (Section 16)</span>
           {head.return_dc_no && (
@@ -1128,7 +1128,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Return DC No</label>
             <input
-              className="input tabular-nums font-bold text-slate-700 bg-slate-50"
+              className="input tabular-nums font-bold text-ink bg-surface-muted"
               value={head.return_dc_no || 'Auto-generated upon DC approval'}
               readOnly
             />
@@ -1145,13 +1145,13 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">E-Way Bill No</label>
             <input
-              className={`input tabular-nums${ewb ? ' bg-slate-50' : ''}`}
+              className={`input tabular-nums${ewb ? ' bg-surface-muted' : ''}`}
               value={head.eway_bill_no || ''}
               onChange={(e) => setHead({ ...head, eway_bill_no: e.target.value })}
               readOnly={Boolean(ewb)}
               placeholder="e.g. 181234567890"
             />
-            {ewb && <p className="mt-1 text-caption text-slate-400">Set by the e-way bill — change it there</p>}
+            {ewb && <p className="mt-1 text-caption text-ink-muted">Set by the e-way bill — change it there</p>}
           </div>
           <div>
             <label className="label">Transporter Name</label>
@@ -1184,8 +1184,8 @@ export function PurchaseReturnDetailPage() {
       </div>
 
       {/* Commercial & Supplier Credit Note Section (Section 27) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 mb-4 flex items-center gap-2">
+      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-ink mb-4 flex items-center gap-2">
           <DollarSign className="h-4 w-4 text-brand-600" />
           <span>Commercial &amp; Credit Note Reference (Section 27)</span>
         </h3>
@@ -1214,7 +1214,7 @@ export function PurchaseReturnDetailPage() {
             <input
               type="number"
               step="0.01"
-              className="input tabular-nums font-bold text-slate-800"
+              className="input tabular-nums font-bold text-ink"
               value={head.credit_note_amount || grandTotal}
               onChange={(e) => setHead({ ...head, credit_note_amount: Number(e.target.value) })}
             />

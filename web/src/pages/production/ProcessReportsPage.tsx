@@ -78,7 +78,7 @@ const prettyHeader = (k: string) =>
    .replace(/\bPo\b/, 'PO').replace(/\bGm\b/, 'gm').replace(/\bTpi\b/, 'TPI');
 
 function renderCell(key: string, v: any) {
-  if (v == null || v === '') return <span className="text-slate-300">—</span>;
+  if (v == null || v === '') return <span className="text-ink-disabled">—</span>;
   if (/date$/.test(key)) return fmtDate(v);
   if (/status/i.test(key)) {
     const s = String(v);
@@ -162,14 +162,14 @@ export default function ProcessReportsPage() {
             if (!items.length) return null;
             return (
               <div key={g}>
-                <p className="mb-1 text-micro font-bold uppercase tracking-wider text-slate-400">{g}</p>
+                <p className="mb-1 text-micro font-bold uppercase tracking-wider text-ink-muted">{g}</p>
                 <div className="space-y-0.5">
                   {items.map((r) => (
                     <button key={r.key}
                       className={`block w-full rounded px-2 py-1.5 text-left text-small transition ${
                         active.key === r.key
                           ? 'bg-brand-50 font-semibold text-brand-700'
-                          : 'text-slate-600 hover:bg-slate-50'
+                          : 'text-ink-secondary hover:bg-surface-muted'
                       }`}
                       onClick={() => { setActive(r); setText(''); }}
                       id={`rep-${r.key}`}>
@@ -185,8 +185,8 @@ export default function ProcessReportsPage() {
         {/* Report body */}
         <div className="space-y-3">
           <div className="card p-3">
-            <h3 className="text-body font-bold text-slate-800">{active.label}</h3>
-            <p className="mt-0.5 text-caption text-slate-500">{active.hint}</p>
+            <h3 className="text-body font-bold text-ink">{active.label}</h3>
+            <p className="mt-0.5 text-caption text-ink-secondary">{active.hint}</p>
 
             {active.filter === 'dates' && (
               <div className="mt-2 flex flex-wrap items-end gap-2">
@@ -212,15 +212,15 @@ export default function ProcessReportsPage() {
                 message="This report returned no rows for the current filters." />
             ) : (
               <div className="card p-0">
-                <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-                  <span className="text-caption font-semibold text-slate-500">
+                <div className="flex items-center justify-between border-b border-surface-divider px-3 py-2">
+                  <span className="text-caption font-semibold text-ink-secondary">
                     {rows.length.toLocaleString()} row{rows.length === 1 ? '' : 's'}
                   </span>
-                  {isFetching && <span className="text-caption text-slate-400">Updating…</span>}
+                  {isFetching && <span className="text-caption text-ink-muted">Updating…</span>}
                 </div>
                 <div className="max-h-[65vh] overflow-auto">
                   <table className="w-full text-small">
-                    <thead className="sticky top-0 bg-slate-50">
+                    <thead className="sticky top-0 bg-surface-muted">
                       <tr>
                         {columns.map((c) => (
                           <th key={c}
@@ -232,7 +232,7 @@ export default function ProcessReportsPage() {
                     </thead>
                     <tbody>
                       {rows.map((r: any, i: number) => (
-                        <tr key={i} className="border-t border-slate-100 hover:bg-slate-50/60">
+                        <tr key={i} className="border-t border-surface-divider hover:bg-surface-muted/60">
                           {columns.map((c) => (
                             <td key={c}
                               className={`td whitespace-nowrap ${isNumericKey(c) ? 'text-right tabular-nums' : ''}`}>

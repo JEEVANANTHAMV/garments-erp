@@ -56,10 +56,10 @@ export default function GenealogyReportsPage() {
           : q.error ? <p className="p-6 text-sm text-red-700">{q.error instanceof ApiError ? q.error.message : 'Failed'}</p>
           : (
             <table className="w-full text-xs" id="gr-table">
-              <thead className="bg-slate-50 text-slate-500"><tr>{rep.cols.map(([k, l, kind]) => <th key={k} className={`px-2 py-2 ${kind && kind !== 'date' ? 'text-right' : 'text-left'}`}>{l}</th>)}</tr></thead>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>{rep.cols.map(([k, l, kind]) => <th key={k} className={`px-2 py-2 ${kind && kind !== 'date' ? 'text-right' : 'text-left'}`}>{l}</th>)}</tr></thead>
               <tbody>
-                {rows.map((r, i) => <tr key={i} className={`border-t border-slate-100 ${String(r.movement ?? '').startsWith('⚠') ? 'bg-amber-50' : ''}`}>{rep.cols.map(([k, , kind]) => <td key={k} className={`px-2 py-1 ${kind && kind !== 'date' ? 'text-right tabular-nums' : ''}`}>{fmt(r[k], kind)}</td>)}</tr>)}
-                {!rows.length && <tr><td colSpan={rep.cols.length} className="px-3 py-8 text-center text-slate-400">No rows</td></tr>}
+                {rows.map((r, i) => <tr key={i} className={`border-t border-surface-divider ${String(r.movement ?? '').startsWith('⚠') ? 'bg-amber-50' : ''}`}>{rep.cols.map(([k, , kind]) => <td key={k} className={`px-2 py-1 ${kind && kind !== 'date' ? 'text-right tabular-nums' : ''}`}>{fmt(r[k], kind)}</td>)}</tr>)}
+                {!rows.length && <tr><td colSpan={rep.cols.length} className="px-3 py-8 text-center text-ink-muted">No rows</td></tr>}
               </tbody>
             </table>
           )}

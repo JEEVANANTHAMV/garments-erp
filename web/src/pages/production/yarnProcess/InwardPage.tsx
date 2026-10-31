@@ -56,19 +56,19 @@ function InwardList({ onOpen, onNew }: { onOpen: (id: number) => void; onNew: ()
         </div>
         {list.isLoading ? <LoadingBlock /> : (
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>{['GRN no', 'Date', 'Status', 'DC', 'Process', 'Process unit', 'Jobs', 'Output cones', 'Good KG', 'Reject KG', 'Loss KG', 'Challan', 'Billed'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|cones/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>{['GRN no', 'Date', 'Status', 'DC', 'Process', 'Process unit', 'Jobs', 'Output cones', 'Good KG', 'Reject KG', 'Loss KG', 'Challan', 'Billed'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|cones/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
+                <tr key={r.id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => onOpen(r.id)}>
                   <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-micro text-purple-800">Reprocess</span> : null}</td>
                   <td className="px-3 py-2">{fmtDate(r.inward_date)}</td><td className="px-3 py-2"><YpStatus value={r.status} /></td><td className="px-3 py-2 tabular-nums">{r.ypo_no}</td>
                   <td className="px-3 py-2">{r.process_name || r.process_code}</td><td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.jobs || '—'}</td>
                   <td className="px-3 py-2 text-right">{r.cone_count}</td><td className="px-3 py-2 text-right text-emerald-700">{kg(r.good_kg)}</td><td className="px-3 py-2 text-right text-red-700">{kg(r.reject_kg)}</td>
                   <td className="px-3 py-2 text-right text-amber-700">{kg(r.loss_kg)}</td><td className="px-3 py-2">{r.challan_no || '—'}</td>
-                  <td className="px-3 py-2">{r.bill_id ? <YpStatus value="BILLED" /> : r.is_reprocess ? '—' : <span className="text-slate-400">No</span>}</td>
+                  <td className="px-3 py-2">{r.bill_id ? <YpStatus value="BILLED" /> : r.is_reprocess ? '—' : <span className="text-ink-muted">No</span>}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">No GRNs yet</td></tr>}
+              {!rows.length && <tr><td colSpan={13} className="px-3 py-10 text-center text-ink-muted">No GRNs yet</td></tr>}
             </tbody>
           </table>
         )}
@@ -188,20 +188,20 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
         <Select label="Reject store" value={head.reject_warehouse_id} onChange={(e) => setHead({ ...head, reject_warehouse_id: e.target.value })} options={toOptions(warehouses.data)} />
         <Textarea label="Remarks" className="col-span-2 md:col-span-4" rows={1} value={head.remarks} onChange={(e) => setHead({ ...head, remarks: e.target.value })} />
       </div>
-      {!ypoId && <div className="card p-10 text-center text-sm text-slate-400">Choose the outward DC to load its lots / cones</div>}
+      {!ypoId && <div className="card p-10 text-center text-sm text-ink-muted">Choose the outward DC to load its lots / cones</div>}
       {ypoId && dc.isLoading && <LoadingBlock />}
       {d && (
         <>
           <div className="card overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-2.5">
-              <h3 className="text-body font-semibold text-slate-800">{many ? `Twisting — each output cone from ${d.default_ply ?? 'n'} input cones (ply)` : mode === 'ONE_TO_MANY' ? 'Winding — one input lot / cone → many output cones (use ⑂ to add cones)' : 'Input cone → output cone (split with ⑂)'}</h3>
+              <h3 className="text-body font-semibold text-ink">{many ? `Twisting — each output cone from ${d.default_ply ?? 'n'} input cones (ply)` : mode === 'ONE_TO_MANY' ? 'Winding — one input lot / cone → many output cones (use ⑂ to add cones)' : 'Input cone → output cone (split with ⑂)'}</h3>
               <div className="flex gap-2">
                 {many ? <Button size="sm" onClick={addTwist}><Plus size={13} className="mr-1" /> Add output cone</Button> : <Button size="sm" variant="secondary" onClick={fillGood}>Fill open KG as good</Button>}
               </div>
             </div>
             <div className="max-h-[55vh] overflow-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 z-10 bg-slate-50 text-slate-500"><tr>
+                <thead className="sticky top-0 z-10 bg-surface-muted text-ink-secondary"><tr>
                   {[many ? 'Input cones (ply)' : 'Input lot / cone', many ? 'Input KG' : 'Open KG', 'Output cone', 'Output lot (blank = auto)', ...(dyeing ? ['Yarn colour', 'Dye colour'] : ['Shade']), many ? 'Output yarn' : null, 'Cones', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason', ''].filter((x) => x !== null)
                     .map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Cones/.test(String(h)) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                 </tr></thead>
@@ -213,10 +213,10 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                         const first = many || idx === 0 || g.rows[idx - 1].inputs[0]?.ypo_line_id !== o.inputs[0]?.ypo_line_id;
                         const overL = !many && l && usedOf(String(l.id)) > n(l.balance_kg) + 0.0005;
                         return (
-                          <tr key={o.key} className={`border-t border-slate-100 align-top ${overL ? 'bg-red-50' : ''}`}>
+                          <tr key={o.key} className={`border-t border-surface-divider align-top ${overL ? 'bg-red-50' : ''}`}>
                             <td className="px-2 py-1">{many ? (
                               <div className="space-y-1">
-                                <div className="flex items-center gap-1"><span className="text-slate-500">Ply</span>
+                                <div className="flex items-center gap-1"><span className="text-ink-secondary">Ply</span>
                                   <input type="number" min={1} className={`${inp} w-12`} value={o.ply} onChange={(e) => { const p = Math.max(1, Number(e.target.value) || 1); set(o.key, { ply: p, inputs: Array.from({ length: p }, (_, k) => o.inputs[k] ?? { ypo_line_id: '', input_kg: '', cone_no: '' }) }); }} /></div>
                                 {o.inputs.map((i, k) => (
                                   <div key={k} className="flex gap-1">
@@ -229,11 +229,11 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                                   </div>
                                 ))}
                               </div>
-                            ) : (first ? <span className="tabular-nums">{l?.lot_no}{l?.cone_no ? ` / ${l.cone_no}` : ''}<span className="ml-1 font-sans text-slate-400">{l?.yarn_name}</span></span> : <span className="text-slate-400">↳ more cones</span>)}</td>
+                            ) : (first ? <span className="tabular-nums">{l?.lot_no}{l?.cone_no ? ` / ${l.cone_no}` : ''}<span className="ml-1 font-sans text-ink-muted">{l?.yarn_name}</span></span> : <span className="text-ink-muted">↳ more cones</span>)}</td>
                             <td className="px-2 py-1 text-right tabular-nums">{many ? kg(outIn(o)) : first ? kg(l?.balance_kg) : ''}</td>
                             <td className="px-1 py-1"><input className={`${inp} w-24`} value={o.output_cone_no} onChange={(e) => set(o.key, { output_cone_no: e.target.value })} /></td>
                             <td className="px-1 py-1"><input className={`${inp} w-28`} value={o.output_lot_no} onChange={(e) => set(o.key, { output_lot_no: e.target.value })} /></td>
-                            {dyeing && <td className="px-2 py-1 text-slate-600">{many ? '' : (l?.shade || '—')}</td>}
+                            {dyeing && <td className="px-2 py-1 text-ink-secondary">{many ? '' : (l?.shade || '—')}</td>}
                             <td className="px-1 py-1"><input className={`${inp} ${dyeing ? 'w-28' : 'w-20'}`} placeholder={dyeing ? 'Dye colour' : ''} value={o.shade} onChange={(e) => set(o.key, { shade: e.target.value })} /></td>
                             {many && <td className="px-1 py-1"><select className={`${inp} w-36`} value={o.yarn_id} onChange={(e) => set(o.key, { yarn_id: e.target.value })}><option value="">Same as input</option>{(yarns.data ?? []).map((y: any) => <option key={y.id} value={y.id}>{y.label}</option>)}</select></td>}
                             <td className="px-1 py-1"><input type="number" className={`${inp} w-14 text-right`} value={o.no_of_cones} onChange={(e) => set(o.key, { no_of_cones: e.target.value === '' ? '' : Number(e.target.value) })} /></td>
@@ -244,16 +244,16 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                             <td className="px-1 py-1"><select className={`${inp} w-36 ${n(o.reject_kg) > 0 && !o.reject_reason ? 'border-red-400' : ''}`} value={o.reject_reason} onChange={(e) => set(o.key, { reject_reason: e.target.value })}>
                               <option value="">{n(o.reject_kg) > 0 ? '— reason * —' : '—'}</option>{rejReasons.map((r) => <option key={r.id} value={r.reason}>{r.reason}</option>)}</select></td>
                             <td className="whitespace-nowrap px-1 py-1">
-                              {!many && <button title="Add another output cone from this input" className="p-1 text-slate-400 hover:text-sky-700" onClick={() => split(o)}><Split size={13} /></button>}
-                              {(many || !first) && <button className="p-1 text-slate-400 hover:text-red-600" onClick={() => setOuts((os) => os.filter((x) => x.key !== o.key))}><Trash2 size={13} /></button>}
+                              {!many && <button title="Add another output cone from this input" className="p-1 text-ink-muted hover:text-sky-700" onClick={() => split(o)}><Split size={13} /></button>}
+                              {(many || !first) && <button className="p-1 text-ink-muted hover:text-red-600" onClick={() => setOuts((os) => os.filter((x) => x.key !== o.key))}><Trash2 size={13} /></button>}
                             </td>
                           </tr>
                         );
                       })}</Fragment>
                   ))}
-                  {!outs.length && <tr><td colSpan={12} className="px-3 py-8 text-center text-slate-400">{many ? 'Click “Add output cone” and pick its input cones' : 'Every lot of this DC is already received'}</td></tr>}
+                  {!outs.length && <tr><td colSpan={12} className="px-3 py-8 text-center text-ink-muted">{many ? 'Click “Add output cone” and pick its input cones' : 'Every lot of this DC is already received'}</td></tr>}
                 </tbody>
-                <tfoot className="sticky bottom-0 bg-slate-100 font-bold"><tr><td colSpan={(many ? 7 : 6) + (dyeing ? 1 : 0)} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={2} className="px-2 py-2 text-left text-caption font-normal">{tot.good + tot.rej + tot.loss > 0 ? `loss ${lossPct.toFixed(2)}%${tol ? ` (tolerance ${tol}%)` : ''}` : ''}</td></tr></tfoot>
+                <tfoot className="sticky bottom-0 bg-surface-header font-bold"><tr><td colSpan={(many ? 7 : 6) + (dyeing ? 1 : 0)} className="px-2 py-2 text-right">This GRN</td><td className="px-2 py-2 text-right text-emerald-800">{kg(tot.good)}</td><td className="px-2 py-2 text-right text-red-700">{kg(tot.rej)}</td><td className="px-2 py-2 text-right text-amber-700">{kg(tot.loss)}</td><td colSpan={2} className="px-2 py-2 text-left text-caption font-normal">{tot.good + tot.rej + tot.loss > 0 ? `loss ${lossPct.toFixed(2)}%${tol ? ` (tolerance ${tol}%)` : ''}` : ''}</td></tr></tfoot>
               </table>
             </div>
           </div>
@@ -263,7 +263,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
               <Input label="Reason to accept the loss *" className="w-96" value={head.loss_override_reason} onChange={(e) => setHead({ ...head, loss_override_reason: e.target.value })} />
             </div>
           )}
-          <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {d.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={d.reconciliation.total} /></div>
+          <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-ink">DC {d.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={d.reconciliation.total} /></div>
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="secondary" onClick={onBack}>Cancel</Button>
             <Button variant="secondary" loading={busy} onClick={() => save('DRAFT')}><Save size={14} className="mr-1" /> Save Draft</Button>
@@ -296,21 +296,21 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
         actions={<><YpStatus value={g.bill_id ? 'BILLED' : 'POSTED'} /><Button variant="secondary" onClick={print}><Printer size={14} className="mr-1" /> Print GRN</Button><Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button></>} />
       <div className="card mb-3 grid grid-cols-2 gap-3 p-4 text-xs md:grid-cols-6">
         {[['GRN date', fmtDate(g.inward_date)], ['Challan', g.challan_no || '—'], ['Vehicle', g.vehicle_no || '—'], ['Received by', g.received_by || '—'], ['Store', g.warehouse_name], ['Reject store', g.reject_store || '—']].map(([k, v]) => (
-          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold">{v}</div></div>))}
+          <div key={k}><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{k}</div><div className="font-semibold">{v}</div></div>))}
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Input cone(s) (KG)', 'Output cone', 'Output lot', 'Yarn', ...(isDyeing(g.process_code) ? ['Yarn colour', 'Dye colour'] : ['Shade']), 'Ply', 'Cones', 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Cones|Ply/.test(h) && !/cone\(s\)/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['Job', 'Input cone(s) (KG)', 'Output cone', 'Output lot', 'Yarn', ...(isDyeing(g.process_code) ? ['Yarn colour', 'Dye colour'] : ['Shade']), 'Ply', 'Cones', 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Cones|Ply/.test(h) && !/cone\(s\)/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{g.outputs.map((o: any) => (
-            <tr key={o.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{o.inputs}</td><td className="px-2 py-1 tabular-nums">{o.output_cone_no || '—'}</td>
+            <tr key={o.id} className="border-t border-surface-divider"><td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{o.inputs}</td><td className="px-2 py-1 tabular-nums">{o.output_cone_no || '—'}</td>
               <td className="px-2 py-1 tabular-nums">{o.output_lot_no}</td><td className="px-2 py-1">{o.yarn_name}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td><td className="px-2 py-1 text-right">{o.ply || '—'}</td><td className="px-2 py-1 text-right">{o.no_of_cones || '—'}</td>
               <td className="px-2 py-1 text-right">{kg(o.input_kg)}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(o.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(o.reject_kg)}</td>
               <td className="px-2 py-1 text-right text-amber-700">{kg(o.loss_kg)}</td><td className="px-2 py-1">{o.reject_reason || '—'}</td></tr>
           ))}</tbody>
-          <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={isDyeing(g.process_code) ? 9 : 8} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.input_kg)}</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td /></tr></tfoot>
+          <tfoot className="bg-surface-header font-bold"><tr><td colSpan={isDyeing(g.process_code) ? 9 : 8} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(g.input_kg)}</td><td className="px-2 py-2 text-right">{kg(g.good_kg)}</td><td className="px-2 py-2 text-right">{kg(g.reject_kg)}</td><td className="px-2 py-2 text-right">{kg(g.loss_kg)}</td><td /></tr></tfoot>
         </table>
       </div>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.ypo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-ink">DC {g.ypo_no} reconciliation</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }
@@ -349,32 +349,32 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
           <Button variant="secondary" onClick={onBack}><ArrowLeft size={14} className="mr-1" /> Back</Button>
         </>} />
       {g.status === 'QC_PENDING' && <div className="mb-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-xs text-orange-900">Waiting for QC — no stock has moved. Record the QC result per output cone, then post.</div>}
-      {g.status === 'DRAFT' && <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">Draft — no stock has moved.{g.requires_qc ? ' This process requires QC: send it for QC before posting.' : ''}</div>}
+      {g.status === 'DRAFT' && <div className="mb-3 rounded-lg border border-surface-border bg-surface-muted px-4 py-2 text-xs text-ink">Draft — no stock has moved.{g.requires_qc ? ' This process requires QC: send it for QC before posting.' : ''}</div>}
       <div className="card overflow-x-auto">
-        <div className="flex items-center gap-2 px-4 pt-3 text-body font-semibold text-slate-800"><ClipboardCheck size={15} /> Output cones{params.length ? ' & QC' : ''}</div>
+        <div className="flex items-center gap-2 px-4 pt-3 text-body font-semibold text-ink"><ClipboardCheck size={15} /> Output cones{params.length ? ' & QC' : ''}</div>
         <table className="mt-2 w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>
             {['Job', 'Input cone(s)', 'Output cone', 'Lot', ...(isDyeing(g.process_code) ? ['Yarn colour', 'Dye colour'] : ['Shade']), 'Good KG', 'Reject KG', 'Loss KG'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
-            {params.map((p) => <th key={p.id} className="px-2 py-2 text-left">{p.param_name}{p.uom ? ` (${p.uom})` : ''}{p.is_mandatory ? ' *' : ''}<div className="font-normal normal-case text-slate-400">{p.min_value ?? '…'} – {p.max_value ?? '…'}</div></th>)}
+            {params.map((p) => <th key={p.id} className="px-2 py-2 text-left">{p.param_name}{p.uom ? ` (${p.uom})` : ''}{p.is_mandatory ? ' *' : ''}<div className="font-normal normal-case text-ink-muted">{p.min_value ?? '…'} – {p.max_value ?? '…'}</div></th>)}
             <th className="px-2 py-2 text-left">QC status</th>
           </tr></thead>
           <tbody>
             {outs.map((o) => {
               const k = o.line_index as number; const good = n(o.good_kg) > 0; const f = fails(k);
               return (
-                <tr key={k} className={`border-t border-slate-100 ${f ? 'bg-red-50/60' : ''}`}>
+                <tr key={k} className={`border-t border-surface-divider ${f ? 'bg-red-50/60' : ''}`}>
                   <td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{o.input_text}</td><td className="px-2 py-1 tabular-nums">{o.output_cone_no || '—'}</td>
-                  <td className="px-2 py-1 tabular-nums">{o.output_lot_no || <span className="text-slate-400">auto</span>}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td>
+                  <td className="px-2 py-1 tabular-nums">{o.output_lot_no || <span className="text-ink-muted">auto</span>}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td>
                   <td className="px-2 py-1 text-right text-emerald-700">{kg(o.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(o.reject_kg)}</td><td className="px-2 py-1 text-right text-amber-700">{kg(o.loss_kg)}</td>
                   {params.map((p) => {
                     const raw = vals[k]?.[String(p.id)]; const rs = result(p, raw);
                     return <td key={p.id} className="px-1 py-1">{good ? (qcOpen
                       ? <input type="number" step="0.001" className={`${inp} w-20 text-right ${rs === 'FAIL' ? 'border-red-400 text-red-700' : rs === 'PASS' ? 'text-emerald-700' : ''}`} value={raw ?? ''} onChange={(e) => setVals((v) => ({ ...v, [k]: { ...(v[k] ?? {}), [String(p.id)]: e.target.value } }))} />
-                      : <span className={rs === 'FAIL' ? 'font-semibold text-red-700' : ''}>{raw || '—'}{rs !== 'NA' ? ` · ${rs}` : ''}</span>) : <span className="text-slate-300">—</span>}</td>;
+                      : <span className={rs === 'FAIL' ? 'font-semibold text-red-700' : ''}>{raw || '—'}{rs !== 'NA' ? ` · ${rs}` : ''}</span>) : <span className="text-ink-disabled">—</span>}</td>;
                   })}
                   <td className="px-1 py-1">{good ? (qcOpen
                     ? <select className={`${inp} w-28`} value={stat[k] ?? ''} onChange={(e) => setStat((x) => ({ ...x, [k]: e.target.value }))}><option value="">{f ? 'Auto: Rejected' : 'Auto: Accepted'}</option><option value="ACCEPTED">Accepted</option><option value="REJECTED">Rejected</option></select>
-                    : (o.qc ? <YpStatus value={o.qc.status} /> : <span className="text-slate-400">—</span>)) : <span className="text-slate-300">—</span>}</td>
+                    : (o.qc ? <YpStatus value={o.qc.status} /> : <span className="text-ink-muted">—</span>)) : <span className="text-ink-disabled">—</span>}</td>
                 </tr>
               );
             })}
@@ -382,7 +382,7 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
         </table>
         {qcOpen && (
           <div className="flex flex-wrap items-end justify-end gap-2 border-t border-surface-border p-3">
-            {!params.length && <span className="mr-auto text-small text-slate-500">No QC parameters for this process — set them on Yarn Process Types; you can still accept / reject each cone.</span>}
+            {!params.length && <span className="mr-auto text-small text-ink-secondary">No QC parameters for this process — set them on Yarn Process Types; you can still accept / reject each cone.</span>}
             <Input label="QC remarks" className="w-72" value={qcRemarks} onChange={(e) => setQcRemarks(e.target.value)} />
             <Button loading={busy === 'qc'} onClick={() => act('qc', () => http.post(`/yarn-process/inward/${g.id}/qc`, { remarks: qcRemarks || null,
               results: goodIdx.map((k) => ({ line_index: k, qc_status: stat[k] || undefined, values: Object.fromEntries(params.map((p) => [String(p.id), vals[k]?.[String(p.id)] === undefined || vals[k]?.[String(p.id)] === '' ? null : Number(vals[k][String(p.id)])])) })) }))}>
@@ -390,8 +390,8 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
           </div>
         )}
       </div>
-      <p className="mt-2 text-small text-slate-500">On posting, QC-rejected cones go to the reject store (eligible for reprocess) with the failed parameters as the reason.</p>
-      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-slate-800">DC {g.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
+      <p className="mt-2 text-small text-ink-secondary">On posting, QC-rejected cones go to the reject store (eligible for reprocess) with the failed parameters as the reason.</p>
+      <div className="card mt-3 p-4"><h3 className="mb-2 text-body font-semibold text-ink">DC {g.ypo_no} reconciliation (posted GRNs)</h3><ReconCards t={g.reconciliation.total} /></div>
     </div>
   );
 }

@@ -657,7 +657,7 @@ export default function FabricPurchaseOrderDetailPage() {
   return (
     <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -668,7 +668,7 @@ export default function FabricPurchaseOrderDetailPage() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl font-bold text-ink tracking-tight">
                 {isNew ? 'New Fabric Purchase Order' : `Fabric PO: ${head.po_no}`}
               </h1>
               <StatusBadge value={head.approval_state} />
@@ -678,7 +678,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 </span>
               )}
             </div>
-             <p className="text-xs text-slate-500 mt-0.5">
+             <p className="text-xs text-ink-secondary mt-0.5">
               Grey / Dyed fabric purchase — Knitted / Woven specifications, roll targets, and rates
              </p>
           </div>
@@ -728,20 +728,20 @@ export default function FabricPurchaseOrderDetailPage() {
       </div>
 
       {/* Header Fields Card — same layout as the Yarn PO */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm space-y-4">
-        <div className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center justify-between pb-2 border-b border-slate-100">
+      <div className="bg-white p-4 rounded-xl border border-surface-border/80 shadow-sm space-y-4">
+        <div className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center justify-between pb-2 border-b border-surface-divider">
           <div className="flex items-center gap-1.5">
             <Layers size={14} className="text-sky-600" />
             <span>Purchase Order Details</span>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-slate-700 bg-sky-50 px-2.5 py-1 rounded-md border border-sky-200">
+          <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-ink bg-sky-50 px-2.5 py-1 rounded-md border border-sky-200">
             <input
               type="checkbox"
               checked={head.is_interstate}
               onChange={(e) => handleToggleInterstate(e.target.checked)}
               className="h-3.5 w-3.5 rounded text-sky-600 focus:ring-sky-500"
             />
-            <span className="font-semibold text-slate-800">Inter-state PO (IGST Calculation)</span>
+            <span className="font-semibold text-ink">Inter-state PO (IGST Calculation)</span>
           </label>
         </div>
 
@@ -877,7 +877,7 @@ export default function FabricPurchaseOrderDetailPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-caption text-slate-600 mt-0.5">
+                <p className="text-caption text-ink-secondary mt-0.5">
                   {bomLoading
                     ? 'Loading the BOM of this job…'
                     : bomData
@@ -888,12 +888,12 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
             <div className="flex items-center gap-3">
               {bomFabrics.length > 0 && (
-                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-ink cursor-pointer">
                   <input
                     type="checkbox"
                     checked={filterBomOnly}
                     onChange={(e) => setFilterBomOnly(e.target.checked)}
-                    className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                    className="rounded border-surface-input text-sky-600 focus:ring-sky-500"
                   />
                   <span>Show BOM Items Only</span>
                 </label>
@@ -914,10 +914,10 @@ export default function FabricPurchaseOrderDetailPage() {
       {/* Billing and Shipping Addresses */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Billing Address Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+              <div className="flex items-center gap-2 text-ink font-semibold text-xs">
                 <span className="p-1 rounded bg-blue-100 text-blue-700">
                   <Building2 size={13} />
                 </span>
@@ -932,7 +932,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 <RotateCcw size={11} /> Reset Default
               </button>
             </div>
-            <p className="text-caption text-slate-500 mb-2.5">
+            <p className="text-caption text-ink-secondary mb-2.5">
               Buyer / Company legal office address billed by the fabric mill
             </p>
           </div>
@@ -946,10 +946,10 @@ export default function FabricPurchaseOrderDetailPage() {
         </div>
 
         {/* Shipping Address Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+              <div className="flex items-center gap-2 text-ink font-semibold text-xs">
                 <span className="p-1 rounded bg-emerald-100 text-emerald-700">
                   <Truck size={13} />
                 </span>
@@ -958,7 +958,7 @@ export default function FabricPurchaseOrderDetailPage() {
               <button
                 type="button"
                 onClick={() => setHead((h) => ({ ...h, shipping_to_party_id: '', shipping_address: head.billing_address }))}
-                className="text-caption text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1"
+                className="text-caption text-ink-secondary hover:text-ink font-medium flex items-center gap-1"
                 title="Copy from Billing Address"
               >
                 Same as Billing
@@ -985,14 +985,14 @@ export default function FabricPurchaseOrderDetailPage() {
       </div>
 
       {/* Fabric Lines Table */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+      <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
           <div>
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <Layers size={14} className="text-emerald-600" />
               <span>Fabric Line Items ({lines.length})</span>
             </h3>
-            <p className="text-caption text-slate-400">
+            <p className="text-caption text-ink-muted">
               Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
             </p>
           </div>
@@ -1007,7 +1007,7 @@ export default function FabricPurchaseOrderDetailPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-100/70 border-b border-slate-200 text-caption font-semibold text-slate-600 uppercase tracking-wider">
+            <thead className="bg-surface-header/70 border-b border-surface-border text-caption font-semibold text-ink-secondary uppercase tracking-wider">
               <tr>
                 <th className="py-2.5 px-2 w-8 text-center">#</th>
                 <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
@@ -1038,14 +1038,14 @@ export default function FabricPurchaseOrderDetailPage() {
                 <th className="py-2.5 px-2 w-8 text-center"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-surface-divider">
               {lines.map((l, idx) => {
                 const isDyed = l.fabric_category === 'Dyed Fabric';
                 const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['FABRIC']).filter((it) => it.fabric_id);
                 return (
-                <tr key={l._key} className="hover:bg-slate-50/50">
+                <tr key={l._key} className="hover:bg-surface-muted/50">
                   {/* # S NO */}
-                  <td className="py-2 px-2 text-center text-slate-400 tabular-nums text-caption">{idx + 1}</td>
+                  <td className="py-2 px-2 text-center text-ink-muted tabular-nums text-caption">{idx + 1}</td>
                   {/* I/O Num (Sales Order / Job) */}
                   <td className="py-2 px-2">
                     <select
@@ -1156,7 +1156,7 @@ export default function FabricPurchaseOrderDetailPage() {
                         className="input py-1 text-xs w-full tabular-nums text-purple-700 bg-purple-50/30"
                       />
                     ) : (
-                      <span className="text-slate-300 text-caption block text-center">—</span>
+                      <span className="text-ink-disabled text-caption block text-center">—</span>
                     )}
                   </td>
                   {/* Composition */}
@@ -1252,13 +1252,13 @@ export default function FabricPurchaseOrderDetailPage() {
                           className="input py-1 text-xs w-full text-center"
                         />
                       </td>
-                      <td className="py-2 px-2 text-right tabular-nums font-medium text-slate-700">
+                      <td className="py-2 px-2 text-right tabular-nums font-medium text-ink">
                         ₹{fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}
                       </td>
                     </>
                   )}
                   {/* Amount */}
-                  <td className="py-2 px-2 text-right tabular-nums font-bold text-slate-900">
+                  <td className="py-2 px-2 text-right tabular-nums font-bold text-ink">
                     ₹{fmtDecimal(l.net_amount)}
                   </td>
                   {/* Delete */}
@@ -1267,7 +1267,7 @@ export default function FabricPurchaseOrderDetailPage() {
                       type="button"
                       disabled={lines.length === 1}
                       onClick={() => setLines(lines.filter((_, i) => i !== idx))}
-                      className="text-slate-400 hover:text-rose-600 disabled:opacity-30"
+                      className="text-ink-muted hover:text-rose-600 disabled:opacity-30"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -1276,31 +1276,31 @@ export default function FabricPurchaseOrderDetailPage() {
                 );
               })}
             </tbody>
-            <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
+            <tfoot className="bg-surface-muted/80 border-t border-surface-border font-bold text-ink">
               <tr>
-                <td colSpan={12} className="py-3 px-3 text-right text-slate-600">
+                <td colSpan={12} className="py-3 px-3 text-right text-ink-secondary">
                   <span className="mr-4">Grey: <span className="tabular-nums text-amber-700">{fmtDecimal(totals.greyQty)}</span></span>
                   <span className="mr-4">Dyed: <span className="tabular-nums text-purple-700">{fmtDecimal(totals.dyedQty)}</span></span>
                   Total Qty:
                 </td>
                 <td className="py-3 px-2 text-right tabular-nums">{fmtDecimal(totals.totalQty, 2)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-xs text-slate-500">Taxable:</td>
+                <td className="py-3 px-2 text-right tabular-nums text-xs text-ink-secondary">Taxable:</td>
                 {head.is_interstate ? (
                   <>
-                    <td className="py-3 px-2 text-center text-xs text-slate-500">IGST:</td>
+                    <td className="py-3 px-2 text-center text-xs text-ink-secondary">IGST:</td>
                     <td className="py-3 px-2 text-right tabular-nums text-purple-700">
                       ₹{fmtDecimal(totals.totalIgst, 2)}
                     </td>
                   </>
                 ) : (
                   <>
-                    <td className="py-3 px-2 text-center text-xs text-slate-500">CGST+SGST:</td>
+                    <td className="py-3 px-2 text-center text-xs text-ink-secondary">CGST+SGST:</td>
                     <td className="py-3 px-2 text-right tabular-nums text-purple-700">
                       ₹{fmtDecimal(totals.totalCgst + totals.totalSgst, 2)}
                     </td>
                   </>
                 )}
-                <td className="py-3 px-2 text-right tabular-nums text-base font-bold text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-base font-bold text-ink">
                   ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td></td>
@@ -1310,10 +1310,10 @@ export default function FabricPurchaseOrderDetailPage() {
         </div>
 
         {/* Footer Financial Adjustments & TCS */}
-        <div className="mt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl">
+        <div className="mt-4 border-t border-surface-border bg-surface-muted/70 p-4 rounded-xl">
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
             <div>
-              <label className="label text-caption font-bold text-slate-700">Freight / Transport Charges (₹)</label>
+              <label className="label text-caption font-bold text-ink">Freight / Transport Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1325,7 +1325,7 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-caption font-bold text-slate-700">Other / Unloading Charges (₹)</label>
+              <label className="label text-caption font-bold text-ink">Other / Unloading Charges (₹)</label>
               <input
                 type="number"
                 step="10"
@@ -1337,7 +1337,7 @@ export default function FabricPurchaseOrderDetailPage() {
             </div>
 
             <div>
-              <label className="label text-caption font-bold text-slate-700">Round Off (₹)</label>
+              <label className="label text-caption font-bold text-ink">Round Off (₹)</label>
               <input
                 type="number"
                 step="0.01"
@@ -1383,13 +1383,13 @@ export default function FabricPurchaseOrderDetailPage() {
                     className="input py-0.5 px-1.5 text-micro text-right tabular-nums w-16"
                     placeholder="0.10"
                   />
-                  <span className="text-slate-500">%</span>
+                  <span className="text-ink-secondary">%</span>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-              <span className="text-caption text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
+            <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-surface-border shadow-sm">
+              <span className="text-caption text-ink-secondary font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
               <span className="text-xl font-bold text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
               {isForeignCurrency && (
                 <span className="text-xs font-bold text-amber-900 mt-0.5">
@@ -1411,9 +1411,9 @@ export default function FabricPurchaseOrderDetailPage() {
         footer={<button type="button" className="btn-secondary" onClick={() => setShowQuoteModal(false)}>Cancel</button>}
       >
         <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 overflow-hidden">
+          <div className="rounded-lg border border-surface-border overflow-hidden">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+              <thead className="bg-surface-muted border-b border-surface-border text-ink-secondary">
                 <tr>
                   <th className="py-2.5 px-3">Quotation No</th>
                   <th className="py-2.5 px-3">Date</th>
@@ -1422,16 +1422,16 @@ export default function FabricPurchaseOrderDetailPage() {
                   <th className="py-2.5 px-3 text-center">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-surface-divider">
                 {fabricQuotes.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                    <td colSpan={5} className="py-6 text-center text-ink-muted">
                       No approved fabric quotations available.
                     </td>
                   </tr>
                 ) : (
                   fabricQuotes.map((q: any) => (
-                    <tr key={q.id} className="hover:bg-slate-50">
+                    <tr key={q.id} className="hover:bg-surface-muted">
                       <td className="py-2.5 px-3 tabular-nums font-bold text-brand-700">{q.quotation_no}</td>
                       <td className="py-2.5 px-3">{q.quotation_date?.slice(0, 10)}</td>
                       <td className="py-2.5 px-3">{q.buyer_name || q.supplier_name || '—'}</td>

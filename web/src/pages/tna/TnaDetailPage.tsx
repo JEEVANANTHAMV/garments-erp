@@ -203,7 +203,7 @@ export default function TnaDetailPage() {
   return (
     <div className="space-y-4 pb-14">
       {/* 1. Header Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -214,7 +214,7 @@ export default function TnaDetailPage() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 tabular-nums">
+              <h1 className="text-xl font-bold text-ink tabular-nums">
                 {header.tna_no || 'Time & Action Plan'}
               </h1>
               <span className="rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-bold text-indigo-700 tabular-nums">
@@ -227,7 +227,7 @@ export default function TnaDetailPage() {
                 Risk: {header.shipment_risk || 'ON_TRACK'}
               </span>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-secondary">
               Contract schedule & milestone tracking against Sales Order {header.so_no}
             </p>
           </div>
@@ -300,63 +300,63 @@ export default function TnaDetailPage() {
       </div>
 
       {/* 2. Order Context & Header Grid Card */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+      <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs">
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-3 text-xs">
           <div>
-            <span className="text-slate-400 block text-caption">Buyer</span>
-            <span className="font-semibold text-slate-900">{header.buyer_name || '—'}</span>
+            <span className="text-ink-muted block text-caption">Buyer</span>
+            <span className="font-semibold text-ink">{header.buyer_name || '—'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Buyer Style No</span>
-            <span className="font-semibold text-slate-900 tabular-nums">{header.buyer_style_ref || 'BST-2026'}</span>
+            <span className="text-ink-muted block text-caption">Buyer Style No</span>
+            <span className="font-semibold text-ink tabular-nums">{header.buyer_style_ref || 'BST-2026'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Internal Style</span>
-            <span className="font-semibold text-slate-900 tabular-nums">
+            <span className="text-ink-muted block text-caption">Internal Style</span>
+            <span className="font-semibold text-ink tabular-nums">
               {header.style_code} {header.style_name ? `(${header.style_name})` : ''}
             </span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Sales Order / PO</span>
-            <span className="font-semibold text-slate-900">{header.so_no} {header.buyer_po_no ? `• PO: ${header.buyer_po_no}` : ''}</span>
+            <span className="text-ink-muted block text-caption">Sales Order / PO</span>
+            <span className="font-semibold text-ink">{header.so_no} {header.buyer_po_no ? `• PO: ${header.buyer_po_no}` : ''}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Internal Order (IO)</span>
+            <span className="text-ink-muted block text-caption">Internal Order (IO)</span>
             <span className="font-semibold text-brand-700 tabular-nums">{header.io_no || 'IO-2026-001'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Order Qty</span>
-            <span className="font-bold text-slate-900">{fmtNumber(header.order_qty)} pcs</span>
+            <span className="text-ink-muted block text-caption">Order Qty</span>
+            <span className="font-bold text-ink">{fmtNumber(header.order_qty)} pcs</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Shipment Target Date</span>
+            <span className="text-ink-muted block text-caption">Shipment Target Date</span>
             <span className="font-bold text-rose-600">{fmtDate(header.shipment_date)}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Merchandiser</span>
-            <span className="font-medium text-slate-800">{header.merchandiser_name || 'Merchandiser Team'}</span>
+            <span className="text-ink-muted block text-caption">Merchandiser</span>
+            <span className="font-medium text-ink">{header.merchandiser_name || 'Merchandiser Team'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Applied Template</span>
+            <span className="text-ink-muted block text-caption">Applied Template</span>
             <span className="font-medium text-indigo-700">{header.template_name || 'Basic T-Shirt'}</span>
           </div>
 
           <div>
-            <span className="text-slate-400 block text-caption">Created Date</span>
-            <span className="text-slate-700">{fmtDate(header.tna_date)}</span>
+            <span className="text-ink-muted block text-caption">Created Date</span>
+            <span className="text-ink">{fmtDate(header.tna_date)}</span>
           </div>
 
           {header.approved_by_name && (
             <div>
-              <span className="text-slate-400 block text-caption">Approved By</span>
+              <span className="text-ink-muted block text-caption">Approved By</span>
               <span className="text-emerald-700 font-medium">{header.approved_by_name} ({fmtDate(header.approved_at)})</span>
             </div>
           )}
@@ -364,29 +364,29 @@ export default function TnaDetailPage() {
       </div>
 
       {/* 3. Milestone Summary Bar */}
-      <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-xl border border-surface-border bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-6 text-xs">
           <div>
-            <span className="text-slate-400 block text-caption">Total Activities</span>
-            <span className="font-bold text-slate-900 text-sm">{summary.total}</span>
+            <span className="text-ink-muted block text-caption">Total Activities</span>
+            <span className="font-bold text-ink text-sm">{summary.total}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-caption">Completed</span>
+            <span className="text-ink-muted block text-caption">Completed</span>
             <span className="font-bold text-emerald-600 text-sm">{summary.completed}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-caption">Pending</span>
-            <span className="font-bold text-slate-700 text-sm">{summary.pending}</span>
+            <span className="text-ink-muted block text-caption">Pending</span>
+            <span className="font-bold text-ink text-sm">{summary.pending}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-caption">Delayed</span>
-            <span className={`font-bold text-sm ${summary.delayed > 0 ? 'text-rose-600' : 'text-slate-700'}`}>
+            <span className="text-ink-muted block text-caption">Delayed</span>
+            <span className={`font-bold text-sm ${summary.delayed > 0 ? 'text-rose-600' : 'text-ink'}`}>
               {summary.delayed}
             </span>
           </div>
           <div>
-            <span className="text-slate-400 block text-caption">At Risk</span>
-            <span className={`font-bold text-sm ${summary.at_risk > 0 ? 'text-amber-600' : 'text-slate-700'}`}>
+            <span className="text-ink-muted block text-caption">At Risk</span>
+            <span className={`font-bold text-sm ${summary.at_risk > 0 ? 'text-amber-600' : 'text-ink'}`}>
               {summary.at_risk}
             </span>
           </div>
@@ -395,10 +395,10 @@ export default function TnaDetailPage() {
         <div className="flex items-center gap-3 min-w-[240px]">
           <div className="flex-1">
             <div className="flex justify-between text-xs font-semibold mb-1">
-              <span className="text-slate-600">Completion</span>
+              <span className="text-ink-secondary">Completion</span>
               <span className="text-brand-700">{Number(summary.completion_percentage || 0).toFixed(0)}%</span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+            <div className="w-full bg-surface-header rounded-full h-2 overflow-hidden border border-surface-border">
               <div
                 className="h-2 rounded-full bg-brand-600 transition-all"
                 style={{ width: `${Math.min(100, Math.max(0, Number(summary.completion_percentage || 0)))}%` }}
@@ -425,7 +425,7 @@ export default function TnaDetailPage() {
       )}
 
       {/* 4. Tab Navigation */}
-      <div className="border-b border-slate-200 flex items-center justify-between">
+      <div className="border-b border-surface-border flex items-center justify-between">
         <div className="flex gap-1 overflow-x-auto">
           {(['Overview', 'Development', 'Material', 'Production', 'Shipment', 'Calendar', 'Gantt'] as const).map((t) => (
             <button
@@ -434,7 +434,7 @@ export default function TnaDetailPage() {
               className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
                 activeTab === t
                   ? 'border-brand-600 text-brand-700 bg-brand-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  : 'border-transparent text-ink-secondary hover:text-ink'
               }`}
               onClick={() => setActiveTab(t)}
             >
@@ -451,8 +451,8 @@ export default function TnaDetailPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Health status summary card */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Order Health Status</h3>
+            <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-secondary mb-3">Order Health Status</h3>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between items-center p-2 rounded-lg bg-emerald-50 border border-emerald-100">
                   <span className="text-emerald-800 font-medium">On Track Activities</span>
@@ -470,8 +470,8 @@ export default function TnaDetailPage() {
             </div>
 
             {/* Category breakdown */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Milestones by Stage</h3>
+            <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-secondary mb-3">Milestones by Stage</h3>
               <div className="space-y-2 text-xs">
                 {(['ORDER', 'SAMPLING', 'FABRIC', 'TRIM', 'PRODUCTION', 'QUALITY', 'SHIPMENT'] as const).map((cat) => {
                   const stageActs = activities.filter((a) => a.category === cat);
@@ -479,8 +479,8 @@ export default function TnaDetailPage() {
                   if (stageActs.length === 0) return null;
                   return (
                     <div key={cat} className="flex justify-between items-center">
-                      <span className="text-slate-600 font-medium">{cat}</span>
-                      <span className="text-slate-900 tabular-nums">
+                      <span className="text-ink-secondary font-medium">{cat}</span>
+                      <span className="text-ink tabular-nums">
                         {stageDone} / {stageActs.length}
                       </span>
                     </div>
@@ -490,8 +490,8 @@ export default function TnaDetailPage() {
             </div>
 
             {/* Active alerts box */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center justify-between">
+            <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-secondary mb-3 flex items-center justify-between">
                 <span>Active Schedule Alerts</span>
                 <span className="rounded-full bg-rose-100 text-rose-700 px-2 py-0.5 text-micro font-bold">
                   {alerts.length}
@@ -499,7 +499,7 @@ export default function TnaDetailPage() {
               </h3>
               <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {alerts.length === 0 ? (
-                  <p className="text-slate-400 text-xs py-4 text-center">No active delay alerts. Plan is healthy!</p>
+                  <p className="text-ink-muted text-xs py-4 text-center">No active delay alerts. Plan is healthy!</p>
                 ) : (
                   alerts.map((al, i) => (
                     <div
@@ -523,19 +523,19 @@ export default function TnaDetailPage() {
 
       {/* 6. Activity Table View (For Overview, Development, Material, Production, Shipment tabs) */}
       {activeTab !== 'Calendar' && activeTab !== 'Gantt' && (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
-          <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
-            <span className="font-semibold text-slate-700">
+        <div className="rounded-xl border border-surface-border bg-white overflow-hidden shadow-xs">
+          <div className="p-3 bg-surface-muted border-b border-surface-border flex justify-between items-center text-xs">
+            <span className="font-semibold text-ink">
               Showing {filteredActivities.length} Milestones in {activeTab}
             </span>
-            <span className="text-caption text-slate-500">
+            <span className="text-caption text-ink-secondary">
               Click any milestone to edit dates, assign owners or mark complete
             </span>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-caption">
+              <thead className="bg-surface-header/70 border-b border-surface-border text-ink-secondary font-semibold uppercase tracking-wider text-caption">
                 <tr>
                   <th className="py-2.5 px-3 w-12 text-center">Seq</th>
                   <th className="py-2.5 px-3">Activity</th>
@@ -551,10 +551,10 @@ export default function TnaDetailPage() {
                   <th className="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-surface-divider text-ink">
                 {filteredActivities.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-8 text-center text-slate-400">
+                    <td colSpan={12} className="py-8 text-center text-ink-muted">
                       No activities recorded for this stage.
                     </td>
                   </tr>
@@ -566,15 +566,15 @@ export default function TnaDetailPage() {
                     return (
                       <tr
                         key={act.id}
-                        className={`hover:bg-slate-50 transition-colors cursor-pointer ${
+                        className={`hover:bg-surface-muted transition-colors cursor-pointer ${
                           act.health_status === 'DELAYED' || act.health_status === 'CRITICAL' ? 'bg-rose-50/20' : ''
                         }`}
                         onClick={() => openActivityDrawer(act)}
                       >
-                        <td className="py-2.5 px-3 text-center tabular-nums font-medium text-slate-500">
+                        <td className="py-2.5 px-3 text-center tabular-nums font-medium text-ink-secondary">
                           {act.sequence_no}
                         </td>
-                        <td className="py-2.5 px-3 font-medium text-slate-900">
+                        <td className="py-2.5 px-3 font-medium text-ink">
                           <div className="flex items-center gap-1.5">
                             <span>{act.activity_name}</span>
                             {Boolean(act.mandatory) && (
@@ -582,26 +582,26 @@ export default function TnaDetailPage() {
                             )}
                           </div>
                           {act.remarks && (
-                            <div className="text-caption text-slate-500 truncate max-w-xs">{act.remarks}</div>
+                            <div className="text-caption text-ink-secondary truncate max-w-xs">{act.remarks}</div>
                           )}
                         </td>
                         <td className="py-2.5 px-3">
-                          <span className="rounded px-1.5 py-0.5 text-micro font-semibold bg-slate-100 text-slate-700">
+                          <span className="rounded px-1.5 py-0.5 text-micro font-semibold bg-surface-header text-ink">
                             {act.category}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 tabular-nums">{fmtDate(act.planned_start_date)}</td>
-                        <td className="py-2.5 px-3 tabular-nums font-medium text-slate-900">{fmtDate(act.planned_end_date)}</td>
-                        <td className="py-2.5 px-3 tabular-nums text-slate-600">{fmtDate(act.actual_start_date) || '—'}</td>
+                        <td className="py-2.5 px-3 tabular-nums font-medium text-ink">{fmtDate(act.planned_end_date)}</td>
+                        <td className="py-2.5 px-3 tabular-nums text-ink-secondary">{fmtDate(act.actual_start_date) || '—'}</td>
                         <td className="py-2.5 px-3 tabular-nums text-emerald-700 font-medium">{fmtDate(act.actual_end_date) || '—'}</td>
-                        <td className="py-2.5 px-3 text-slate-600">{act.department_name || '—'}</td>
+                        <td className="py-2.5 px-3 text-ink-secondary">{act.department_name || '—'}</td>
                         <td className="py-2.5 px-3 text-center">
                           {delay > 0 ? (
                             <span className="rounded bg-rose-100 text-rose-800 font-bold px-1.5 py-0.5 text-micro">
                               +{delay} d
                             </span>
                           ) : (
-                            <span className="text-slate-400 tabular-nums text-caption">0</span>
+                            <span className="text-ink-muted tabular-nums text-caption">0</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
@@ -626,7 +626,7 @@ export default function TnaDetailPage() {
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : act.status === 'IN_PROGRESS'
                                 ? 'bg-blue-100 text-blue-800'
-                                : 'bg-slate-100 text-slate-600'
+                                : 'bg-surface-header text-ink-secondary'
                             }`}
                           >
                             {act.status}
@@ -646,7 +646,7 @@ export default function TnaDetailPage() {
                             )}
                             <button
                               type="button"
-                              className="btn-ghost btn-xs text-slate-600"
+                              className="btn-ghost btn-xs text-ink-secondary"
                               onClick={() => openActivityDrawer(act)}
                               title="Edit Activity"
                             >
@@ -666,14 +666,14 @@ export default function TnaDetailPage() {
 
       {/* 7. Tab Content: GANTT CHART VIEW */}
       {activeTab === 'Gantt' && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-surface-divider pb-3">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <h3 className="text-sm font-bold text-ink flex items-center gap-1.5">
                 <BarChart2 size={16} className="text-brand-600" />
                 Interactive Time & Action Gantt Timeline
               </h3>
-              <p className="text-xs text-slate-500">Visual critical path and sequence dependencies</p>
+              <p className="text-xs text-ink-secondary">Visual critical path and sequence dependencies</p>
             </div>
             <div className="flex items-center gap-2 text-xs">
               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Completed</span>
@@ -693,15 +693,15 @@ export default function TnaDetailPage() {
                 const barColor = isCompleted ? 'bg-emerald-500' : isDelayed ? 'bg-rose-500' : isAtRisk ? 'bg-amber-500' : 'bg-brand-500';
 
                 return (
-                  <div key={t.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-slate-50 hover:bg-slate-50/80 px-2 rounded">
-                    <div className="w-48 shrink-0 truncate font-medium text-slate-800">
-                      <span className="tabular-nums text-slate-400 mr-1.5">{t.sequence_no}.</span>
+                  <div key={t.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-surface-divider hover:bg-surface-muted/80 px-2 rounded">
+                    <div className="w-48 shrink-0 truncate font-medium text-ink">
+                      <span className="tabular-nums text-ink-muted mr-1.5">{t.sequence_no}.</span>
                       {t.activity_name}
                     </div>
-                    <div className="w-24 shrink-0 text-caption tabular-nums text-slate-500">
+                    <div className="w-24 shrink-0 text-caption tabular-nums text-ink-secondary">
                       {fmtDate(t.planned_start_date)}
                     </div>
-                    <div className="flex-1 bg-slate-100 rounded-full h-4 relative overflow-hidden">
+                    <div className="flex-1 bg-surface-header rounded-full h-4 relative overflow-hidden">
                       <div
                         className={`h-4 rounded-full ${barColor} transition-all opacity-85 flex items-center justify-end px-2 text-micro text-white font-bold`}
                         style={{ width: isCompleted ? '100%' : '65%' }}
@@ -709,7 +709,7 @@ export default function TnaDetailPage() {
                         {isCompleted ? '✓' : ''}
                       </div>
                     </div>
-                    <div className="w-24 shrink-0 text-caption tabular-nums font-semibold text-slate-800 text-right">
+                    <div className="w-24 shrink-0 text-caption tabular-nums font-semibold text-ink text-right">
                       {fmtDate(t.planned_end_date)}
                     </div>
                   </div>
@@ -722,13 +722,13 @@ export default function TnaDetailPage() {
 
       {/* 8. Tab Content: CALENDAR VIEW */}
       {activeTab === 'Calendar' && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-surface-divider pb-2.5">
+            <h3 className="text-sm font-bold text-ink flex items-center gap-1.5">
               <CalendarIcon size={16} className="text-brand-600" />
               T&A Milestone Calendar View
             </h3>
-            <span className="text-xs text-slate-500">Color-coded by category and health status</span>
+            <span className="text-xs text-ink-secondary">Color-coded by category and health status</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -743,22 +743,22 @@ export default function TnaDetailPage() {
                       ? 'bg-emerald-50/50 border-emerald-200'
                       : act.health_status === 'DELAYED' || act.health_status === 'CRITICAL'
                       ? 'bg-rose-50/50 border-rose-200'
-                      : 'bg-white border-slate-200'
+                      : 'bg-white border-surface-border'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-micro font-bold text-slate-500">{act.category}</span>
+                    <span className="text-micro font-bold text-ink-secondary">{act.category}</span>
                     <span
                       className={`text-micro font-bold rounded px-1 ${
-                        isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                        isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-header text-ink-secondary'
                       }`}
                     >
                       {act.status}
                     </span>
                   </div>
-                  <h4 className="font-bold text-slate-900 line-clamp-1">{act.activity_name}</h4>
-                  <div className="mt-2 text-caption text-slate-500 tabular-nums">
-                    Due: <span className="font-semibold text-slate-800">{fmtDate(act.planned_end_date)}</span>
+                  <h4 className="font-bold text-ink line-clamp-1">{act.activity_name}</h4>
+                  <div className="mt-2 text-caption text-ink-secondary tabular-nums">
+                    Due: <span className="font-semibold text-ink">{fmtDate(act.planned_end_date)}</span>
                   </div>
                   {act.delay_days > 0 && (
                     <div className="text-micro text-rose-600 font-bold mt-1">
@@ -806,7 +806,7 @@ export default function TnaDetailPage() {
           <form id="tna-activity-form" onSubmit={handleSaveActivity}>
           <FormSection title="Dates" cols={2}>
             <div>
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Planned Start</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Planned Start</label>
               <input
                 type="date"
                 value={selectedActivity.planned_start_date}
@@ -815,7 +815,7 @@ export default function TnaDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Planned End</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Planned End</label>
               <input
                 type="date"
                 value={selectedActivity.planned_end_date}
@@ -824,7 +824,7 @@ export default function TnaDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Actual Start</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Actual Start</label>
               <input
                 type="date"
                 value={selectedActivity.actual_start_date}
@@ -833,7 +833,7 @@ export default function TnaDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Actual End</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Actual End</label>
               <input
                 type="date"
                 value={selectedActivity.actual_end_date}
@@ -842,7 +842,7 @@ export default function TnaDetailPage() {
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-caption font-semibold text-slate-700 mb-1">
+              <label className="block text-caption font-semibold text-ink mb-1">
                 Reason for Date Change (Audit Log)
               </label>
               <input
@@ -857,7 +857,7 @@ export default function TnaDetailPage() {
 
           <FormSection title="Status & ownership" cols={3}>
             <div>
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Status</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Status</label>
               <select
                 value={selectedActivity.status}
                 onChange={(e) => setSelectedActivity({ ...selectedActivity, status: e.target.value })}
@@ -871,7 +871,7 @@ export default function TnaDetailPage() {
               </select>
             </div>
             <div>
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Priority</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Priority</label>
               <select
                 value={selectedActivity.priority}
                 onChange={(e) => setSelectedActivity({ ...selectedActivity, priority: e.target.value })}
@@ -884,7 +884,7 @@ export default function TnaDetailPage() {
               </select>
             </div>
             <div className="sm:col-span-2 lg:col-span-1">
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Responsible Department</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Responsible Department</label>
               <input
                 type="text"
                 value={selectedActivity.department_name || ''}
@@ -897,7 +897,7 @@ export default function TnaDetailPage() {
 
           <FormSection title="Remarks" cols={1}>
             <div>
-              <label className="block text-caption font-semibold text-slate-700 mb-1">Remarks & Status Notes</label>
+              <label className="block text-caption font-semibold text-ink mb-1">Remarks & Status Notes</label>
               <textarea
                 rows={2}
                 value={selectedActivity.remarks || ''}
@@ -913,17 +913,17 @@ export default function TnaDetailPage() {
           <FormSection title="Audit History" cols={1} className="mt-4">
             <div className="space-y-2 max-h-40 overflow-y-auto">
               {(historyQuery.data || []).filter((h) => h.activity_id === selectedActivity.id).length === 0 ? (
-                <p className="text-caption text-slate-400">No revisions logged yet.</p>
+                <p className="text-caption text-ink-muted">No revisions logged yet.</p>
               ) : (
                 (historyQuery.data || [])
                   .filter((h) => h.activity_id === selectedActivity.id)
                   .map((h, i) => (
-                    <div key={i} className="text-caption bg-slate-50 p-2 rounded border border-slate-100">
-                      <div className="font-semibold text-slate-800 flex justify-between">
+                    <div key={i} className="text-caption bg-surface-muted p-2 rounded border border-surface-divider">
+                      <div className="font-semibold text-ink flex justify-between">
                         <span>{h.changed_by_name || 'User'}</span>
-                        <span className="text-slate-400 tabular-nums">{fmtDate(h.changed_at)}</span>
+                        <span className="text-ink-muted tabular-nums">{fmtDate(h.changed_at)}</span>
                       </div>
-                      <div className="text-slate-600 mt-0.5">{h.reason || 'Status updated'}</div>
+                      <div className="text-ink-secondary mt-0.5">{h.reason || 'Status updated'}</div>
                     </div>
                   ))
               )}

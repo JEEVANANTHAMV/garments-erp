@@ -19,7 +19,7 @@ export function DivisionsPage() {
       { key: 'billing_name', header: 'Billing name (on invoice)' },
       { key: 'process_type', header: 'Process', render: (r: any) => <Badge tone="violet">{humanize(r.process_type)}</Badge> },
       { key: 'invoice_prefix', header: 'Invoice prefix' },
-      { key: 'gstin', header: 'GSTIN', render: (r: any) => r.gstin || <span className="text-slate-400">Company</span> },
+      { key: 'gstin', header: 'GSTIN', render: (r: any) => r.gstin || <span className="text-ink-muted">Company</span> },
       { key: 'is_active', header: 'Active',
         render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
     ]}

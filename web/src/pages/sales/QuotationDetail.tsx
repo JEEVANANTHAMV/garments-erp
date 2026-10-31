@@ -891,10 +891,10 @@ export default function QuotationDetailPage() {
       {/* ── Quotation Type Switcher Banner ── */}
       <div className="card mb-4 p-3 bg-white">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-caption font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          <span className="text-caption font-bold uppercase tracking-wider text-ink-secondary flex items-center gap-1.5">
             <Layers size={13} className="text-brand-600" /> Select Quotation Classification
           </span>
-          <span className="text-caption text-slate-400 font-medium">Fields and calculations adapt automatically</span>
+          <span className="text-caption text-ink-muted font-medium">Fields and calculations adapt automatically</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -913,7 +913,7 @@ export default function QuotationDetailPage() {
               activeColor = 'border-rose-500 bg-rose-50/90 text-rose-950 ring-1 ring-rose-400';
               dotColor = 'border-rose-600 bg-rose-600';
             } else if (t.value === 'GENERAL') {
-              activeColor = 'border-slate-600 bg-slate-100 text-slate-900 ring-1 ring-slate-500';
+              activeColor = 'border-slate-600 bg-surface-header text-ink ring-1 ring-slate-500';
               dotColor = 'border-slate-700 bg-slate-700';
             } else if (t.value === 'BUYER') {
               activeColor = 'border-emerald-500 bg-emerald-50/90 text-emerald-950 ring-1 ring-emerald-400';
@@ -931,18 +931,18 @@ export default function QuotationDetailPage() {
                 className={`p-2.5 rounded-lg border text-left transition-all flex flex-col justify-between ${
                   active
                     ? `${activeColor} shadow-sm`
-                    : 'border-surface-border bg-slate-50/50 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
+                    : 'border-surface-border bg-surface-muted/50 text-ink-secondary hover:bg-surface-header hover:border-surface-input'
                 }`}
               >
                 <div className="flex items-center justify-between w-full mb-1">
                   <p className="text-xs font-bold">{t.label}</p>
                   <span className={`h-3.5 w-3.5 rounded-full border-2 flex items-center justify-center ${
-                    active ? dotColor : 'border-slate-300'
+                    active ? dotColor : 'border-surface-input'
                   }`}>
                     {active && <span className="h-1 w-1 rounded-full bg-white" />}
                   </span>
                 </div>
-                <p className="text-caption text-slate-500 leading-snug line-clamp-2">{t.desc}</p>
+                <p className="text-caption text-ink-secondary leading-snug line-clamp-2">{t.desc}</p>
               </button>
             );
           })}
@@ -950,20 +950,20 @@ export default function QuotationDetailPage() {
 
         {/* ── Quotation Purpose: Purchase vs Process (Job Work) ── */}
         {isDomesticLike && (
-          <div className="mt-3 pt-3 border-t border-slate-200">
+          <div className="mt-3 pt-3 border-t border-surface-border">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-700">
+                <span className="text-xs font-bold text-ink">
                   Quotation Purpose:
                 </span>
-                <div className="inline-flex rounded-lg bg-slate-100 p-0.5 border border-slate-300">
+                <div className="inline-flex rounded-lg bg-surface-header p-0.5 border border-surface-input">
                   <button
                     type="button"
                     onClick={() => setHead(h => ({ ...h, quotation_category: 'PURCHASE', process_name: '' }))}
                     className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
                       head.quotation_category !== 'PROCESS'
                         ? 'bg-white text-brand-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        : 'text-ink-secondary hover:text-ink'
                     }`}
                   >
                     📦 Material Purchase Quotation (Default)
@@ -981,7 +981,7 @@ export default function QuotationDetailPage() {
                     className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
                       head.quotation_category === 'PROCESS'
                         ? 'bg-amber-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        : 'text-ink-secondary hover:text-ink'
                     }`}
                   >
                     ⚙️ Process / Job Work Quotation
@@ -1014,7 +1014,7 @@ export default function QuotationDetailPage() {
                         className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all border ${
                           sel
                             ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
-                            : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                            : 'bg-white text-ink border-amber-200 hover:bg-amber-100'
                         }`}
                       >
                         {sel ? `✓ ${proc}` : proc}
@@ -1028,7 +1028,7 @@ export default function QuotationDetailPage() {
                       placeholder="e.g. Specialty Finish"
                       value={head.process_name || ''}
                       onChange={(e) => setHead(h => ({ ...h, process_name: e.target.value }))}
-                      className="text-xs px-2 py-1 rounded border border-amber-300 bg-white font-medium text-slate-800 focus:outline-none focus:border-amber-500 w-44"
+                      className="text-xs px-2 py-1 rounded border border-amber-300 bg-white font-medium text-ink focus:outline-none focus:border-amber-500 w-44"
                     />
                   </div>
                 </div>
@@ -1039,12 +1039,12 @@ export default function QuotationDetailPage() {
 
         {/* ── Sub-Toggle for GENERAL Quotation: Normal vs I/O Wise ── */}
         {isGeneral && (
-          <div className="mt-3 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 bg-slate-50 p-2.5 rounded-lg">
+          <div className="mt-3 pt-3 border-t border-surface-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 bg-surface-muted p-2.5 rounded-lg">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-brand-600 shrink-0" />
               <div>
-                <p className="text-xs font-bold text-slate-800">General Quotation Mode</p>
-                <p className="text-caption text-slate-500">
+                <p className="text-xs font-bold text-ink">General Quotation Mode</p>
+                <p className="text-caption text-ink-secondary">
                   {head.is_io_wise
                     ? '🎯 I/O Wise Mode: Sample materials or testing cones/buttons charged to a specific Internal Job Order'
                     : '🏢 Normal Mode: General administration, consumables & stock materials'}
@@ -1052,12 +1052,12 @@ export default function QuotationDetailPage() {
               </div>
             </div>
 
-            <div className="flex items-center rounded-lg border border-slate-300 bg-white p-0.5 shadow-sm">
+            <div className="flex items-center rounded-lg border border-surface-input bg-white p-0.5 shadow-sm">
               <button
                 type="button"
                 onClick={() => hSet('is_io_wise', 0)}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                  !head.is_io_wise ? 'bg-brand-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  !head.is_io_wise ? 'bg-brand-600 text-white shadow-xs' : 'text-ink-secondary hover:text-ink'
                 }`}
               >
                 Normal Mode
@@ -1066,7 +1066,7 @@ export default function QuotationDetailPage() {
                 type="button"
                 onClick={() => hSet('is_io_wise', 1)}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                  head.is_io_wise ? 'bg-cyan-700 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  head.is_io_wise ? 'bg-cyan-700 text-white shadow-xs' : 'text-ink-secondary hover:text-ink'
                 }`}
               >
                 I/O Wise (Job Costing)
@@ -1082,17 +1082,17 @@ export default function QuotationDetailPage() {
           
           {/* Header Card */}
           <div className="card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-surface-border bg-surface-muted/70 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 rounded-full ${
                   isBuyer ? 'bg-emerald-500' : isImport ? 'bg-violet-500' : isFabric ? 'bg-sky-500' : isYarn ? 'bg-amber-500' : isTrims ? 'bg-rose-500' : 'bg-slate-500'
                 }`} />
-                <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">
+                <h4 className="text-small font-bold uppercase tracking-wider text-ink">
                   {typeLabel} Header
                 </h4>
               </div>
-              <span className="text-caption font-semibold text-slate-500">
-                Currency: <strong className="text-slate-800">{currCode} ({currSymbol})</strong>
+              <span className="text-caption font-semibold text-ink-secondary">
+                Currency: <strong className="text-ink">{currCode} ({currSymbol})</strong>
               </span>
             </div>
 
@@ -1100,13 +1100,13 @@ export default function QuotationDetailPage() {
               {/* Supplier or Customer */}
               {isBuyer ? (
                 <div>
-                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                     Customer / Buyer *
                   </label>
                   <select
                     value={head.buyer_id ?? ''}
                     onChange={e => hSet('buyer_id', e.target.value)}
-                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                   >
                     <option value="">— Select Buyer —</option>
                     {(buyers.data ?? []).map((b: any) => (
@@ -1117,13 +1117,13 @@ export default function QuotationDetailPage() {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                     Supplier / Vendor *
                   </label>
                   <select
                     value={head.supplier_id ?? ''}
                     onChange={e => hSet('supplier_id', e.target.value)}
-                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                   >
                     <option value="">— Select Supplier —</option>
                     {(suppliers.data ?? []).map((s: any) => (
@@ -1136,11 +1136,11 @@ export default function QuotationDetailPage() {
 
               {/* Currency */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Currency *
                 </label>
                 {isDomesticLike ? (
-                  <div className="flex items-center justify-between rounded-lg border border-surface-border bg-slate-50 px-3 py-1.5 text-xs text-slate-700 font-medium">
+                  <div className="flex items-center justify-between rounded-lg border border-surface-border bg-surface-muted px-3 py-1.5 text-xs text-ink font-medium">
                     <span>INR — Indian Rupee (₹)</span>
                     <span className="rounded bg-sky-100 px-1.5 py-0.5 text-micro font-bold text-sky-800">INR</span>
                   </div>
@@ -1148,7 +1148,7 @@ export default function QuotationDetailPage() {
                   <select
                     value={head.currency_id ?? ''}
                     onChange={e => hSet('currency_id', e.target.value)}
-                    className={`w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:outline-none ${
+                    className={`w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:outline-none ${
                       isBuyer ? 'focus:border-emerald-500' : 'focus:border-violet-500'
                     }`}
                   >
@@ -1163,34 +1163,34 @@ export default function QuotationDetailPage() {
 
               {/* Quotation Date */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Quotation Date *
                 </label>
                 <input
                   type="date"
                   value={head.quotation_date ?? ''}
                   onChange={e => hSet('quotation_date', e.target.value)}
-                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                 />
                 {err('quotation_date')}
               </div>
 
               {/* Valid Till */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Valid Till
                 </label>
                 <input
                   type="date"
                   value={head.valid_until ?? ''}
                   onChange={e => hSet('valid_until', e.target.value)}
-                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                 />
               </div>
 
               {/* Payment Terms */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Payment Terms
                 </label>
                 <input
@@ -1198,19 +1198,19 @@ export default function QuotationDetailPage() {
                   placeholder={isBuyer ? 'e.g. LC at Sight, TT 30 Days' : 'e.g. 30 Days Net, Advance, Against Delivery'}
                   value={head.payment_terms ?? ''}
                   onChange={e => hSet('payment_terms', e.target.value)}
-                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                 />
               </div>
 
               {/* Incoterms */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Delivery / Incoterms
                 </label>
                 <select
                   value={head.incoterm ?? (isBuyer ? 'FOB' : isImport ? 'CIF' : 'EXW')}
                   onChange={e => hSet('incoterm', e.target.value)}
-                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                 >
                   {INCOTERMS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
@@ -1220,7 +1220,7 @@ export default function QuotationDetailPage() {
               {!isDomesticLike && (
                 <>
                   <div>
-                    <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                       Port of Loading
                     </label>
                     <input
@@ -1228,12 +1228,12 @@ export default function QuotationDetailPage() {
                       placeholder={isBuyer ? 'e.g. Tuticorin / Chennai / Nhava Sheva' : 'e.g. Shanghai, China'}
                       value={head.port_of_loading ?? ''}
                       onChange={e => hSet('port_of_loading', e.target.value)}
-                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                       Port of Discharge
                     </label>
                     <input
@@ -1241,12 +1241,12 @@ export default function QuotationDetailPage() {
                       placeholder={isBuyer ? 'e.g. Felixstowe / Rotterdam / New York' : 'e.g. Chennai / Tuticorin'}
                       value={head.port_of_discharge ?? ''}
                       onChange={e => hSet('port_of_discharge', e.target.value)}
-                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                    <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                       Forex Rate (1 {currCode} to INR)
                     </label>
                     <input
@@ -1254,7 +1254,7 @@ export default function QuotationDetailPage() {
                       step="0.01"
                       value={head.exchange_rate ?? 86.50}
                       onChange={e => hSet('exchange_rate', Number(e.target.value))}
-                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                      className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                     />
                   </div>
                 </>
@@ -1263,13 +1263,13 @@ export default function QuotationDetailPage() {
               {/* Optional Buyer / Customer reference for procurement */}
               {isDomesticLike && (
                 <div>
-                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                     Buyer / Customer Reference
                   </label>
                   <select
                     value={head.buyer_id ?? ''}
                     onChange={e => hSet('buyer_id', e.target.value)}
-                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                   >
                     <option value="">— Optional Buyer —</option>
                     {(buyers.data ?? []).map((b: any) => (
@@ -1281,7 +1281,7 @@ export default function QuotationDetailPage() {
 
               {/* Enquiry Ref */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Enquiry / PO Reference
                 </label>
                 <input
@@ -1289,19 +1289,19 @@ export default function QuotationDetailPage() {
                   placeholder="e.g. ENQ-2026-004 / REF-88"
                   value={head.enquiry_ref ?? ''}
                   onChange={e => hSet('enquiry_ref', e.target.value)}
-                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                 />
               </div>
 
               {/* Sales Person / Agent */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Sales Person / Agent
                 </label>
                 <select
                   value={head.agent_id ?? ''}
                   onChange={e => hSet('agent_id', e.target.value)}
-                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                 >
                   <option value="">— None —</option>
                   {(agents.data ?? []).map((a: any) => (
@@ -1312,13 +1312,13 @@ export default function QuotationDetailPage() {
 
               {/* Branch */}
               <div>
-                <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                   Branch
                 </label>
                 <select
                   value={head.branch_id ?? ''}
                   onChange={e => hSet('branch_id', e.target.value)}
-                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                 >
                   <option value="">— Default Branch —</option>
                   {(branches.data ?? []).map((b: any) => (
@@ -1332,14 +1332,14 @@ export default function QuotationDetailPage() {
           {/* ── Load from Bill of Material (Fabric / Yarn / Trims quotations) ── */}
           {bomMaterial && (
             <div className="card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
+              <div className="flex items-center justify-between border-b border-surface-border bg-surface-muted/70 px-4 py-2.5">
                 <div className="flex items-center gap-2">
                   <Sparkles size={13} className="text-brand-600" />
-                  <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">
+                  <h4 className="text-small font-bold uppercase tracking-wider text-ink">
                     {isProcessQuote ? `Load the job's actual ${bomMaterial.label.toLowerCase()}` : 'Load from Bill of Material'}
                   </h4>
                 </div>
-                <span className="text-caption text-slate-500">
+                <span className="text-caption text-ink-secondary">
                   {isProcessQuote
                     ? `Job-work on what the job really has: ${head.quotation_type === 'FABRIC' ? 'the fabric rolls its knitting produced (or bought for it)' : 'the yarn lots bought for / transferred to it'} — no fabric BOM needed`
                     : `Picks only the job's BOM ${bomMaterial.label.toLowerCase()} items with the planned requirement`}
@@ -1347,7 +1347,7 @@ export default function QuotationDetailPage() {
               </div>
               <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-3 items-end">
                 <div>
-                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                     IO No (Internal Order)
                   </label>
                   <select
@@ -1357,7 +1357,7 @@ export default function QuotationDetailPage() {
                       setBomJobId(e.target.value);
                       setBomStyleId(job && job.styles.length === 1 ? String(job.styles[0].style_id) : '');
                     }}
-                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
                   >
                     <option value="">— Select Job / IO No —</option>
                     {(jobs.data ?? []).map(j => (
@@ -1366,14 +1366,14 @@ export default function QuotationDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">
+                  <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">
                     Style No
                   </label>
                   <select
                     value={bomStyleId}
                     onChange={e => setBomStyleId(e.target.value)}
                     disabled={!bomJob}
-                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none disabled:bg-slate-50"
+                    className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none disabled:bg-surface-muted"
                   >
                     <option value="">{bomJob ? 'All styles of the job' : '— Select job first —'}</option>
                     {(bomJob?.styles ?? []).map(st => (
@@ -1393,9 +1393,9 @@ export default function QuotationDetailPage() {
                   </button>
                 </div>
                 {isProcessQuote && head.quotation_type === 'FABRIC' && (
-                  <div className="md:col-span-full flex items-end gap-2 border-t border-dashed border-slate-200 pt-2">
+                  <div className="md:col-span-full flex items-end gap-2 border-t border-dashed border-surface-border pt-2">
                     <label className="block flex-1 max-w-xs">
-                      <span className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1">Or scan / type a roll no</span>
+                      <span className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1">Or scan / type a roll no</span>
                       <input value={scanRoll} onChange={(e) => setScanRoll(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addScannedRoll(); } }}
                         placeholder="Roll no — fills job, PO, style, buyer, fabric" id="q-scan-roll" className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs" />
                     </label>
@@ -1409,7 +1409,7 @@ export default function QuotationDetailPage() {
                       <button key={c.id} type="button" className="mr-2 mb-1 rounded border border-amber-300 bg-white px-2 py-1 text-left hover:bg-amber-100" onClick={() => void addScannedRoll(Number(c.id))}>
                         <b>{c.roll_no}</b> · job {c.job_no ?? '—'} · {c.grn_no} · {c.fabric_name} {c.process_state}{c.color_name ? ` ${c.color_name}` : ''} · {c.available_kg} KG
                       </button>))}
-                    <button type="button" className="text-slate-500 underline" onClick={() => setRollChoice(null)}>cancel</button>
+                    <button type="button" className="text-ink-secondary underline" onClick={() => setRollChoice(null)}>cancel</button>
                   </div>
                 )}
               </div>
@@ -1426,17 +1426,17 @@ export default function QuotationDetailPage() {
               </>}>
               {actual.kind === 'FABRIC' ? (
               <table className="w-full text-xs" id="job-actual-table">
-                <thead className="bg-slate-50 text-slate-500"><tr>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>
                   {['', 'Roll', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Production · program · lot', 'QC', 'Available KG', 'Available M', 'Quote KG'].map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|M$/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                 </tr></thead>
                 <tbody>{actual.rolls.map((r) => {
                   const k = String(r.id); const on = Number(actual.pick[k]) > 0;
                   const setPick = (v: number | '') => setActual((a) => (a ? { ...a, pick: { ...a.pick, [k]: v } } : a));
                   return (
-                    <tr key={k} className={`border-t border-slate-100 ${on ? 'bg-emerald-50/50' : ''}`} data-roll={r.roll_no}>
+                    <tr key={k} className={`border-t border-surface-divider ${on ? 'bg-emerald-50/50' : ''}`} data-roll={r.roll_no}>
                       <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setPick(on ? '' : r.available_kg)} /></td>
-                      <td className="px-2 py-1 tabular-nums font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{stateLabel(r.process_state)}</td><td className="px-2 py-1 font-semibold text-slate-800">{rollColour(r) || '—'}</td>
-                      <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1 text-slate-600">{rollTrace(r) || r.grn_no}</td><td className="px-2 py-1">QC ok</td>
+                      <td className="px-2 py-1 tabular-nums font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{stateLabel(r.process_state)}</td><td className="px-2 py-1 font-semibold text-ink">{rollColour(r) || '—'}</td>
+                      <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1 text-ink-secondary">{rollTrace(r) || r.grn_no}</td><td className="px-2 py-1">QC ok</td>
                       <td className="px-2 py-1 text-right tabular-nums">{fmtDecimal(r.available_kg, 3)}</td><td className="px-2 py-1 text-right tabular-nums">{r.available_m ? fmtDecimal(r.available_m, 2) : '—'}</td>
                       <td className="px-2 py-1 text-right"><input type="number" step="0.001" className="w-24 rounded border border-surface-border px-2 py-0.5 text-right text-xs"
                         value={actual.pick[k]} max={r.available_kg} onChange={(e) => setPick(e.target.value === '' ? '' : Math.min(Number(e.target.value), r.available_kg))} /></td>
@@ -1445,7 +1445,7 @@ export default function QuotationDetailPage() {
               </table>
               ) : (
               <table className="w-full text-xs" id="job-actual-table">
-                <thead className="bg-slate-50 text-slate-500"><tr>
+                <thead className="bg-surface-muted text-ink-secondary"><tr>
                   {['', 'Yarn', 'Count', 'Shade', 'Lots', 'Available KG', 'Quote KG']
                     .map((h, i) => <th key={i} className={`px-2 py-2 ${/KG|Rolls/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}
                 </tr></thead>
@@ -1453,7 +1453,7 @@ export default function QuotationDetailPage() {
                   const on = Number(actual.pick[g.key]) > 0;
                   const setPick = (v: number | '') => setActual((a) => (a ? { ...a, pick: { ...a.pick, [g.key]: v } } : a));
                   return (
-                    <tr key={g.key} className={`border-t border-slate-100 ${on ? 'bg-emerald-50/50' : ''}`}>
+                    <tr key={g.key} className={`border-t border-surface-divider ${on ? 'bg-emerald-50/50' : ''}`}>
                       <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setPick(on ? '' : g.available_kg)} /></td>
                       {actual.kind === 'FABRIC' ? (<>
                         <td className="px-2 py-1 font-medium">{g.fabric_name}</td><td className="px-2 py-1">{g.process_state}</td><td className="px-2 py-1">{g.colour ?? '—'}</td>
@@ -1473,19 +1473,19 @@ export default function QuotationDetailPage() {
 
           {/* ── Product Details Table ── */}
           <div className="card overflow-hidden shadow-xs">
-            <div className="flex items-center justify-between border-b border-surface-border bg-slate-50/70 px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-surface-border bg-surface-muted/70 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 rounded-full ${
                   isBuyer ? 'bg-emerald-500' : isFabric ? 'bg-sky-500' : isYarn ? 'bg-amber-500' : isTrims ? 'bg-rose-500' : 'bg-brand-500'
                 }`} />
-                <h4 className="text-small font-bold uppercase tracking-wider text-slate-700">
+                <h4 className="text-small font-bold uppercase tracking-wider text-ink">
                   {typeLabel} Line Items
                 </h4>
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-micro font-bold text-slate-700">
+                <span className="rounded-full bg-surface-border px-2 py-0.5 text-micro font-bold text-ink">
                   {lines.length} {lines.length === 1 ? 'Item' : 'Items'}
                 </span>
               </div>
-              <span className="text-caption text-slate-500">
+              <span className="text-caption text-ink-secondary">
                 Amount uses <strong>Confirm Rate</strong> (falls back to Quotation Rate if unconfirmed)
               </span>
             </div>
@@ -1499,7 +1499,7 @@ export default function QuotationDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="border-b border-surface-border bg-slate-100/80 font-semibold uppercase tracking-wider text-slate-600 text-caption">
+                  <tr className="border-b border-surface-border bg-surface-header/80 font-semibold uppercase tracking-wider text-ink-secondary text-caption">
                     <th className="w-8 px-2 py-2 text-center">S.No</th>
                     
                     {/* I/O Num / Job No */}
@@ -1583,8 +1583,8 @@ export default function QuotationDetailPage() {
 
                     return (
                       <Fragment key={l._key}>
-                      <tr className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-2 py-1.5 text-center tabular-nums text-caption text-slate-400">
+                      <tr className="hover:bg-surface-muted/80 transition-colors">
+                        <td className="px-2 py-1.5 text-center tabular-nums text-caption text-ink-muted">
                           {i + 1}
                         </td>
 
@@ -1957,7 +1957,7 @@ export default function QuotationDetailPage() {
                                   const val = Number(e.target.value);
                                   setLine(l._key, { gst_rate: val, igst_rate: val > 0 ? 0 : l.igst_rate });
                                 }}
-                                className="w-full rounded border border-surface-border bg-white px-1 py-1 text-center text-xs font-bold text-slate-700 focus:border-brand-500 focus:outline-none"
+                                className="w-full rounded border border-surface-border bg-white px-1 py-1 text-center text-xs font-bold text-ink focus:border-brand-500 focus:outline-none"
                               >
                                 {GST_OPTIONS.map(g => (
                                   <option key={g.value} value={g.value}>{g.label}</option>
@@ -1982,7 +1982,7 @@ export default function QuotationDetailPage() {
                         )}
 
                         {/* Line Total Amount */}
-                        <td className="px-2 py-1.5 text-right tabular-nums font-bold text-slate-800">
+                        <td className="px-2 py-1.5 text-right tabular-nums font-bold text-ink">
                           {fmtDecimal(lineAmt, 2)}
                         </td>
 
@@ -1992,36 +1992,36 @@ export default function QuotationDetailPage() {
                             type="button"
                             onClick={() => removeLine(l._key)}
                             title="Remove line"
-                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                            className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-red-600 transition-colors"
                           >
                             <Trash2 size={13} />
                           </button>
                         </td>
                       </tr>
                       {isProcessQuote && ((l.rolls ?? []).length > 0 || true) && (
-                        <tr className="bg-slate-50/60" data-line={i + 1}>
+                        <tr className="bg-surface-muted/60" data-line={i + 1}>
                           <td />
                           <td colSpan={99} className="px-2 pb-2 pt-0.5 text-caption">
                             {(l.rolls ?? []).length > 0 && (
                               <div className="mb-1 flex flex-wrap items-center gap-1.5" id={`q-rolls-${i + 1}`}>
-                                <span className="font-semibold text-slate-600">Rolls:</span>
+                                <span className="font-semibold text-ink-secondary">Rolls:</span>
                                 {(l.rolls ?? []).map((r) => (
                                   <span key={r.fabric_roll_id} className="inline-flex items-center gap-1 rounded border border-sky-200 bg-white px-1.5 py-0.5" title={r.trace}>
                                     <b className="tabular-nums">{r.roll_no}</b>
-                                    <input type="number" step="0.001" className="w-16 rounded border border-slate-200 px-1 text-right" value={r.qty_kg}
+                                    <input type="number" step="0.001" className="w-16 rounded border border-surface-border px-1 text-right" value={r.qty_kg}
                                       onChange={(e) => setRollKg(l._key, r.fabric_roll_id, e.target.value === '' ? '' : Number(e.target.value))} /> KG
-                                    {r.trace && <span className="text-slate-400">{r.trace}</span>}
-                                    <button type="button" className="text-slate-400 hover:text-rose-600" onClick={() => dropRoll(l._key, r.fabric_roll_id)} title="Take the roll off">✕</button>
+                                    {r.trace && <span className="text-ink-muted">{r.trace}</span>}
+                                    <button type="button" className="text-ink-muted hover:text-rose-600" onClick={() => dropRoll(l._key, r.fabric_roll_id)} title="Take the roll off">✕</button>
                                   </span>
                                 ))}
-                                <span className="text-slate-500">= {fmtDecimal(sumRolls(l.rolls), 3)} KG</span>
+                                <span className="text-ink-secondary">= {fmtDecimal(sumRolls(l.rolls), 3)} KG</span>
                               </div>
                             )}
-                            <div className="flex flex-wrap items-center gap-2 text-slate-600" id={`q-cost-${i + 1}`}>
+                            <div className="flex flex-wrap items-center gap-2 text-ink-secondary" id={`q-cost-${i + 1}`}>
                               <span className="font-semibold">Costing / KG:</span>
                               {([['process_rate', 'Process'], ['dye_chem_rate', 'Dye / chemical'], ['other_rate', 'Other']] as const).map(([k, lab]) => (
                                 <label key={k} className="inline-flex items-center gap-1">{lab}
-                                  <input type="number" step="0.01" min="0" className="w-20 rounded border border-slate-200 px-1 text-right" value={(l as any)[k] ?? ''} id={`q-${k}-${i + 1}`}
+                                  <input type="number" step="0.01" min="0" className="w-20 rounded border border-surface-border px-1 text-right" value={(l as any)[k] ?? ''} id={`q-${k}-${i + 1}`}
                                     onChange={(e) => setBreakup(l._key, { [k]: e.target.value === '' ? '' : Number(e.target.value) } as any)} /></label>
                               ))}
                               <span>= <b>{currSymbol}{fmtDecimal(Number(l.quotation_rate) || 0, 2)}</b> quoted rate{[l.process_rate, l.dye_chem_rate, l.other_rate].some((x) => x !== '' && x != null) ? '' : ' (enter the breakup to build it)'}</span>
@@ -2034,19 +2034,19 @@ export default function QuotationDetailPage() {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-surface-border bg-slate-50/40">
+                  <tr className="border-t border-surface-border bg-surface-muted/40">
                     <td colSpan={20} className="px-3 py-2">
                       <button
                         type="button"
                         onClick={addLine}
-                        className="btn-secondary btn-sm w-full border-dashed border-slate-300 hover:border-brand-500 hover:text-brand-700 hover:bg-brand-50/40 transition-colors flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-slate-600"
+                        className="btn-secondary btn-sm w-full border-dashed border-surface-input hover:border-brand-500 hover:text-brand-700 hover:bg-brand-50/40 transition-colors flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-ink-secondary"
                       >
                         <Plus size={14} className="text-brand-600" /> Add {typeLabel} Line
                       </button>
                     </td>
                   </tr>
-                  <tr className="border-t-2 border-surface-border bg-slate-50/90 font-bold text-slate-800">
-                    <td colSpan={colsBeforeQty} className="px-3 py-2.5 text-right uppercase tracking-wider text-caption text-slate-600">
+                  <tr className="border-t-2 border-surface-border bg-surface-muted/90 font-bold text-ink">
+                    <td colSpan={colsBeforeQty} className="px-3 py-2.5 text-right uppercase tracking-wider text-caption text-ink-secondary">
                       Total Basic Value
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">
@@ -2101,7 +2101,7 @@ export default function QuotationDetailPage() {
           {/* ── Notes & Terms Card ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="card p-3.5">
-              <h4 className="text-caption font-bold uppercase tracking-wider text-slate-600 mb-2">
+              <h4 className="text-caption font-bold uppercase tracking-wider text-ink-secondary mb-2">
                 Internal Remarks / Notes
               </h4>
               <textarea
@@ -2109,12 +2109,12 @@ export default function QuotationDetailPage() {
                 placeholder="Internal notes for merchandising, procurement and store teams…"
                 value={head.remarks ?? ''}
                 onChange={e => hSet('remarks', e.target.value)}
-                className="w-full rounded-lg border border-surface-border p-2.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-surface-border p-2.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
               />
             </div>
 
             <div className="card p-3.5">
-              <h4 className="text-caption font-bold uppercase tracking-wider text-slate-600 mb-2">
+              <h4 className="text-caption font-bold uppercase tracking-wider text-ink-secondary mb-2">
                 Terms &amp; Conditions
               </h4>
               <textarea
@@ -2122,7 +2122,7 @@ export default function QuotationDetailPage() {
                 placeholder="Validity, delivery terms, payment conditions, certification requirements…"
                 value={head.terms ?? ''}
                 onChange={e => hSet('terms', e.target.value)}
-                className="w-full rounded-lg border border-surface-border p-2.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-lg border border-surface-border p-2.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
               />
             </div>
           </div>
@@ -2145,20 +2145,20 @@ export default function QuotationDetailPage() {
               </span>
             </div>
 
-            <div className="p-4 space-y-2 text-xs divide-y divide-slate-100">
+            <div className="p-4 space-y-2 text-xs divide-y divide-surface-divider">
               {/* ── BUYER EXPORT SUMMARY ── */}
               {isBuyer && (() => {
                 const d = calc as any;
                 return (
                   <div className="space-y-2 pt-1">
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600 font-medium">Items Total ({currCode})</span>
-                      <span className="tabular-nums font-bold text-slate-800">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
+                      <span className="text-ink-secondary font-medium">Items Total ({currCode})</span>
+                      <span className="tabular-nums font-bold text-ink">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-slate-600">Discount %</span>
+                        <span className="text-ink-secondary">Discount %</span>
                         <input
                           type="number"
                           min="0"
@@ -2169,11 +2169,11 @@ export default function QuotationDetailPage() {
                           className="w-14 rounded border border-surface-border px-1.5 py-0.5 text-right text-xs focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
-                      <span className="tabular-nums text-slate-700">- {currSymbol} {fmtDecimal(d.discAmt, 2)}</span>
+                      <span className="tabular-nums text-ink">- {currSymbol} {fmtDecimal(d.discAmt, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Ocean / Air Freight ({currCode})</span>
+                      <span className="text-ink-secondary">Ocean / Air Freight ({currCode})</span>
                       <input
                         type="number"
                         min="0"
@@ -2185,7 +2185,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Marine Insurance ({currCode})</span>
+                      <span className="text-ink-secondary">Marine Insurance ({currCode})</span>
                       <input
                         type="number"
                         min="0"
@@ -2197,7 +2197,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Packing &amp; Hangtag ({currCode})</span>
+                      <span className="text-ink-secondary">Packing &amp; Hangtag ({currCode})</span>
                       <input
                         type="number"
                         min="0"
@@ -2209,7 +2209,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Other / Handling ({currCode})</span>
+                      <span className="text-ink-secondary">Other / Handling ({currCode})</span>
                       <input
                         type="number"
                         min="0"
@@ -2222,7 +2222,7 @@ export default function QuotationDetailPage() {
 
                     <div className="border-t-2 border-emerald-600 pt-2.5 mt-2 space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm font-bold text-slate-900">Total Offer ({currCode})</span>
+                        <span className="text-sm font-bold text-ink">Total Offer ({currCode})</span>
                         <span className="text-lg font-bold text-emerald-700 tabular-nums">
                           {currSymbol} {fmtDecimal(d.finalOffer, 2)}
                         </span>
@@ -2241,9 +2241,9 @@ export default function QuotationDetailPage() {
                       </div>
 
                       {/* Tax Note */}
-                      <div className="rounded bg-slate-50 border border-slate-200 px-2 py-1 text-caption text-slate-600 flex items-center justify-between">
+                      <div className="rounded bg-surface-muted border border-surface-border px-2 py-1 text-caption text-ink-secondary flex items-center justify-between">
                         <span>Export Tax Scheme:</span>
-                        <span className="font-semibold text-slate-800">LUT Export (0% GST)</span>
+                        <span className="font-semibold text-ink">LUT Export (0% GST)</span>
                       </div>
                     </div>
                   </div>
@@ -2259,13 +2259,13 @@ export default function QuotationDetailPage() {
                 return (
                   <div className="space-y-2 pt-1">
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600 font-medium">Basic Amount</span>
-                      <span className="tabular-nums font-bold text-slate-800">₹ {fmtDecimal(d.basicAmount, 2)}</span>
+                      <span className="text-ink-secondary font-medium">Basic Amount</span>
+                      <span className="tabular-nums font-bold text-ink">₹ {fmtDecimal(d.basicAmount, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-slate-600">Discount %</span>
+                        <span className="text-ink-secondary">Discount %</span>
                         <input
                           type="number"
                           min="0"
@@ -2276,11 +2276,11 @@ export default function QuotationDetailPage() {
                           className="w-14 rounded border border-surface-border px-1.5 py-0.5 text-right text-xs focus:border-brand-500 focus:outline-none"
                         />
                       </div>
-                      <span className="tabular-nums text-slate-700">- ₹ {fmtDecimal(d.discAmt, 2)}</span>
+                      <span className="tabular-nums text-ink">- ₹ {fmtDecimal(d.discAmt, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Freight / Transport</span>
+                      <span className="text-ink-secondary">Freight / Transport</span>
                       <input
                         type="number"
                         min="0"
@@ -2292,7 +2292,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Packing Charges</span>
+                      <span className="text-ink-secondary">Packing Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2304,7 +2304,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Other Charges</span>
+                      <span className="text-ink-secondary">Other Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2316,7 +2316,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="border-t border-surface-border pt-2 flex justify-between items-center">
-                      <span className="font-bold text-slate-800">Taxable Value</span>
+                      <span className="font-bold text-ink">Taxable Value</span>
                       <span className="tabular-nums font-bold text-brand-800">₹ {fmtDecimal(d.taxableValue, 2)}</span>
                     </div>
 
@@ -2330,11 +2330,11 @@ export default function QuotationDetailPage() {
                       {/* CGST + SGST (Intrastate) */}
                       {totalGstBreakdown.map((g: any) => (
                         <div key={`cgst-${g.rate}`} className="text-caption space-y-0.5 border-b border-amber-200/60 pb-1">
-                          <div className="flex justify-between text-slate-600">
+                          <div className="flex justify-between text-ink-secondary">
                             <span>CGST @ {(g.rate / 2).toFixed(1)}% (on ₹{fmtDecimal(g.baseAmt, 2)})</span>
                             <span className="tabular-nums font-semibold">₹ {fmtDecimal(g.cgst, 2)}</span>
                           </div>
-                          <div className="flex justify-between text-slate-600">
+                          <div className="flex justify-between text-ink-secondary">
                             <span>SGST @ {(g.rate / 2).toFixed(1)}% (on ₹{fmtDecimal(g.baseAmt, 2)})</span>
                             <span className="tabular-nums font-semibold">₹ {fmtDecimal(g.sgst, 2)}</span>
                           </div>
@@ -2344,7 +2344,7 @@ export default function QuotationDetailPage() {
                       {/* IGST (Interstate) */}
                       {totalIgstBreakdown.map((ig: any) => (
                         <div key={`igst-${ig.rate}`} className="text-caption space-y-0.5 border-b border-amber-200/60 pb-1">
-                          <div className="flex justify-between text-slate-600">
+                          <div className="flex justify-between text-ink-secondary">
                             <span>IGST @ {ig.rate}% (on ₹{fmtDecimal(ig.baseAmt, 2)})</span>
                             <span className="tabular-nums font-semibold text-amber-900">₹ {fmtDecimal(ig.igst, 2)}</span>
                           </div>
@@ -2352,7 +2352,7 @@ export default function QuotationDetailPage() {
                       ))}
 
                       {totalGstBreakdown.length === 0 && totalIgstBreakdown.length === 0 && (
-                        <div className="text-caption text-slate-500 italic">0% GST / IGST applied</div>
+                        <div className="text-caption text-ink-secondary italic">0% GST / IGST applied</div>
                       )}
 
                       <div className="flex justify-between pt-1 font-bold text-amber-950 border-t border-amber-200">
@@ -2362,7 +2362,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Round Off</span>
+                      <span className="text-ink-secondary">Round Off</span>
                       <input
                         type="number"
                         step="0.01"
@@ -2374,7 +2374,7 @@ export default function QuotationDetailPage() {
 
                     <div className="border-t-2 border-slate-800 pt-3 mt-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm font-bold text-slate-900">Grand Total (INR)</span>
+                        <span className="text-sm font-bold text-ink">Grand Total (INR)</span>
                         <span className="text-lg font-bold text-brand-700 tabular-nums">
                           ₹ {fmtDecimal(d.grandTotal, 2)}
                         </span>
@@ -2390,12 +2390,12 @@ export default function QuotationDetailPage() {
                 return (
                   <div className="space-y-2 pt-1">
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600 font-medium">Product Value</span>
-                      <span className="tabular-nums font-bold text-slate-800">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
+                      <span className="text-ink-secondary font-medium">Product Value</span>
+                      <span className="tabular-nums font-bold text-ink">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Courier Charges</span>
+                      <span className="text-ink-secondary">Courier Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2407,7 +2407,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Freight Charges</span>
+                      <span className="text-ink-secondary">Freight Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2419,7 +2419,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Insurance</span>
+                      <span className="text-ink-secondary">Insurance</span>
                       <input
                         type="number"
                         min="0"
@@ -2431,7 +2431,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Packing Charges</span>
+                      <span className="text-ink-secondary">Packing Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2443,7 +2443,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Bank Charges</span>
+                      <span className="text-ink-secondary">Bank Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2455,7 +2455,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Customs / Duty</span>
+                      <span className="text-ink-secondary">Customs / Duty</span>
                       <input
                         type="number"
                         min="0"
@@ -2467,7 +2467,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Clearing Charges</span>
+                      <span className="text-ink-secondary">Clearing Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2479,7 +2479,7 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="flex justify-between items-center py-1">
-                      <span className="text-slate-600">Other Charges</span>
+                      <span className="text-ink-secondary">Other Charges</span>
                       <input
                         type="number"
                         min="0"
@@ -2491,13 +2491,13 @@ export default function QuotationDetailPage() {
                     </div>
 
                     <div className="border-t border-surface-border pt-2 flex justify-between items-center">
-                      <span className="font-bold text-slate-800">Landed Cost</span>
+                      <span className="font-bold text-ink">Landed Cost</span>
                       <span className="tabular-nums font-bold text-violet-800">{currSymbol} {fmtDecimal(d.landedCost, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-slate-600">Margin %</span>
+                        <span className="text-ink-secondary">Margin %</span>
                         <input
                           type="number"
                           min="0"
@@ -2508,17 +2508,17 @@ export default function QuotationDetailPage() {
                           className="w-14 rounded border border-surface-border px-1.5 py-0.5 text-right text-xs focus:border-violet-500 focus:outline-none"
                         />
                       </div>
-                      <span className="tabular-nums text-slate-700">+ {currSymbol} {fmtDecimal(d.marginAmt, 2)}</span>
+                      <span className="tabular-nums text-ink">+ {currSymbol} {fmtDecimal(d.marginAmt, 2)}</span>
                     </div>
 
                     <div className="border-t-2 border-slate-800 pt-3 mt-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm font-bold text-slate-900">Final Quotation Value</span>
+                        <span className="text-sm font-bold text-ink">Final Quotation Value</span>
                         <span className="text-lg font-bold text-violet-700 tabular-nums">
                           {currSymbol} {fmtDecimal(d.finalSelling, 2)}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-caption text-slate-500 mt-1">
+                      <div className="flex justify-between items-center text-caption text-ink-secondary mt-1">
                         <span>INR Equivalent (@ ₹{fmtDecimal(head.exchange_rate || 1, 2)})</span>
                         <span className="tabular-nums font-semibold">
                           ₹ {fmtDecimal(d.finalSelling * (Number(head.exchange_rate) || 1), 2)}
@@ -2533,13 +2533,13 @@ export default function QuotationDetailPage() {
 
           {/* Workflow Status Card */}
           <div className="card p-4">
-            <label className="block text-caption font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            <label className="block text-caption font-semibold uppercase tracking-wider text-ink-secondary mb-1.5">
               Workflow Status
             </label>
             <select
               value={head.status_id ?? ''}
               onChange={e => hSet('status_id', e.target.value)}
-              className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-xs text-ink focus:border-brand-500 focus:outline-none"
             >
               <option value="">— Select Status —</option>
               {(statuses.data ?? []).map((s: any) => (

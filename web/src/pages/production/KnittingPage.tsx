@@ -210,15 +210,15 @@ export default function KnittingPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="p-2 rounded-xl bg-teal-100 text-teal-700 shadow-sm">
               <Activity size={22} />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Yarn Processing (Knitting & Preparatory)</h1>
-              <p className="text-xs text-slate-500">
+              <h1 className="text-xl font-bold text-ink tracking-tight">Yarn Processing (Knitting & Preparatory)</h1>
+              <p className="text-xs text-ink-secondary">
                 Yarn issue, grey fabric knitting, winding, twisting & roll QC output tracking
               </p>
             </div>
@@ -227,7 +227,7 @@ export default function KnittingPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => refetch()}
-            className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 transition"
+            className="p-2 border border-surface-border rounded-lg hover:bg-surface-muted text-ink-secondary transition"
             title="Refresh"
           >
             <RefreshCw size={15} />
@@ -249,8 +249,8 @@ export default function KnittingPage() {
             <FileText size={20} />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500">Total KWOs</p>
-            <p className="text-xl font-bold text-slate-900">{kpis.totalOrders}</p>
+            <p className="text-xs font-medium text-ink-secondary">Total KWOs</p>
+            <p className="text-xl font-bold text-ink">{kpis.totalOrders}</p>
           </div>
         </div>
         <div className="card p-4 flex items-center gap-3.5 bg-gradient-to-br from-white to-slate-50/50">
@@ -258,8 +258,8 @@ export default function KnittingPage() {
             <Layers size={20} />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500">Yarn Issued</p>
-            <p className="text-xl font-bold text-slate-900">{fmtDecimal(kpis.totalYarn)} <span className="text-xs font-normal text-slate-500">kg</span></p>
+            <p className="text-xs font-medium text-ink-secondary">Yarn Issued</p>
+            <p className="text-xl font-bold text-ink">{fmtDecimal(kpis.totalYarn)} <span className="text-xs font-normal text-ink-secondary">kg</span></p>
           </div>
         </div>
         <div className="card p-4 flex items-center gap-3.5 bg-gradient-to-br from-white to-slate-50/50">
@@ -267,8 +267,8 @@ export default function KnittingPage() {
             <Box size={20} />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500">Grey Rolls Produced</p>
-            <p className="text-xl font-bold text-slate-900">{fmtDecimal(kpis.totalFabric)} <span className="text-xs font-normal text-slate-500">kg</span></p>
+            <p className="text-xs font-medium text-ink-secondary">Grey Rolls Produced</p>
+            <p className="text-xl font-bold text-ink">{fmtDecimal(kpis.totalFabric)} <span className="text-xs font-normal text-ink-secondary">kg</span></p>
           </div>
         </div>
         <div className="card p-4 flex items-center gap-3.5 bg-gradient-to-br from-white to-slate-50/50">
@@ -276,8 +276,8 @@ export default function KnittingPage() {
             <AlertTriangle size={20} />
           </div>
           <div>
-            <p className="text-xs font-medium text-slate-500">Avg Knitting Loss</p>
-            <p className="text-xl font-bold text-slate-900">{fmtDecimal(kpis.lossPct)}%</p>
+            <p className="text-xs font-medium text-ink-secondary">Avg Knitting Loss</p>
+            <p className="text-xl font-bold text-ink">{fmtDecimal(kpis.lossPct)}%</p>
           </div>
         </div>
       </div>
@@ -286,7 +286,7 @@ export default function KnittingPage() {
       <div className="card p-4 space-y-3">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" size={16} />
             <input
               type="text"
               placeholder="Search by KWO No, IO No, Style, Fabric..."
@@ -326,7 +326,7 @@ export default function KnittingPage() {
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table w-full text-xs">
-            <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-semibold">
+            <thead className="bg-surface-muted text-ink-secondary border-b border-surface-border uppercase font-semibold">
               <tr>
                 <th className="py-3 px-4 text-left">KWO No</th>
                 <th className="py-3 px-4 text-left">Date</th>
@@ -341,21 +341,21 @@ export default function KnittingPage() {
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-surface-divider text-ink">
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-400">Loading knitting orders...</td>
+                  <td colSpan={11} className="py-8 text-center text-ink-muted">Loading knitting orders...</td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-400">No yarn processing orders found</td>
+                  <td colSpan={11} className="py-8 text-center text-ink-muted">No yarn processing orders found</td>
                 </tr>
               ) : (
                 filteredOrders.map((o) => (
-                  <tr key={o.id} className="hover:bg-slate-50/70 transition">
+                  <tr key={o.id} className="hover:bg-surface-muted/70 transition">
                     <td className="py-3 px-4 font-semibold text-teal-700">{o.kwo_no}</td>
-                    <td className="py-3 px-4 text-slate-500">{fmtDate(o.kwo_date)}</td>
-                    <td className="py-3 px-4 font-medium text-slate-900">
+                    <td className="py-3 px-4 text-ink-secondary">{fmtDate(o.kwo_date)}</td>
+                    <td className="py-3 px-4 font-medium text-ink">
                       <div>{o.io_no}</div>
                       {o.customer_po_no && (
                         <div className="text-micro text-teal-600 font-normal">PO: {o.customer_po_no}</div>
@@ -364,27 +364,27 @@ export default function KnittingPage() {
                     <td className="py-3 px-4">
                       {o.style_code ? (
                         <div>
-                          <span className="font-semibold text-slate-900">{o.style_code}</span>
-                          <span className="text-slate-400 text-micro block">{o.style_name}</span>
+                          <span className="font-semibold text-ink">{o.style_code}</span>
+                          <span className="text-ink-muted text-micro block">{o.style_name}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-ink-muted">-</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-micro font-medium bg-slate-100 text-slate-700">
+                      <span className="px-2 py-0.5 rounded-full text-micro font-medium bg-surface-header text-ink">
                         {o.sub_process}
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-medium text-slate-800">{o.fabric_name || 'Single Jersey'}</div>
-                      <div className="text-micro text-slate-400">Dia: {o.dia || '-'} | GSM: {o.gsm || '-'}</div>
+                      <div className="font-medium text-ink">{o.fabric_name || 'Single Jersey'}</div>
+                      <div className="text-micro text-ink-muted">Dia: {o.dia || '-'} | GSM: {o.gsm || '-'}</div>
                     </td>
                     <td className="py-3 px-4 text-right font-medium">{fmtDecimal(o.planned_fabric_kg)}</td>
                     <td className="py-3 px-4 text-right font-medium text-indigo-600">{fmtDecimal(o.total_yarn_issued_kg)} kg</td>
                     <td className="py-3 px-4 text-right font-medium text-emerald-600">
                       {fmtDecimal(o.total_fabric_produced_kg)} kg
-                      <span className="text-micro text-slate-400 block">({o.total_rolls_count || 0} rolls)</span>
+                      <span className="text-micro text-ink-muted block">({o.total_rolls_count || 0} rolls)</span>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <Badge variant={o.status === 'COMPLETED' ? 'success' : o.status === 'IN_PROGRESS' ? 'warning' : 'neutral'}>
@@ -621,11 +621,11 @@ export default function KnittingPage() {
                 {activeOrder.status}
               </Badge>
             </span>
-            I/O No: <span className="font-semibold text-slate-800">{activeOrder.io_no}</span>
+            I/O No: <span className="font-semibold text-ink">{activeOrder.io_no}</span>
             {activeOrder.customer_po_no && (
               <> | Customer PO: <span className="font-semibold text-teal-700">{activeOrder.customer_po_no}</span></>
             )}
-            {' '}| Style: <span className="font-medium text-slate-800">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-slate-800">{activeOrder.fabric_name} ({activeOrder.dia || '-'}, {activeOrder.gsm || '-'} GSM)</span>
+            {' '}| Style: <span className="font-medium text-ink">{activeOrder.style_code || '-'}</span> | Target: <span className="font-medium text-ink">{activeOrder.fabric_name} ({activeOrder.dia || '-'}, {activeOrder.gsm || '-'} GSM)</span>
           </>}
           footer={<>
             <button type="button" onClick={() => setActiveKwoId(null)} className="btn-secondary text-xs">
@@ -641,14 +641,14 @@ export default function KnittingPage() {
           </>}>
             {/* Production Summary Cards */}
             <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-              <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
-                <span className="text-slate-400 block text-micro">Total Yarn Issued</span>
+              <div className="p-2.5 bg-white rounded-xl border border-surface-border/60">
+                <span className="text-ink-muted block text-micro">Total Yarn Issued</span>
                 <span className="text-sm font-bold text-indigo-700">
                   {fmtDecimal(activeOrder.summary?.total_yarn_issued_kg)} kg
                 </span>
               </div>
-              <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
-                <span className="text-slate-400 block text-micro">Total Fabric Produced</span>
+              <div className="p-2.5 bg-white rounded-xl border border-surface-border/60">
+                <span className="text-ink-muted block text-micro">Total Fabric Produced</span>
                 <div className="flex items-baseline gap-1 flex-wrap">
                   <span className="text-sm font-bold text-emerald-700">
                     {fmtDecimal(activeOrder.summary?.total_rolls_produced_kg)} kg
@@ -659,32 +659,32 @@ export default function KnittingPage() {
                     </span>
                   )}
                 </div>
-                <span className="text-micro text-slate-400 block">
+                <span className="text-micro text-ink-muted block">
                   {activeOrder.summary?.total_rolls_count || 0} rolls
                 </span>
               </div>
-              <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
-                <span className="text-slate-400 block text-micro">Knitting Loss (Kg)</span>
+              <div className="p-2.5 bg-white rounded-xl border border-surface-border/60">
+                <span className="text-ink-muted block text-micro">Knitting Loss (Kg)</span>
                 <span className="text-sm font-bold text-amber-700">
                   {fmtDecimal(activeOrder.summary?.knitting_loss_kg)} kg
                 </span>
               </div>
-              <div className="p-2.5 bg-white rounded-xl border border-slate-200/60">
-                <span className="text-slate-400 block text-micro">Knitting Loss (%)</span>
-                <span className="text-sm font-bold text-slate-800">
+              <div className="p-2.5 bg-white rounded-xl border border-surface-border/60">
+                <span className="text-ink-muted block text-micro">Knitting Loss (%)</span>
+                <span className="text-sm font-bold text-ink">
                   {fmtDecimal(activeOrder.summary?.knitting_loss_pct)}%
                 </span>
               </div>
             </div>
 
             {/* Tab Navigation */}
-            <div className="mb-4 flex gap-4 border-b border-slate-200 text-xs font-semibold">
+            <div className="mb-4 flex gap-4 border-b border-surface-border text-xs font-semibold">
               <button
                 onClick={() => setManageTab('issues')}
                 className={`pb-2.5 flex items-center gap-1.5 border-b-2 transition ${
                   manageTab === 'issues'
                     ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                    : 'border-transparent text-ink-secondary hover:text-ink'
                 }`}
               >
                 <Layers size={14} /> 1. Yarn Issue to Knitting ({activeOrder.yarn_issues?.length || 0})
@@ -694,7 +694,7 @@ export default function KnittingPage() {
                 className={`pb-2.5 flex items-center gap-1.5 border-b-2 transition ${
                   manageTab === 'rolls'
                     ? 'border-teal-600 text-teal-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                    : 'border-transparent text-ink-secondary hover:text-ink'
                 }`}
               >
                 <Box size={14} /> 2. Grey Fabric Roll Entry & QC ({activeOrder.roll_outputs?.length || 0})
@@ -720,7 +720,7 @@ export default function KnittingPage() {
                     }}
                     className="p-4 bg-indigo-50/40 rounded-xl border border-indigo-100 space-y-3"
                   >
-                    <h4 className="flex items-center gap-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
+                    <h4 className="flex items-center gap-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">
                       <Plus size={14} /> Record Yarn Issue to Knitting
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -803,9 +803,9 @@ export default function KnittingPage() {
                   </form>
 
                   {/* Issues List Table */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="border border-surface-border rounded-xl overflow-hidden">
                     <table className="table w-full text-xs">
-                      <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <thead className="bg-surface-muted text-ink-secondary font-semibold border-b border-surface-border">
                         <tr>
                           <th className="py-2.5 px-3 text-left">Issue No</th>
                           <th className="py-2.5 px-3 text-left">Date</th>
@@ -816,18 +816,18 @@ export default function KnittingPage() {
                           <th className="py-2.5 px-3 text-center">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-surface-divider">
                         {activeOrder.yarn_issues?.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="py-6 text-center text-slate-400">No yarn issued yet</td>
+                            <td colSpan={7} className="py-6 text-center text-ink-muted">No yarn issued yet</td>
                           </tr>
                         ) : (
                           activeOrder.yarn_issues?.map((yi: any) => (
-                            <tr key={yi.id} className="hover:bg-slate-50">
+                            <tr key={yi.id} className="hover:bg-surface-muted">
                               <td className="py-2 px-3 font-semibold text-indigo-700">{yi.issue_no}</td>
-                              <td className="py-2 px-3 text-slate-500">{fmtDate(yi.issue_date)}</td>
-                              <td className="py-2 px-3 font-medium text-slate-800">{yi.yarn_name}</td>
-                              <td className="py-2 px-3 tabular-nums text-slate-600">{yi.yarn_lot_no || '-'}</td>
+                              <td className="py-2 px-3 text-ink-secondary">{fmtDate(yi.issue_date)}</td>
+                              <td className="py-2 px-3 font-medium text-ink">{yi.yarn_name}</td>
+                              <td className="py-2 px-3 tabular-nums text-ink-secondary">{yi.yarn_lot_no || '-'}</td>
                               <td className="py-2 px-3 text-right">{yi.bags_cones}</td>
                               <td className="py-2 px-3 text-right font-bold text-indigo-700">{fmtDecimal(yi.issued_weight_kg)} kg</td>
                               <td className="py-2 px-3 text-center">
@@ -863,7 +863,7 @@ export default function KnittingPage() {
                     }}
                     className="p-4 bg-teal-50/40 rounded-xl border border-teal-100 space-y-3"
                   >
-                    <h4 className="flex items-center gap-1.5 text-small font-semibold uppercase tracking-wider text-slate-500">
+                    <h4 className="flex items-center gap-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">
                       <Plus size={14} /> Record Grey Fabric Roll Output & QC
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -964,9 +964,9 @@ export default function KnittingPage() {
                   </form>
 
                   {/* Rolls List Table */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="border border-surface-border rounded-xl overflow-hidden">
                     <table className="table w-full text-xs">
-                      <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <thead className="bg-surface-muted text-ink-secondary font-semibold border-b border-surface-border">
                         <tr>
                           <th className="py-2.5 px-3 text-left">Roll No</th>
                           <th className="py-2.5 px-3 text-left">Lot No</th>
@@ -978,18 +978,18 @@ export default function KnittingPage() {
                           <th className="py-2.5 px-3 text-center">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-surface-divider">
                         {activeOrder.roll_outputs?.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="py-6 text-center text-slate-400">No rolls produced yet</td>
+                            <td colSpan={8} className="py-6 text-center text-ink-muted">No rolls produced yet</td>
                           </tr>
                         ) : (
                           activeOrder.roll_outputs?.map((ro: any) => (
-                            <tr key={ro.id} className="hover:bg-slate-50">
+                            <tr key={ro.id} className="hover:bg-surface-muted">
                               <td className="py-2 px-3 font-semibold text-teal-700">{ro.roll_no}</td>
-                              <td className="py-2 px-3 tabular-nums text-slate-600">{ro.lot_no}</td>
-                              <td className="py-2 px-3 text-slate-500">{fmtDate(ro.production_date)}</td>
-                              <td className="py-2 px-3 text-slate-600">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
+                              <td className="py-2 px-3 tabular-nums text-ink-secondary">{ro.lot_no}</td>
+                              <td className="py-2 px-3 text-ink-secondary">{fmtDate(ro.production_date)}</td>
+                              <td className="py-2 px-3 text-ink-secondary">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
                               <td className="py-2 px-3 text-right font-medium">{fmtDecimal(ro.meters)} m</td>
                               <td className="py-2 px-3 text-right font-bold text-teal-700">{fmtDecimal(ro.weight_kg)} kg</td>
                               <td className="py-2 px-3 text-center">
@@ -1021,9 +1021,9 @@ export default function KnittingPage() {
       {/* PRINTABLE KNITTING WORK ORDER VOUCHER MODAL */}
       {showPrintVoucher && activeOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[96vh]">
-            <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
-              <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-surface-border my-auto flex flex-col max-h-[96vh]">
+            <div className="px-6 py-3 border-b border-surface-border flex items-center justify-between bg-surface-muted no-print">
+              <span className="font-bold text-sm text-ink flex items-center gap-2">
                 <Printer size={16} className="text-teal-600" /> Print Yarn Processing Order (Knitting)
               </span>
               <div className="flex items-center gap-2">
@@ -1045,62 +1045,62 @@ export default function KnittingPage() {
             </div>
 
             {/* Printable Document Sheet */}
-            <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
+            <div className="p-8 overflow-y-auto print-container text-ink bg-white font-sans text-xs">
               {/* Company & Document Title */}
               <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
-                <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
-                <p className="text-xs text-slate-500 font-medium">Yarn Processing Division — Work Order &amp; Yarn Issuance Card</p>
+                <h1 className="text-xl font-bold uppercase tracking-wider text-ink">GARMENT MANUFACTURING ERP</h1>
+                <p className="text-xs text-ink-secondary font-medium">Yarn Processing Division — Work Order &amp; Yarn Issuance Card</p>
                 <div className="inline-block mt-2 px-4 py-1 rounded bg-teal-100 text-teal-900 font-bold text-sm tracking-wide">
                   {activeOrder.sub_process || 'YARN PROCESSING'} WORK ORDER
                 </div>
               </div>
 
               {/* Order Meta Grid */}
-              <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
+              <div className="grid grid-cols-2 gap-4 border border-surface-input rounded-lg p-3.5 mb-4 bg-surface-muted/50">
                 <div className="space-y-1.5">
-                  <div><span className="text-slate-500 font-medium">KWO Order No:</span> <span className="font-bold text-slate-900 tabular-nums text-sm">{activeOrder.kwo_no}</span></div>
-                  <div><span className="text-slate-500 font-medium">Order Date:</span> <span className="font-semibold text-slate-800">{fmtDate(activeOrder.kwo_date)}</span></div>
-                  <div><span className="text-slate-500 font-medium">Sub-Process:</span> <span className="font-bold text-teal-700">{activeOrder.sub_process}</span></div>
-                  <div><span className="text-slate-500 font-medium">Knitting Vendor:</span> <span className="font-semibold text-slate-800">{activeOrder.vendor_name || 'In-House Unit'}</span></div>
+                  <div><span className="text-ink-secondary font-medium">KWO Order No:</span> <span className="font-bold text-ink tabular-nums text-sm">{activeOrder.kwo_no}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Order Date:</span> <span className="font-semibold text-ink">{fmtDate(activeOrder.kwo_date)}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Sub-Process:</span> <span className="font-bold text-teal-700">{activeOrder.sub_process}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Knitting Vendor:</span> <span className="font-semibold text-ink">{activeOrder.vendor_name || 'In-House Unit'}</span></div>
                 </div>
-                <div className="space-y-1.5 border-l border-slate-200 pl-4">
-                  <div><span className="text-slate-500 font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 tabular-nums">{activeOrder.io_no}</span></div>
-                  <div><span className="text-slate-500 font-medium">Customer PO No:</span> <span className="font-bold text-teal-800 tabular-nums">{activeOrder.customer_po_no || 'N/A'}</span></div>
-                  <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{activeOrder.style_code ? `${activeOrder.style_code} - ${activeOrder.style_name || ''}` : '-'}</span></div>
-                  <div><span className="text-slate-500 font-medium">Fabric:</span> <span className="font-semibold text-slate-800">{activeOrder.fabric_name || '-'}</span></div>
+                <div className="space-y-1.5 border-l border-surface-border pl-4">
+                  <div><span className="text-ink-secondary font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 tabular-nums">{activeOrder.io_no}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Customer PO No:</span> <span className="font-bold text-teal-800 tabular-nums">{activeOrder.customer_po_no || 'N/A'}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Style:</span> <span className="font-semibold text-ink">{activeOrder.style_code ? `${activeOrder.style_code} - ${activeOrder.style_name || ''}` : '-'}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Fabric:</span> <span className="font-semibold text-ink">{activeOrder.fabric_name || '-'}</span></div>
                 </div>
               </div>
 
               {/* Technical Specifications */}
-              <div className="border border-slate-300 rounded-lg p-3.5 mb-4">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-2 border-b border-slate-200 pb-1">
+              <div className="border border-surface-input rounded-lg p-3.5 mb-4">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-ink mb-2 border-b border-surface-border pb-1">
                   Technical Specifications & Yarn Plan
                 </h4>
                 <div className="grid grid-cols-4 gap-3 text-center">
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-micro text-slate-500 block uppercase font-medium">Fabric GSM</span>
+                  <div className="p-2 bg-surface-muted rounded border border-surface-border">
+                    <span className="text-micro text-ink-secondary block uppercase font-medium">Fabric GSM</span>
                     <span className="text-sm font-bold text-teal-700">{activeOrder.gsm || '-'} GSM</span>
                   </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-micro text-slate-500 block uppercase font-medium">Dia / Width</span>
-                    <span className="text-sm font-bold text-slate-800">{activeOrder.dia || '-'}</span>
+                  <div className="p-2 bg-surface-muted rounded border border-surface-border">
+                    <span className="text-micro text-ink-secondary block uppercase font-medium">Dia / Width</span>
+                    <span className="text-sm font-bold text-ink">{activeOrder.dia || '-'}</span>
                   </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-micro text-slate-500 block uppercase font-medium">Gauge / Loop</span>
-                    <span className="text-sm font-bold text-slate-800">{activeOrder.gauge || '-'} / {activeOrder.loop_length || '-'}</span>
+                  <div className="p-2 bg-surface-muted rounded border border-surface-border">
+                    <span className="text-micro text-ink-secondary block uppercase font-medium">Gauge / Loop</span>
+                    <span className="text-sm font-bold text-ink">{activeOrder.gauge || '-'} / {activeOrder.loop_length || '-'}</span>
                   </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-micro text-slate-500 block uppercase font-medium">Yarn Lot No</span>
-                    <span className="text-sm font-bold text-slate-800 tabular-nums">{activeOrder.yarn_lot_no || '-'}</span>
+                  <div className="p-2 bg-surface-muted rounded border border-surface-border">
+                    <span className="text-micro text-ink-secondary block uppercase font-medium">Yarn Lot No</span>
+                    <span className="text-sm font-bold text-ink tabular-nums">{activeOrder.yarn_lot_no || '-'}</span>
                   </div>
                 </div>
               </div>
 
               {/* Planned vs Actual Quantities */}
               <div className="grid grid-cols-4 gap-3 mb-4 text-center">
-                <div className="p-2.5 border border-slate-200 bg-slate-50 rounded-lg">
-                  <span className="text-micro uppercase font-bold text-slate-600 block">Planned Fabric</span>
-                  <span className="text-sm font-bold text-slate-900">{fmtDecimal(activeOrder.planned_fabric_kg)} kg</span>
+                <div className="p-2.5 border border-surface-border bg-surface-muted rounded-lg">
+                  <span className="text-micro uppercase font-bold text-ink-secondary block">Planned Fabric</span>
+                  <span className="text-sm font-bold text-ink">{fmtDecimal(activeOrder.planned_fabric_kg)} kg</span>
                 </div>
                 <div className="p-2.5 border border-indigo-200 bg-indigo-50 rounded-lg">
                   <span className="text-micro uppercase font-bold text-indigo-700 block">Total Yarn Issued</span>
@@ -1125,36 +1125,36 @@ export default function KnittingPage() {
 
               {/* Yarn Issued Lines Table */}
               <div className="mb-4">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-1.5">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-ink mb-1.5">
                   Yarn Issuance Details
                 </h4>
-                <table className="w-full border-collapse border border-slate-300 text-caption">
+                <table className="w-full border-collapse border border-surface-input text-caption">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-700">
-                      <th className="border border-slate-300 py-1 px-2 text-left">Issue No</th>
-                      <th className="border border-slate-300 py-1 px-2 text-left">Date</th>
-                      <th className="border border-slate-300 py-1 px-2 text-left">Yarn</th>
-                      <th className="border border-slate-300 py-1 px-2 text-left">Lot No</th>
-                      <th className="border border-slate-300 py-1 px-2 text-right">Bags/Cones</th>
-                      <th className="border border-slate-300 py-1 px-2 text-right">Issued Wt (kg)</th>
+                    <tr className="bg-surface-header text-ink">
+                      <th className="border border-surface-input py-1 px-2 text-left">Issue No</th>
+                      <th className="border border-surface-input py-1 px-2 text-left">Date</th>
+                      <th className="border border-surface-input py-1 px-2 text-left">Yarn</th>
+                      <th className="border border-surface-input py-1 px-2 text-left">Lot No</th>
+                      <th className="border border-surface-input py-1 px-2 text-right">Bags/Cones</th>
+                      <th className="border border-surface-input py-1 px-2 text-right">Issued Wt (kg)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {!activeOrder.yarn_issues || activeOrder.yarn_issues.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="border border-slate-300 py-2 text-center text-slate-400 italic">
+                        <td colSpan={6} className="border border-surface-input py-2 text-center text-ink-muted italic">
                           No yarn issued yet.
                         </td>
                       </tr>
                     ) : (
                       activeOrder.yarn_issues.map((yi: any, idx: number) => (
                         <tr key={yi.id || idx}>
-                          <td className="border border-slate-300 py-1 px-2 tabular-nums">{yi.issue_no}</td>
-                          <td className="border border-slate-300 py-1 px-2">{fmtDate(yi.issue_date)}</td>
-                          <td className="border border-slate-300 py-1 px-2">{yi.yarn_name}</td>
-                          <td className="border border-slate-300 py-1 px-2">{yi.yarn_lot_no || '-'}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right">{yi.bags_cones}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-semibold">{fmtDecimal(yi.issued_weight_kg)} kg</td>
+                          <td className="border border-surface-input py-1 px-2 tabular-nums">{yi.issue_no}</td>
+                          <td className="border border-surface-input py-1 px-2">{fmtDate(yi.issue_date)}</td>
+                          <td className="border border-surface-input py-1 px-2">{yi.yarn_name}</td>
+                          <td className="border border-surface-input py-1 px-2">{yi.yarn_lot_no || '-'}</td>
+                          <td className="border border-surface-input py-1 px-2 text-right">{yi.bags_cones}</td>
+                          <td className="border border-surface-input py-1 px-2 text-right font-semibold">{fmtDecimal(yi.issued_weight_kg)} kg</td>
                         </tr>
                       ))
                     )}
@@ -1164,36 +1164,36 @@ export default function KnittingPage() {
 
               {/* Grey Rolls Produced Table */}
               <div className="mb-6">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-1.5">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-ink mb-1.5">
                   Grey Fabric Rolls Produced
                 </h4>
-                <table className="w-full border-collapse border border-slate-300 text-caption">
+                <table className="w-full border-collapse border border-surface-input text-caption">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-700">
-                      <th className="border border-slate-300 py-1 px-2 text-left">Roll No</th>
-                      <th className="border border-slate-300 py-1 px-2 text-left">Lot No</th>
-                      <th className="border border-slate-300 py-1 px-2 text-center">Dia / GSM</th>
-                      <th className="border border-slate-300 py-1 px-2 text-right">Meters</th>
-                      <th className="border border-slate-300 py-1 px-2 text-right">Weight (kg)</th>
-                      <th className="border border-slate-300 py-1 px-2 text-center">QC Status</th>
+                    <tr className="bg-surface-header text-ink">
+                      <th className="border border-surface-input py-1 px-2 text-left">Roll No</th>
+                      <th className="border border-surface-input py-1 px-2 text-left">Lot No</th>
+                      <th className="border border-surface-input py-1 px-2 text-center">Dia / GSM</th>
+                      <th className="border border-surface-input py-1 px-2 text-right">Meters</th>
+                      <th className="border border-surface-input py-1 px-2 text-right">Weight (kg)</th>
+                      <th className="border border-surface-input py-1 px-2 text-center">QC Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {!activeOrder.roll_outputs || activeOrder.roll_outputs.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="border border-slate-300 py-2 text-center text-slate-400 italic">
+                        <td colSpan={6} className="border border-surface-input py-2 text-center text-ink-muted italic">
                           No produced rolls recorded yet.
                         </td>
                       </tr>
                     ) : (
                       activeOrder.roll_outputs.map((ro: any, idx: number) => (
                         <tr key={ro.id || idx}>
-                          <td className="border border-slate-300 py-1 px-2 tabular-nums font-semibold">{ro.roll_no}</td>
-                          <td className="border border-slate-300 py-1 px-2">{ro.lot_no}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-center">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right">{fmtDecimal(ro.meters)} m</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-semibold">{fmtDecimal(ro.weight_kg)} kg</td>
-                          <td className="border border-slate-300 py-1 px-2 text-center font-semibold text-emerald-700">{ro.qc_status}</td>
+                          <td className="border border-surface-input py-1 px-2 tabular-nums font-semibold">{ro.roll_no}</td>
+                          <td className="border border-surface-input py-1 px-2">{ro.lot_no}</td>
+                          <td className="border border-surface-input py-1 px-2 text-center">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
+                          <td className="border border-surface-input py-1 px-2 text-right">{fmtDecimal(ro.meters)} m</td>
+                          <td className="border border-surface-input py-1 px-2 text-right font-semibold">{fmtDecimal(ro.weight_kg)} kg</td>
+                          <td className="border border-surface-input py-1 px-2 text-center font-semibold text-emerald-700">{ro.qc_status}</td>
                         </tr>
                       ))
                     )}
@@ -1202,22 +1202,22 @@ export default function KnittingPage() {
               </div>
 
               {/* Signatures */}
-              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-micro">
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-surface-input text-center text-micro">
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">Prepared By</span>
+                  <span className="font-semibold text-ink">Prepared By</span>
                 </div>
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">Knitting Master</span>
+                  <span className="font-semibold text-ink">Knitting Master</span>
                 </div>
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">QC Inspector</span>
+                  <span className="font-semibold text-ink">QC Inspector</span>
                 </div>
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">Authorized Signatory</span>
+                  <span className="font-semibold text-ink">Authorized Signatory</span>
                 </div>
               </div>
             </div>

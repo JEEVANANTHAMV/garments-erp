@@ -101,7 +101,7 @@ function EntryEditor({ doc, kind, canPost, onClose, onSaved }: { doc: any | null
           onChange={(e) => setH({ ...h, rejection_warehouse_id: e.target.value })} options={toOptions(rejWhs as any)} />}
         <Input label="Remarks" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
       </FormSection>
-      <div className="mb-2 flex items-end justify-between border-b border-slate-100 pb-1.5">
+      <div className="mb-2 flex items-end justify-between border-b border-surface-divider pb-1.5">
         <h3 className={tableHead}>Items</h3>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" id="scrap-garment-line" onClick={() => setLines((ls) => [...ls, { source_ref: null, material_type: 'GARMENT', item_name: '', item_description: '', color_name: '', sizes: '', uom_id: 1, stock_qty: 0, qty: '', rate: '', reason: '' }])}>
@@ -111,11 +111,11 @@ function EntryEditor({ doc, kind, canPost, onClose, onSaved }: { doc: any | null
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>{['Item', 'Description', 'Colour', 'Sizes', 'UOM', 'Stock', 'Qty', 'Rate', 'Value', 'Reason', ''].map((t) => <th key={t} className={`${TH} ${/Stock|Qty|Rate|Value/.test(t) ? 'text-right' : 'text-left'}`}>{t}</th>)}</tr></thead>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>{['Item', 'Description', 'Colour', 'Sizes', 'UOM', 'Stock', 'Qty', 'Rate', 'Value', 'Reason', ''].map((t) => <th key={t} className={`${TH} ${/Stock|Qty|Rate|Value/.test(t) ? 'text-right' : 'text-left'}`}>{t}</th>)}</tr></thead>
           <tbody>
             {lines.map((l, i) => (
-              <tr key={l.source_ref ?? `g${i}`} className="border-t border-slate-100 scrap-line">
-                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-caption text-slate-400">{l.material_type.toLowerCase()}</span></> : <span className="text-slate-500">Garment / WIP</span>}</td>
+              <tr key={l.source_ref ?? `g${i}`} className="border-t border-surface-divider scrap-line">
+                <td className={`${TD} font-medium`}>{l.source_ref ? <>{l.item_name}<span className="ml-1 text-caption text-ink-muted">{l.material_type.toLowerCase()}</span></> : <span className="text-ink-secondary">Garment / WIP</span>}</td>
                 <td className={TD}><input className="input w-48 line-desc" value={l.item_description} placeholder={l.source_ref ? '' : 'e.g. Sewing rejects — style / part'} onChange={(e) => set(i, { item_description: e.target.value })} /></td>
                 <td className={TD}><input className="input w-24" value={l.color_name} onChange={(e) => set(i, { color_name: e.target.value })} /></td>
                 <td className={TD}><input className="input w-16" value={l.sizes} onChange={(e) => set(i, { sizes: e.target.value })} /></td>
@@ -125,10 +125,10 @@ function EntryEditor({ doc, kind, canPost, onClose, onSaved }: { doc: any | null
                 <td className={TD}><input className="input w-24 text-right" type="number" min="0" step="any" value={l.rate} onChange={(e) => set(i, { rate: e.target.value })} /></td>
                 <td className={`${TD} text-right tabular-nums`}>{fmtDecimal(num(l.qty) * num(l.rate), 2)}</td>
                 <td className={TD}><input className="input w-36" value={l.reason} onChange={(e) => set(i, { reason: e.target.value })} /></td>
-                <td className={TD}><button className="rounded p-1 text-slate-400 hover:text-red-600" aria-label="Remove item" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button></td>
+                <td className={TD}><button className="rounded p-1 text-ink-muted hover:text-red-600" aria-label="Remove item" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button></td>
               </tr>
             ))}
-            {!lines.length && <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-400">Pick stock items or add garment / WIP pieces</td></tr>}
+            {!lines.length && <tr><td colSpan={11} className="px-3 py-8 text-center text-ink-muted">Pick stock items or add garment / WIP pieces</td></tr>}
           </tbody>
         </table>
       </div>

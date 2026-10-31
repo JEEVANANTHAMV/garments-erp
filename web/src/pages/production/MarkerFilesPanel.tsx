@@ -21,7 +21,7 @@ export interface MarkerFile {
 
 export function MarkerThumb({ url, size = 28, alt = 'marker' }: { url?: string | null; size?: number; alt?: string }) {
   if (!url) return null;
-  return <img src={url} alt={alt} loading="lazy" style={{ width: size, height: size }} className="rounded border border-slate-200 bg-white object-contain" />;
+  return <img src={url} alt={alt} loading="lazy" style={{ width: size, height: size }} className="rounded border border-surface-border bg-white object-contain" />;
 }
 
 export function MarkerFilesPanel({ cadId, markerRef, files, onFiles, onApply, disabled }: {
@@ -62,17 +62,17 @@ export function MarkerFilesPanel({ cadId, markerRef, files, onFiles, onApply, di
         <div className="shrink-0">
           {pic ? (
             <button type="button" onClick={() => setZoom(pic)} title="Click to enlarge" className="block" id={`marker-pic-${markerRef}`}>
-              <img src={pic} alt={`Marker ${markerRef}`} loading="lazy" className="h-36 w-36 rounded border border-slate-300 bg-white object-contain" />
+              <img src={pic} alt={`Marker ${markerRef}`} loading="lazy" className="h-36 w-36 rounded border border-surface-input bg-white object-contain" />
             </button>
           ) : (
-            <div className="flex h-36 w-36 items-center justify-center rounded border border-dashed border-slate-300 bg-white p-2 text-center text-caption text-slate-400">
+            <div className="flex h-36 w-36 items-center justify-center rounded border border-dashed border-surface-input bg-white p-2 text-center text-caption text-ink-muted">
               No marker picture — upload the marker report PDF
             </div>
           )}
         </div>
         <div className="min-w-[260px] flex-1 space-y-2 text-xs">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-bold text-slate-700">Marker report / CAD file</span>
+            <span className="font-bold text-ink">Marker report / CAD file</span>
             {cadId ? (
               <label className={`cursor-pointer rounded border border-indigo-300 bg-white px-2 py-1 font-semibold text-indigo-700 hover:bg-indigo-50 ${busy || disabled ? 'pointer-events-none opacity-50' : ''}`}>
                 {busy ? 'Uploading…' : 'Upload PDF / CAD file'}
@@ -99,15 +99,15 @@ export function MarkerFilesPanel({ cadId, markerRef, files, onFiles, onApply, di
             <ul className="space-y-0.5">
               {mine.map((f) => (
                 <li key={f.id} className="flex items-center gap-2">
-                  <span className={`rounded px-1 text-micro font-bold ${f.kind === 'REPORT' ? 'bg-indigo-100 text-indigo-800' : f.kind === 'IMAGE' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>{f.kind === 'REPORT' ? 'PDF' : f.kind}</span>
+                  <span className={`rounded px-1 text-micro font-bold ${f.kind === 'REPORT' ? 'bg-indigo-100 text-indigo-800' : f.kind === 'IMAGE' ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-border text-ink'}`}>{f.kind === 'REPORT' ? 'PDF' : f.kind}</span>
                   <a href={f.file_url} target="_blank" rel="noreferrer" className="truncate text-brand-700 hover:underline">{f.file_name}</a>
-                  <span className="text-slate-400">{f.file_size ? `${Math.round(f.file_size / 1024)} KB` : ''} · {fmtDateTime(f.uploaded_at)}</span>
+                  <span className="text-ink-muted">{f.file_size ? `${Math.round(f.file_size / 1024)} KB` : ''} · {fmtDateTime(f.uploaded_at)}</span>
                   {!disabled && <button type="button" className="text-red-500" onClick={() => void remove(f)}>×</button>}
                 </li>
               ))}
             </ul>
           )}
-          {mine.some((f) => f.kind === 'CAD') && !pic && <p className="text-caption text-slate-500">A CAD file (.ord …) is kept for reference; its marker picture comes from the marker report PDF.</p>}
+          {mine.some((f) => f.kind === 'CAD') && !pic && <p className="text-caption text-ink-secondary">A CAD file (.ord …) is kept for reference; its marker picture comes from the marker report PDF.</p>}
         </div>
       </div>
       {zoom && createPortal(

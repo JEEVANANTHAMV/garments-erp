@@ -105,7 +105,7 @@ function AuditEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: () =
         <Select label="Location" required id="audit-wh" value={h.warehouse_id} disabled={lines.length > 0} placeholder="Select…" onChange={(e) => setH({ ...h, warehouse_id: e.target.value })} options={toOptions(whs.data)} />
         <Input label="Remarks" value={h.remarks} onChange={(e) => setH({ ...h, remarks: e.target.value })} />
       </FormSection>
-      <div className="mb-2 flex flex-wrap items-end justify-between gap-2 border-b border-slate-100 pb-1.5">
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-2 border-b border-surface-divider pb-1.5">
         <h3 className={tableHead}>Count sheet</h3>
         <div className="flex gap-2">
           {h.audit_type === 'GENERAL' && <Button size="sm" variant="secondary" onClick={() => setLines((ls) => [...ls, { source_ref: null, item_name: '', item_description: '', uom_id: null, system_qty: 0, rate: 0, physical_qty: '', process_name: '', remarks: '' }])}>
@@ -116,29 +116,29 @@ function AuditEditor({ doc, onClose, onSaved }: { doc: any | null; onClose: () =
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-500"><tr>
+          <thead className="bg-surface-muted text-ink-secondary"><tr>
             {['Item', 'Lot / roll', 'GRN', 'Colour', 'Job', 'UOM', 'ERP stock', 'Physical', 'Difference', 'Rate', 'Value', 'Process', 'Remarks', ''].map((t) => <th key={t} className={`${TH} ${/stock|Physical|Difference|Rate|Value/.test(t) ? 'text-right' : 'text-left'}`}>{t}</th>)}
           </tr></thead>
           <tbody>
             {lines.map((l, i) => {
               const d = diff(l);
               return (
-                <tr key={l.source_ref ?? `new${i}`} className="border-t border-slate-100 audit-line">
+                <tr key={l.source_ref ?? `new${i}`} className="border-t border-surface-divider audit-line">
                   <td className={`${TD} font-medium`}>{l.source_ref ? l.item_name : <input className="input w-48" placeholder="Item name" value={l.item_description ?? ''} onChange={(e) => set(i, { item_description: e.target.value, item_name: e.target.value })} />}</td>
                   <td className={TD}>{l.lot_no || '—'}</td><td className={TD}>{l.grn_no || '—'}</td><td className={TD}>{l.color_name || '—'}</td><td className={TD}>{l.job_no || '—'}</td>
                   <td className={TD}>{l.source_ref ? l.uom_code : <select className="input w-20" value={l.uom_id ?? ''} onChange={(e) => set(i, { uom_id: Number(e.target.value) || null })}><option value="">—</option>{(uoms.data ?? []).map((u) => <option key={u.id} value={u.id}>{String(u.code)}</option>)}</select>}</td>
                   <td className={`${TD} text-right tabular-nums`}>{qtyFmt(l.system_qty)}</td>
                   <td className={TD}><input className="input w-24 text-right audit-physical" type="number" min="0" step="any" value={l.physical_qty} onChange={(e) => set(i, { physical_qty: e.target.value })} /></td>
-                  <td className={`${TD} text-right tabular-nums font-semibold ${d < 0 ? 'text-red-700' : d > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>{l.physical_qty === '' ? '—' : qtyFmt(d)}</td>
+                  <td className={`${TD} text-right tabular-nums font-semibold ${d < 0 ? 'text-red-700' : d > 0 ? 'text-emerald-700' : 'text-ink-muted'}`}>{l.physical_qty === '' ? '—' : qtyFmt(d)}</td>
                   <td className={`${TD} text-right tabular-nums`}>{fmtDecimal(l.rate, 2)}</td>
                   <td className={`${TD} text-right tabular-nums`}>{l.physical_qty === '' ? '—' : fmtDecimal(d * l.rate, 2)}</td>
                   <td className={TD}><input className="input w-24" value={l.process_name} onChange={(e) => set(i, { process_name: e.target.value })} /></td>
                   <td className={TD}><input className="input w-32" value={l.remarks} onChange={(e) => set(i, { remarks: e.target.value })} /></td>
-                  <td className={TD}><button className="rounded p-1 text-slate-400 hover:text-red-600" aria-label="Remove line" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button></td>
+                  <td className={TD}><button className="rounded p-1 text-ink-muted hover:text-red-600" aria-label="Remove line" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button></td>
                 </tr>
               );
             })}
-            {!lines.length && <tr><td colSpan={14} className="px-3 py-8 text-center text-slate-400">Choose type and location, then Load all stock or Pick items</td></tr>}
+            {!lines.length && <tr><td colSpan={14} className="px-3 py-8 text-center text-ink-muted">Choose type and location, then Load all stock or Pick items</td></tr>}
           </tbody>
         </table>
       </div>

@@ -119,7 +119,7 @@ function SampleForm({ sample, onSaved }: { sample?: any; onSaved?: () => void })
         )}
       </FormSection>
       {editable && (
-        <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-surface-divider pt-3">
           {isNew && <Button variant="secondary" onClick={() => nav('/sales/samples?tab=register')}>Cancel</Button>}
           <Button variant={isNew ? 'secondary' : 'primary'} loading={saving} id="sample-save" onClick={() => void save(false)}><Save size={14} />{isNew ? 'Save draft' : 'Save changes'}</Button>
           {isNew && <Button loading={saving} id="sample-save-submit" onClick={() => void save(true)}><Send size={14} />Save &amp; submit</Button>}
@@ -243,14 +243,14 @@ function Overview({ s, refresh }: { s: any; refresh: () => void }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Details">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 text-body">
-            <dt className="text-slate-500">Created</dt><dd>{fmtDateTime(s.created_at)} · {s.created_by_name ?? '—'}</dd>
-            <dt className="text-slate-500">Merchandiser</dt><dd>{s.merchandiser_name ?? '—'}</dd>
-            <dt className="text-slate-500">Coordinator</dt><dd>{s.coordinator_name ?? '—'}</dd>
-            <dt className="text-slate-500">Stages done</dt><dd>{s.completed_date ? fmtDate(s.completed_date) : '—'}</dd>
-            <dt className="text-slate-500">Buyer decision</dt><dd>{s.buyer_decision ? s.buyer_decision.replace(/_/g, ' ').toLowerCase() : '—'}</dd>
-            <dt className="text-slate-500">Last QC</dt><dd>{s.last_qc_result ?? '—'}</dd>
-            {s.cancel_reason && <><dt className="text-slate-500">Cancel reason</dt><dd>{s.cancel_reason}</dd></>}
-            <dt className="text-slate-500">Output (this revision)</dt><dd>{fmtNumber(s.progress.good_qty)} good · {fmtNumber(s.progress.reject_qty)} reject · {fmtNumber(s.progress.rework_qty)} rework</dd>
+            <dt className="text-ink-secondary">Created</dt><dd>{fmtDateTime(s.created_at)} · {s.created_by_name ?? '—'}</dd>
+            <dt className="text-ink-secondary">Merchandiser</dt><dd>{s.merchandiser_name ?? '—'}</dd>
+            <dt className="text-ink-secondary">Coordinator</dt><dd>{s.coordinator_name ?? '—'}</dd>
+            <dt className="text-ink-secondary">Stages done</dt><dd>{s.completed_date ? fmtDate(s.completed_date) : '—'}</dd>
+            <dt className="text-ink-secondary">Buyer decision</dt><dd>{s.buyer_decision ? s.buyer_decision.replace(/_/g, ' ').toLowerCase() : '—'}</dd>
+            <dt className="text-ink-secondary">Last QC</dt><dd>{s.last_qc_result ?? '—'}</dd>
+            {s.cancel_reason && <><dt className="text-ink-secondary">Cancel reason</dt><dd>{s.cancel_reason}</dd></>}
+            <dt className="text-ink-secondary">Output (this revision)</dt><dd>{fmtNumber(s.progress.good_qty)} good · {fmtNumber(s.progress.reject_qty)} reject · {fmtNumber(s.progress.rework_qty)} rework</dd>
           </dl>
         </Card>
         <Attachments s={s} refresh={refresh} />
@@ -285,11 +285,11 @@ function Attachments({ s, refresh }: { s: any; refresh: () => void }) {
           <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.svg" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} /></label>
       </div>}>
       <div className="p-3">
-        {!s.attachments.length && <p className="py-4 text-center text-small text-slate-400">No files yet (PDF / images, up to 10 MB)</p>}
+        {!s.attachments.length && <p className="py-4 text-center text-small text-ink-muted">No files yet (PDF / images, up to 10 MB)</p>}
         {s.attachments.map((a: any) => (
-          <div key={a.id} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-body last:border-0">
+          <div key={a.id} className="flex items-center justify-between border-b border-surface-divider py-1.5 text-body last:border-0">
             <span><Badge tone="slate">{String(a.doc_type).replace(/_/g, ' ').toLowerCase()}</Badge> <a className="text-brand-700 hover:underline" href={a.file_url} target="_blank" rel="noreferrer">{a.file_name ?? a.file_url}</a></span>
-            <span className="text-caption text-slate-400">{a.uploaded_by_name} · {fmtDateTime(a.uploaded_at)}{can('SAMPLE.UPDATE') && <button className="ml-2 text-red-500 hover:text-red-700" onClick={() => void remove(a)}>remove</button>}</span>
+            <span className="text-caption text-ink-muted">{a.uploaded_by_name} · {fmtDateTime(a.uploaded_at)}{can('SAMPLE.UPDATE') && <button className="ml-2 text-red-500 hover:text-red-700" onClick={() => void remove(a)}>remove</button>}</span>
           </div>
         ))}
       </div>
@@ -305,7 +305,7 @@ function Workflow({ s, refresh }: { s: any; refresh: () => void }) {
   const revs = useMemo(() => [...new Set<number>(s.processes.map((p: any) => Number(p.revision_no)))].sort((a, b) => b - a), [s.processes]);
   const running = ['SUBMITTED', 'IN_PROGRESS', 'ON_HOLD'].includes(s.status);
   const reopenable = running || ['PENDING_INTERNAL_APPROVAL', 'INTERNALLY_APPROVED'].includes(s.status);
-  if (!s.processes.length) return <div className="card p-8 text-center text-body text-slate-500">{s.status === 'DRAFT' ? 'Submit the request to create its stages.' : 'No stages yet — use "Create stages".'}</div>;
+  if (!s.processes.length) return <div className="card p-8 text-center text-body text-ink-secondary">{s.status === 'DRAFT' ? 'Submit the request to create its stages.' : 'No stages yet — use "Create stages".'}</div>;
   return (
     <div className="space-y-4" id="sample-stages">
       {revs.map((rev) => {
@@ -313,7 +313,7 @@ function Workflow({ s, refresh }: { s: any; refresh: () => void }) {
         const current = rev === Number(s.revision_no);
         const r = s.revisions.find((x: any) => Number(x.revision_no) === rev);
         return (
-          <Card key={rev} title={<span>{rev === 0 ? 'First build' : `Revision ${rev}`}{!current && <span className="ml-2 text-caption font-normal text-slate-400">earlier revision — read only</span>}</span>}
+          <Card key={rev} title={<span>{rev === 0 ? 'First build' : `Revision ${rev}`}{!current && <span className="ml-2 text-caption font-normal text-ink-muted">earlier revision — read only</span>}</span>}
             subtitle={r?.comments ?? undefined}>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -322,18 +322,18 @@ function Workflow({ s, refresh }: { s: any; refresh: () => void }) {
                 <tbody>
                   {rows.map((p: any) => (
                     <tr key={p.id} className={clsx('align-top', current ? 'row-hover' : 'opacity-70')} data-stage={p.stage_code}>
-                      <td className="td text-caption text-slate-400">{p.step_group}</td>
-                      <td className="td"><p className="font-medium">{p.stage_name}{!Number(p.is_mandatory) && <span className="ml-1 text-caption text-slate-400">optional</span>}</p>
+                      <td className="td text-caption text-ink-muted">{p.step_group}</td>
+                      <td className="td"><p className="font-medium">{p.stage_name}{!Number(p.is_mandatory) && <span className="ml-1 text-caption text-ink-muted">optional</span>}</p>
                         {p.rework_of_stage && <p className="text-caption text-amber-700">rework of {p.rework_of_stage}</p>}
-                        {p.blocked_by?.length > 0 && <p className="text-caption text-slate-400">after {p.blocked_by.join(', ')}</p>}
+                        {p.blocked_by?.length > 0 && <p className="text-caption text-ink-muted">after {p.blocked_by.join(', ')}</p>}
                         {p.hold_reason && p.status === 'ON_HOLD' && <p className="text-caption text-amber-700">Hold: {p.hold_reason}</p>}
-                        {p.skip_reason && <p className="text-caption text-slate-500">Skipped: {p.skip_reason}</p>}</td>
+                        {p.skip_reason && <p className="text-caption text-ink-secondary">Skipped: {p.skip_reason}</p>}</td>
                       <td className="td"><ProcStatus value={p.status} ready={p.ready} /></td>
-                      <td className="td text-small"><p>{p.dept_name ?? '—'}</p><p className={!p.assigned_user_name && !p.assigned_contractor_name && current && !['COMPLETED', 'SKIPPED', 'CANCELLED'].includes(p.status) ? 'font-semibold text-red-600' : 'text-slate-500'}>
+                      <td className="td text-small"><p>{p.dept_name ?? '—'}</p><p className={!p.assigned_user_name && !p.assigned_contractor_name && current && !['COMPLETED', 'SKIPPED', 'CANCELLED'].includes(p.status) ? 'font-semibold text-red-600' : 'text-ink-secondary'}>
                         {p.assigned_user_name ?? p.assigned_contractor_name ?? 'no owner'}{p.assigned_contractor_name && p.assigned_user_name ? ` · ${p.assigned_contractor_name}` : ''}</p>
-                        {p.planned_date && <p className="text-caption text-slate-400">planned {fmtDate(p.planned_date)}</p>}</td>
-                      <td className="td text-small">{p.started_at ? fmtDateTime(p.started_at) : '—'}<p className="text-slate-500">{p.completed_at ? fmtDateTime(p.completed_at) : ''}</p></td>
-                      <td className="td text-right text-small tabular-nums">{p.age_days != null ? `${p.age_days} d` : '—'}<p className={p.sla_breached ? 'font-semibold text-red-600' : 'text-slate-400'}>{p.sla_days != null ? `SLA ${Number(p.sla_days)} d` : ''}{p.sla_breached ? ' · late' : ''}</p></td>
+                        {p.planned_date && <p className="text-caption text-ink-muted">planned {fmtDate(p.planned_date)}</p>}</td>
+                      <td className="td text-small">{p.started_at ? fmtDateTime(p.started_at) : '—'}<p className="text-ink-secondary">{p.completed_at ? fmtDateTime(p.completed_at) : ''}</p></td>
+                      <td className="td text-right text-small tabular-nums">{p.age_days != null ? `${p.age_days} d` : '—'}<p className={p.sla_breached ? 'font-semibold text-red-600' : 'text-ink-muted'}>{p.sla_days != null ? `SLA ${Number(p.sla_days)} d` : ''}{p.sla_breached ? ' · late' : ''}</p></td>
                       <td className="td text-right text-small tabular-nums">{p.good_qty != null || p.reject_qty != null ? `${fmtNumber(p.good_qty ?? 0)} · ${fmtNumber(p.reject_qty ?? 0)} · ${fmtNumber(p.rework_qty ?? 0)}` : '—'}</td>
                       <td className="td text-right text-small tabular-nums">{p.labour_minutes ? fmtNumber(p.labour_minutes) : '—'}</td>
                       {current && (
@@ -432,18 +432,18 @@ function QcBuyer({ s, openQc }: { s: any; openQc: () => void }) {
           <table className="w-full" id="qc-list">
             <thead><tr><th className="th">Date · rev</th><th className="th">Stage</th><th className="th text-right">Checked · pass · rej · rw</th><th className="th">Measurements</th><th className="th">Defects</th><th className="th">Result</th><th className="th">Remarks / by</th></tr></thead>
             <tbody>
-              {!s.qc_inspections.length && <tr><td className="td py-6 text-center text-slate-400" colSpan={7}>No inspection yet</td></tr>}
+              {!s.qc_inspections.length && <tr><td className="td py-6 text-center text-ink-muted" colSpan={7}>No inspection yet</td></tr>}
               {s.qc_inspections.map((q: any) => {
                 const defects = typeof q.defects === 'string' ? JSON.parse(q.defects) : q.defects;
                 return (
                   <tr key={q.id} className="align-top">
-                    <td className="td text-small">{fmtDate(q.inspection_date)}<p className="text-slate-400">rev {q.revision_no}</p></td>
+                    <td className="td text-small">{fmtDate(q.inspection_date)}<p className="text-ink-muted">rev {q.revision_no}</p></td>
                     <td className="td text-small">{q.stage_name ?? '—'}</td>
                     <td className="td text-right text-small tabular-nums">{fmtNumber(q.checked_qty)} · {fmtNumber(q.passed_qty)} · {fmtNumber(q.rejected_qty)} · {fmtNumber(q.rework_qty)}</td>
                     <td className="td text-small">{String(q.measurement_result).replace(/_/g, ' ').toLowerCase()}</td>
-                    <td className="td text-small">{defects?.length ? defects.map((d: any, i: number) => <p key={i}>{d.defect_name} <span className="text-slate-400">({d.severity.toLowerCase()} × {d.qty})</span></p>) : '—'}</td>
-                    <td className="td"><Badge tone={q.result === 'PASS' ? 'green' : 'red'}>{q.result}</Badge><p className="mt-0.5 text-caption text-slate-500">{q.disposition.toLowerCase()}{q.rework_stage_name ? ` → ${q.rework_stage_name}` : ''}</p></td>
-                    <td className="td max-w-[220px] text-small text-slate-600">{q.remarks}<p className="text-caption text-slate-400">{q.inspected_by_name}</p></td>
+                    <td className="td text-small">{defects?.length ? defects.map((d: any, i: number) => <p key={i}>{d.defect_name} <span className="text-ink-muted">({d.severity.toLowerCase()} × {d.qty})</span></p>) : '—'}</td>
+                    <td className="td"><Badge tone={q.result === 'PASS' ? 'green' : 'red'}>{q.result}</Badge><p className="mt-0.5 text-caption text-ink-secondary">{q.disposition.toLowerCase()}{q.rework_stage_name ? ` → ${q.rework_stage_name}` : ''}</p></td>
+                    <td className="td max-w-[220px] text-small text-ink-secondary">{q.remarks}<p className="text-caption text-ink-muted">{q.inspected_by_name}</p></td>
                   </tr>
                 );
               })}
@@ -453,24 +453,24 @@ function QcBuyer({ s, openQc }: { s: any; openQc: () => void }) {
       </Card>
       <Card title="Buyer submissions">
         <div className="p-3 text-body" id="submission-list">
-          {!s.submissions.length && <p className="py-4 text-center text-slate-400">Not sent yet</p>}
+          {!s.submissions.length && <p className="py-4 text-center text-ink-muted">Not sent yet</p>}
           {s.submissions.map((x: any) => (
-            <div key={x.id} className="border-b border-slate-100 py-1.5 last:border-0">
+            <div key={x.id} className="border-b border-surface-divider py-1.5 last:border-0">
               <p><b>{fmtDate(x.submission_date)}</b> · rev {x.revision_no} · {fmtNumber(x.qty)} pcs {x.courier_name ? `· ${x.courier_name}` : ''} {x.tracking_no ? `#${x.tracking_no}` : ''}</p>
-              <p className="text-caption text-slate-500">{x.sent_to ? `to ${x.sent_to} · ` : ''}{x.remarks ?? ''} {x.recorded_by_name}</p>
+              <p className="text-caption text-ink-secondary">{x.sent_to ? `to ${x.sent_to} · ` : ''}{x.remarks ?? ''} {x.recorded_by_name}</p>
             </div>
           ))}
         </div>
       </Card>
       <Card title="Decisions">
         <div className="p-3 text-body" id="decision-list">
-          {!s.decisions.length && <p className="py-4 text-center text-slate-400">No decision yet</p>}
+          {!s.decisions.length && <p className="py-4 text-center text-ink-muted">No decision yet</p>}
           {s.decisions.map((x: any) => (
-            <div key={x.id} className="border-b border-slate-100 py-1.5 last:border-0">
+            <div key={x.id} className="border-b border-surface-divider py-1.5 last:border-0">
               <p><Badge tone={x.decision === 'APPROVED' ? 'green' : x.decision === 'REJECTED' ? 'red' : 'amber'}>{x.stage === 'BUYER' ? 'Buyer' : 'Internal'} · {x.decision.replace(/_/g, ' ').toLowerCase()}</Badge>
                 <span className="ml-2">{fmtDate(x.decision_date)} · rev {x.revision_no}</span></p>
-              {x.comments && <p className="mt-0.5 text-slate-600">{x.comments}</p>}
-              <p className="text-caption text-slate-400">{x.decided_by_name}</p>
+              {x.comments && <p className="mt-0.5 text-ink-secondary">{x.comments}</p>}
+              <p className="text-caption text-ink-muted">{x.decided_by_name}</p>
             </div>
           ))}
         </div>
@@ -478,8 +478,8 @@ function QcBuyer({ s, openQc }: { s: any; openQc: () => void }) {
       <Card title="Revisions" className="lg:col-span-2">
         <div className="p-3 text-body">
           {s.revisions.map((r: any) => (
-            <p key={r.id} className="border-b border-slate-100 py-1.5 last:border-0"><b>{r.revision_no === 0 ? 'First build' : `Revision ${r.revision_no}`}</b> · {r.revision_type.toLowerCase()} · <Badge tone="slate">{r.status.toLowerCase()}</Badge>
-              <span className="ml-2 text-slate-500">{fmtDateTime(r.requested_at)} {r.requested_by_name}</span>{r.comments && <span className="block text-slate-600">{r.comments}</span>}</p>
+            <p key={r.id} className="border-b border-surface-divider py-1.5 last:border-0"><b>{r.revision_no === 0 ? 'First build' : `Revision ${r.revision_no}`}</b> · {r.revision_type.toLowerCase()} · <Badge tone="slate">{r.status.toLowerCase()}</Badge>
+              <span className="ml-2 text-ink-secondary">{fmtDateTime(r.requested_at)} {r.requested_by_name}</span>{r.comments && <span className="block text-ink-secondary">{r.comments}</span>}</p>
           ))}
         </div>
       </Card>
@@ -518,7 +518,7 @@ function SubmissionModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; 
         <Input className="sm:col-span-2" label="Sent to (buyer contact / office)" value={v.sent_to} onChange={(e) => setV({ ...v, sent_to: e.target.value })} />
         <Textarea className="sm:col-span-2" label="Remarks" value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} />
       </div>
-      <p className="mt-2 text-small text-slate-500">Courier cost: enter it in Costing (category Courier) or import the courier bill booked to this sample.</p>
+      <p className="mt-2 text-small text-ink-secondary">Courier cost: enter it in Costing (category Courier) or import the courier bill booked to this sample.</p>
     </Modal>
   );
 }
@@ -540,13 +540,13 @@ function RevisionModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; on
         <Input label="New target date" type="date" value={v.target_date} onChange={(e) => setV({ ...v, target_date: e.target.value })} hint="Leave blank to keep the target" />
         <Textarea className="sm:col-span-2" label="What has to change" required id="revision-comments" value={v.comments} onChange={(e) => setV({ ...v, comments: e.target.value })} />
       </div>
-      <p className="mb-1 mt-3 text-small font-semibold text-slate-600">Stages to redo (workflow v{wf?.version_no ?? '—'})</p>
+      <p className="mb-1 mt-3 text-small font-semibold text-ink-secondary">Stages to redo (workflow v{wf?.version_no ?? '—'})</p>
       {types.isLoading ? <LoadingBlock rows={2} /> : (
         <div className="grid gap-1 sm:grid-cols-2">
           {stages.map((x: any) => (
             <label key={x.id} className="flex items-center gap-2 text-body">
               <input type="checkbox" checked={sel.includes(Number(x.id))} onChange={(e) => setPicked(e.target.checked ? [...sel, Number(x.id)] : sel.filter((y) => y !== Number(x.id)))} />
-              {x.stage_name}{!Number(x.is_mandatory) && <span className="text-caption text-slate-400">optional</span>}
+              {x.stage_name}{!Number(x.is_mandatory) && <span className="text-caption text-ink-muted">optional</span>}
             </label>
           ))}
         </div>
@@ -588,7 +588,7 @@ function QcModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; onClose:
       </div>
       <div className="mt-3 grid gap-4 lg:grid-cols-2">
         <div>
-          <div className="mb-1 flex items-center justify-between"><p className="text-small font-semibold text-slate-600">Defects</p><button className="text-small text-brand-700" onClick={() => setDefects([...defects, { defect_id: '', defect_name: '', severity: 'MINOR', qty: 1 }])}>+ add</button></div>
+          <div className="mb-1 flex items-center justify-between"><p className="text-small font-semibold text-ink-secondary">Defects</p><button className="text-small text-brand-700" onClick={() => setDefects([...defects, { defect_id: '', defect_name: '', severity: 'MINOR', qty: 1 }])}>+ add</button></div>
           {defects.map((d, i) => (
             <div key={i} className="mb-1 grid grid-cols-[1fr_90px_60px_20px] gap-1">
               <select className="input h-8 py-0 text-small" value={d.defect_id} onChange={(e) => { const x = (defectsLk.data ?? []).find((y) => String(y.id) === e.target.value) as any; const n = [...defects]; n[i] = { ...d, defect_id: e.target.value, defect_name: x?.label ?? '', severity: x?.defect_type ?? d.severity }; setDefects(n); }}>
@@ -600,7 +600,7 @@ function QcModal({ s, busy, onClose, onSave }: { s: any; busy: boolean; onClose:
           ))}
         </div>
         <div>
-          <div className="mb-1 flex items-center justify-between"><p className="text-small font-semibold text-slate-600">Measurements</p><button className="text-small text-brand-700" onClick={() => setMeas([...meas, { point: '', spec: '', actual: '', tolerance: '', ok: true }])}>+ add</button></div>
+          <div className="mb-1 flex items-center justify-between"><p className="text-small font-semibold text-ink-secondary">Measurements</p><button className="text-small text-brand-700" onClick={() => setMeas([...meas, { point: '', spec: '', actual: '', tolerance: '', ok: true }])}>+ add</button></div>
           {meas.map((x, i) => (
             <div key={i} className="mb-1 grid grid-cols-[1fr_60px_60px_60px_24px_20px] gap-1">
               {(['point', 'spec', 'actual', 'tolerance'] as const).map((k) => <input key={k} className="input h-8 py-0 text-small" placeholder={k} value={x[k]} onChange={(e) => { const n = [...meas]; n[i] = { ...x, [k]: e.target.value }; setMeas(n); }} />)}
@@ -631,8 +631,8 @@ function Timeline({ id }: { id: number }) {
               <td className="td whitespace-nowrap text-small">{fmtDateTime(r.created_at)}</td>
               <td className="td text-small">{r.user_name ?? '—'}</td>
               <td className="td text-small">{r.kind === 'stage' ? <><Badge tone="blue">Stage</Badge> {r.stage_name}: {r.action.toLowerCase()}</> : <><Badge tone="slate">{r.entity.toLowerCase()}</Badge> {r.action.replace(/_/g, ' ').toLowerCase()}</>}</td>
-              <td className="td max-w-[420px] text-small text-slate-600">{r.kind === 'stage' ? `${r.from_status ?? ''} → ${r.to_status ?? ''}${r.good_qty != null ? ` · good ${r.good_qty}` : ''}${r.minutes ? ` · ${r.minutes} min` : ''}` : <>{r.old_values && <span className="text-slate-400">{show(r.old_values)} → </span>}{show(r.new_values)}</>}</td>
-              <td className="td max-w-[260px] text-small text-slate-600">{r.reason ?? ''}</td>
+              <td className="td max-w-[420px] text-small text-ink-secondary">{r.kind === 'stage' ? `${r.from_status ?? ''} → ${r.to_status ?? ''}${r.good_qty != null ? ` · good ${r.good_qty}` : ''}${r.minutes ? ` · ${r.minutes} min` : ''}` : <>{r.old_values && <span className="text-ink-muted">{show(r.old_values)} → </span>}{show(r.new_values)}</>}</td>
+              <td className="td max-w-[260px] text-small text-ink-secondary">{r.reason ?? ''}</td>
             </tr>
           ))}
         </tbody>

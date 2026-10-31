@@ -1,7 +1,7 @@
 // C-ONE UI specification v1.1: shared by Tailwind and dashboard charts.
 export const colors = {
   primary: '#0070F2', primaryDark: '#0057B8', navy: '#0A285F',
-  text: '#172B4D', secondary: '#526581', muted: '#8696A9',
+  text: '#172B4D', secondary: '#526581', muted: '#8696A9', disabled: '#AAB5C2',
   canvas: '#F3F6FA', content: '#F7F9FC', surface: '#FFFFFF', sidebar: '#F8FAFC',
   header: '#EDF3F8', border: '#DCE4ED', divider: '#E9EEF4', input: '#B8C7D8',
   tableDivider: '#E8EDF3', hover: '#F0F6FC',

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregateOutput, aggregateStock, businessDate, monthRange } from './model.ts';
+import { aggregateOutput, aggregateStock, businessDate, monthRange, samePeriodLastMonth, trendPct, STAGES } from './model.ts';
 
 test('dashboard date uses India time at UTC day boundaries', () => {
   assert.equal(businessDate(new Date('2026-10-30T20:00:00Z')), '2026-10-31');
@@ -12,22 +12,33 @@ test('period boundaries handle new years and leap years without including future
   assert.deepEqual(monthRange('2026-10-05'), { dateFrom: '2026-10-01', dateTo: '2026-10-05' });
 });
 
-test('output aggregates shifts by date and stage, while preserving style totals', () => {
+test('output sums each day by stage; style mix counts sewn pieces only', () => {
   const rows = [
-    { id: 1, output_date: '2026-10-02', style_id: 10, style_code: 'TS-01', stage_id: 2, stage_name: 'Sewing', actual_good: '1200' },
-    { id: 2, output_date: '2026-10-01', style_id: 10, style_code: 'TS-01', stage_id: 1, stage_name: 'Cutting', actual_good: 2000 },
-    { id: 3, output_date: '2026-10-02', style_id: 11, style_code: 'TS-02', stage_id: 2, stage_name: 'Sewing', actual_good: 350 },
-    { id: 4, output_date: '2026-10-02', style_id: null, style_code: null, stage_id: null, stage_name: null, actual_good: 15 },
+    { output_date: '2026-10-02', stage: 'SEWING', style_code: 'TS-01', qty: '1200' },
+    { output_date: '2026-10-01', stage: 'CUTTING', style_code: 'TS-01', qty: 2000 },
+    { output_date: '2026-10-02', stage: 'SEWING', style_code: 'TS-02', qty: 350 },
+    { output_date: '2026-10-02', stage: 'PACKING', style_code: 'TS-01', qty: 900 },
+    { output_date: '2026-10-02', stage: 'SEWING', style_code: null, qty: 15 },
   ];
   const result = aggregateOutput(rows);
   assert.deepEqual(result.days, [
-    { date: '2026-10-01', stage_1: 2000 },
-    { date: '2026-10-02', stage_2: 1550, stage_unassigned: 15 },
+    { date: '2026-10-01', CUTTING: 2000 },
+    { date: '2026-10-02', SEWING: 1565, PACKING: 900 },
   ]);
+  assert.deepEqual(result.totals, { SEWING: 1565, CUTTING: 2000, PACKING: 900 });
   assert.deepEqual(result.styles.map(({ name, value }) => ({ name, value })), [
-    { name: 'TS-01', value: 3200 }, { name: 'TS-02', value: 350 }, { name: 'Unassigned', value: 15 },
+    { name: 'TS-01', value: 1200 }, { name: 'TS-02', value: 350 }, { name: 'Unassigned', value: 15 },
   ]);
-  assert.equal(result.styles.reduce((sum, s) => sum + s.value, 0), 3565);
+  assert.deepEqual(result.stages.map((s) => s.key), ['CUTTING', 'SEWING', 'FINISHING', 'PACKING']);
+});
+
+test('trend compares month-to-date with the same days of last month', () => {
+  assert.deepEqual(samePeriodLastMonth('2026-10-31'), { dateFrom: '2026-09-01', dateTo: '2026-09-30' });
+  assert.deepEqual(samePeriodLastMonth('2026-03-30'), { dateFrom: '2026-02-01', dateTo: '2026-02-28' });
+  assert.deepEqual(samePeriodLastMonth('2026-01-15'), { dateFrom: '2025-12-01', dateTo: '2025-12-15' });
+  assert.equal(trendPct(112, 100), 12);
+  assert.equal(trendPct(80, 100), -20);
+  assert.equal(trendPct(5, 0), null);
 });
 
 test('fabric balances combine bins but never combine different units or mutate source rows', () => {
@@ -46,6 +57,6 @@ test('fabric balances combine bins but never combine different units or mutate s
 });
 
 test('empty data produces empty charts and balances', () => {
-  assert.deepEqual(aggregateOutput([]), { days: [], stages: [], styles: [] });
+  assert.deepEqual(aggregateOutput([]), { days: [], stages: STAGES, totals: {}, styles: [] });
   assert.deepEqual(aggregateStock([]), { items: [], totals: [] });
 });

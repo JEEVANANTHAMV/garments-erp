@@ -111,10 +111,10 @@ export function EwayBillRegisterPage() {
               <tbody>{shown.map((r) => (
                 <tr key={r.id} data-ewb-id={r.id} data-doc-no={r.doc_no} className="cursor-pointer hover:bg-brand-50/40" onClick={() => nav(`/logistics/eway-bills/${r.id}`)}>
                   <td className="td tabular-nums font-medium text-brand-700">{r.doc_no}</td>
-                  <td className="td tabular-nums">{r.ewb_no ?? <span className="text-slate-400">—</span>}</td>
-                  <td className="td"><div className="text-caption text-slate-500">{r.source_label}</div><div className="tabular-nums">{r.source_no ?? '—'}</div></td>
-                  <td className="td"><div>{r.document_type} {r.document_number}</div><div className="text-caption text-slate-500">{fmtDate(r.document_date)}</div></td>
-                  <td className="td"><div className="font-medium">{r.to_name}</div><div className="text-caption text-slate-500">{r.to_gstin}{r.to_place ? ` · ${r.to_place}` : ''}</div></td>
+                  <td className="td tabular-nums">{r.ewb_no ?? <span className="text-ink-muted">—</span>}</td>
+                  <td className="td"><div className="text-caption text-ink-secondary">{r.source_label}</div><div className="tabular-nums">{r.source_no ?? '—'}</div></td>
+                  <td className="td"><div>{r.document_type} {r.document_number}</div><div className="text-caption text-ink-secondary">{fmtDate(r.document_date)}</div></td>
+                  <td className="td"><div className="font-medium">{r.to_name}</div><div className="text-caption text-ink-secondary">{r.to_gstin}{r.to_place ? ` · ${r.to_place}` : ''}</div></td>
                   <td className="td tabular-nums">{r.vehicle_no ?? '—'}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(r.total_invoice_value)}</td>
                   <td className={clsx('td whitespace-nowrap', r.view_status === 'EXPIRED' ? 'font-semibold text-red-600' : r.expiring_soon ? 'font-semibold text-amber-600' : '')}>
@@ -329,19 +329,19 @@ export function EwayBillEditorPage() {
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-5 py-4">
           <div>
-            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">E-way bill no</div>
-            <div id="ewb-number" className={clsx('tabular-nums text-[26px] font-bold tracking-wider', e?.ewb_no ? 'text-slate-900' : 'text-slate-300')}>{e?.ewb_no ?? 'Not generated'}</div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">E-way bill no</div>
+            <div id="ewb-number" className={clsx('tabular-nums text-[26px] font-bold tracking-wider', e?.ewb_no ? 'text-ink' : 'text-ink-disabled')}>{e?.ewb_no ?? 'Not generated'}</div>
           </div>
-          <div><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Status</div><EwbStatus id="ewb-status" value={status} size="lg" /></div>
-          {e?.ewb_date && <div><div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Generated</div><div className="text-body font-medium">{fmtDateTime(e.ewb_date)}</div></div>}
+          <div><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">Status</div><EwbStatus id="ewb-status" value={status} size="lg" /></div>
+          {e?.ewb_date && <div><div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">Generated</div><div className="text-body font-medium">{fmtDateTime(e.ewb_date)}</div></div>}
           {e?.status === 'GENERATED' && <div>
-            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Valid upto</div>
-            <div id="ewb-valid-upto" className={clsx('text-body font-semibold', status === 'EXPIRED' ? 'text-red-600' : e.can_extend ? 'text-amber-600' : 'text-slate-900')}>
+            <div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">Valid upto</div>
+            <div id="ewb-valid-upto" className={clsx('text-body font-semibold', status === 'EXPIRED' ? 'text-red-600' : e.can_extend ? 'text-amber-600' : 'text-ink')}>
               {e.valid_upto ? fmtDateTime(e.valid_upto) : 'Part B not entered — add the vehicle to start the validity'}</div>
           </div>}
           {e?.status === 'CANCELLED' && <div className="text-body text-red-700"><b>Cancelled</b> {fmtDateTime(e.cancelled_at)}{e.cancelled_by_name ? ` by ${e.cancelled_by_name}` : ''} — {e.cancel_reason}: {e.cancel_remark}</div>}
           <div className="ml-auto text-right">
-            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">Total invoice value</div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">Total invoice value</div>
             <div className="text-page font-bold tabular-nums" id="ewb-total" data-value={totals.total}>₹{fmtDecimal(totals.total)}</div>
           </div>
         </div>
@@ -356,7 +356,7 @@ export function EwayBillEditorPage() {
         </div>
       )}
       {draft && totals.total < threshold && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-body text-slate-600" id="ewb-threshold">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-surface-border bg-surface-muted px-3.5 py-2 text-body text-ink-secondary" id="ewb-threshold">
           <Info size={14} />Not required below ₹{fmtDecimal(threshold, 0)} (you can still generate).
         </div>
       )}
@@ -412,7 +412,7 @@ export function EwayBillEditorPage() {
                 </tr></thead>
                 <tbody>{items.map((it, i) => (
                   <tr key={it.key} data-item-row={i}>
-                    <td className="td text-slate-500">{i + 1}</td>
+                    <td className="td text-ink-secondary">{i + 1}</td>
                     <td className="td !py-1.5"><input className="input !h-8" data-f="product_name" maxLength={100} value={it.product_name} onChange={(x) => setItem(it.key, { product_name: x.target.value })} /></td>
                     <td className="td !py-1.5"><input className="input !h-8" data-f="description" maxLength={100} value={it.description} onChange={(x) => setItem(it.key, { description: x.target.value })} /></td>
                     <td className="td !py-1.5"><input className={clsx('input !h-8 tabular-nums', !/^\d{4,8}$/.test(it.hsn_code) && 'input-error')} data-f="hsn_code" inputMode="numeric" maxLength={8} value={it.hsn_code}
@@ -422,8 +422,8 @@ export function EwayBillEditorPage() {
                     <td className="td !py-1.5"><input className="input !h-8 text-right" data-f="taxable_amount" inputMode="decimal" value={it.taxable_amount} onChange={(x) => setItem(it.key, { taxable_amount: x.target.value.replace(/[^0-9.]/g, '') })} /></td>
                     <td className="td !py-1.5"><select className="input !h-8 text-right" data-f="rate" value={it.rate} onChange={(x) => setItem(it.key, { rate: x.target.value })}>
                       {[...new Set(['0', '0.25', '3', '5', '12', '18', '28', it.rate])].map((r) => <option key={r} value={r}>{r}</option>)}</select></td>
-                    <td className="td text-right tabular-nums text-slate-600">{fmtDecimal((n(it.taxable_amount) * n(it.rate)) / 100)}</td>
-                    {!ro && <td className="td !py-1.5"><button type="button" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" data-remove-item={i}
+                    <td className="td text-right tabular-nums text-ink-secondary">{fmtDecimal((n(it.taxable_amount) * n(it.rate)) / 100)}</td>
+                    {!ro && <td className="td !py-1.5"><button type="button" className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-red-600 disabled:opacity-30" data-remove-item={i}
                       title="Remove line" disabled={items.length <= 1} onClick={() => setItems((xs) => xs.filter((x) => x.key !== it.key))}><Trash2 size={14} /></button></td>}
                   </tr>
                 ))}</tbody>
@@ -432,9 +432,9 @@ export function EwayBillEditorPage() {
             <div className="flex flex-wrap items-end justify-end gap-x-6 gap-y-2 text-body" id="ewb-totals">
               <Input label="Other charges ₹" className="w-36" inputMode="decimal" value={f.other_value} onChange={(x) => set({ other_value: x.target.value.replace(/[^0-9.-]/g, '') })} />
               {[['Taxable', totals.taxable], ['CGST', totals.cgst], ['SGST', totals.sgst], ['IGST', totals.igst], ...(totals.cess ? [['Cess', totals.cess]] : [])].map(([k, v]) => (
-                <div key={k as string} className="text-right"><div className="text-caption uppercase tracking-wider text-slate-500">{k}</div><div className="font-semibold tabular-nums" data-total={k}>{fmtDecimal(v)}</div></div>
+                <div key={k as string} className="text-right"><div className="text-caption uppercase tracking-wider text-ink-secondary">{k}</div><div className="font-semibold tabular-nums" data-total={k}>{fmtDecimal(v)}</div></div>
               ))}
-              <div className="text-right"><div className="text-caption uppercase tracking-wider text-slate-500">Total ₹</div><div className="text-title font-bold tabular-nums">{fmtDecimal(totals.total)}</div></div>
+              <div className="text-right"><div className="text-caption uppercase tracking-wider text-ink-secondary">Total ₹</div><div className="text-title font-bold tabular-nums">{fmtDecimal(totals.total)}</div></div>
             </div>
           </FormSection>
 
@@ -463,7 +463,7 @@ export function EwayBillEditorPage() {
                 <thead><tr><th className="th">Action</th><th className="th">Result</th><th className="th">Message</th><th className="th">User</th><th className="th">Time</th></tr></thead>
                 <tbody>{e.events.map((ev: any) => (
                   <tr key={ev.id} data-event={ev.action}>
-                    <td className="td font-medium">{ev.action.replace(/_/g, ' ')}<div className="text-caption text-slate-500">{ev.provider}</div></td>
+                    <td className="td font-medium">{ev.action.replace(/_/g, ' ')}<div className="text-caption text-ink-secondary">{ev.provider}</div></td>
                     <td className="td">{n(ev.ok) ? <span className="font-semibold text-emerald-600">OK</span> : <span className="font-semibold text-red-600">Failed</span>}</td>
                     <td className="td max-w-[520px] break-words">{ev.message ?? '—'}</td>
                     <td className="td">{ev.user_name ?? '—'}</td>

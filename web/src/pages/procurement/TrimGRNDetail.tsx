@@ -534,11 +534,11 @@ export default function TrimGRNDetailPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Top Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-surface-border pb-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => nav('/procurement/trim/grn')}
-            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition"
+            className="p-2 rounded-lg border border-surface-border hover:bg-surface-muted text-ink-secondary transition"
           >
             <ArrowLeft size={16} />
           </button>
@@ -547,7 +547,7 @@ export default function TrimGRNDetailPage() {
               <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700">
                 <PackageCheck size={18} />
               </span>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl font-bold text-ink tracking-tight">
                 {isNew ? 'New Trim Goods Receipt (GRN)' : `Trim GRN: ${head.grn_no || id}`}
               </h1>
               {!isNew && <Badge variant="success">{head.status}</Badge>}
@@ -557,7 +557,7 @@ export default function TrimGRNDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-secondary">
               Goods receipt note with QC inspection, amount details, gate inward linkage & inventory posting
             </p>
           </div>
@@ -580,9 +580,9 @@ export default function TrimGRNDetailPage() {
 
       {/* KPI Cards Strip */}
       <div className={`grid grid-cols-2 ${isForeignCurrency ? 'sm:grid-cols-7' : 'sm:grid-cols-6'} gap-3`}>
-        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="text-caption font-semibold text-slate-600 uppercase tracking-wider">Total Received</div>
-          <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalReceived)}</div>
+        <div className="p-3 bg-surface-muted rounded-xl border border-surface-border">
+          <div className="text-caption font-semibold text-ink-secondary uppercase tracking-wider">Total Received</div>
+          <div className="text-lg font-bold text-ink mt-0.5 tabular-nums">{fmtDecimal(totals.totalReceived)}</div>
         </div>
         <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
           <div className="text-caption font-semibold text-emerald-700 uppercase tracking-wider">Accepted Net</div>
@@ -619,23 +619,23 @@ export default function TrimGRNDetailPage() {
 
       {/* Header Form */}
       <div className="card p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-divider pb-2 gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink-secondary flex items-center gap-1.5">
             <Disc size={14} className="text-indigo-600" />
             <span>Receipt Details, Gate Linkage & Currency</span>
           </h3>
 
           {/* Inter-State IGST Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1 rounded-lg text-xs transition">
+          <label className="flex items-center gap-2 cursor-pointer bg-surface-muted hover:bg-surface-header border border-surface-border px-3 py-1 rounded-lg text-xs transition">
             <input
               type="checkbox"
               checked={head.is_interstate}
               disabled={!isNew}
               onChange={(e) => setHead({ ...head, is_interstate: e.target.checked })}
-              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              className="rounded border-surface-input text-indigo-600 focus:ring-indigo-500"
             />
-            <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
-            <span className="text-micro text-slate-400 font-normal">
+            <span className="font-semibold text-ink">Inter-State Supply (IGST Applicable)</span>
+            <span className="text-micro text-ink-muted font-normal">
               {head.is_interstate ? 'Single IGST rate applied' : 'Split CGST + SGST applied'}
             </span>
           </label>
@@ -644,7 +644,7 @@ export default function TrimGRNDetailPage() {
         {/* Row 1: GRN No, GRN Date, PO Link, Gate Entry */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div>
-            <label className="label font-bold text-slate-800">GRN No</label>
+            <label className="label font-bold text-ink">GRN No</label>
             <input
               type="text"
               value={isNew ? '(Auto-Generated on Save)' : (head.grn_no || `TGRN-${id}`)}
@@ -720,12 +720,12 @@ export default function TrimGRNDetailPage() {
                 <label className="label">Linked Trim POs ({selectedPoIds.length || (head.po_id ? 1 : 0)})</label>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(selectedPoIds.length > 0 ? selectedPoIds : (head.po_id ? [head.po_id] : [])).map((pId) => (
-                    <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                    <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-surface-header text-ink border border-surface-input">
                       📋 PO #{pId}
                     </span>
                   ))}
                   {!selectedPoIds.length && !head.po_id && (
-                    <span className="text-xs text-slate-400">Direct Receipt</span>
+                    <span className="text-xs text-ink-muted">Direct Receipt</span>
                   )}
                 </div>
               </div>
@@ -882,7 +882,7 @@ export default function TrimGRNDetailPage() {
               value={head.exchange_rate}
               disabled={!isNew || !isForeignCurrency}
               onChange={(e) => setHead({ ...head, exchange_rate: Number(e.target.value) })}
-              className={`input text-xs ${isForeignCurrency ? 'font-semibold border-amber-300 bg-amber-50/50' : 'bg-slate-50 text-slate-500'}`}
+              className={`input text-xs ${isForeignCurrency ? 'font-semibold border-amber-300 bg-amber-50/50' : 'bg-surface-muted text-ink-secondary'}`}
             />
           </div>
         </div>
@@ -903,13 +903,13 @@ export default function TrimGRNDetailPage() {
 
       {/* Lines Table - Order strictly follows Clip 3: 1st: #, 2nd: I/O (Job No), 3rd: Style No, 4th: Trim Item */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-surface-muted/70 border-b border-surface-border flex items-center justify-between">
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
               <Layers size={14} className="text-indigo-600" />
               <span>Inspection, Amount Details & Job Allocation ({lines.length})</span>
             </h3>
-            <p className="text-caption text-slate-500">
+            <p className="text-caption text-ink-secondary">
               Columns strictly ordered: # → IO No (Job) → Style No → Trim Item → Specifications & Quantities
             </p>
           </div>
@@ -926,7 +926,7 @@ export default function TrimGRNDetailPage() {
 
         <div className="overflow-x-auto">
           <table className="table w-full text-xs">
-            <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
+            <thead className="bg-surface-muted text-ink-secondary uppercase font-semibold border-b border-surface-border">
               <tr>
                 {/* 1st: S.No */}
                 <th className="py-2.5 px-2 text-center w-10">#</th>
@@ -957,11 +957,11 @@ export default function TrimGRNDetailPage() {
                 {isNew && <th className="py-2.5 px-2 text-center w-8"></th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-surface-divider">
               {lines.map((line, idx) => (
-                <tr key={line._key} className="hover:bg-slate-50/50">
+                <tr key={line._key} className="hover:bg-surface-muted/50">
                   {/* 1. S.No (#) */}
-                  <td className="py-2 px-2 text-center tabular-nums font-medium text-slate-400">
+                  <td className="py-2 px-2 text-center tabular-nums font-medium text-ink-muted">
                     {idx + 1}
                   </td>
 
@@ -972,7 +972,7 @@ export default function TrimGRNDetailPage() {
                         {line.po_no || `PO #${line.po_id}`}
                       </span>
                     ) : (
-                      <span className="text-slate-400 text-caption">—</span>
+                      <span className="text-ink-muted text-caption">—</span>
                     )}
                   </td>
 
@@ -995,7 +995,7 @@ export default function TrimGRNDetailPage() {
                         ))}
                       </select>
                     ) : (
-                      <span className="font-medium text-slate-700">
+                      <span className="font-medium text-ink">
                         {line.so_id ? (salesOrders.find((x: any) => String(x.id) === String(line.so_id))?.job_no ?? `SO #${line.so_id}`) : (head.io_no || 'Stock')}
                       </span>
                     )}
@@ -1017,7 +1017,7 @@ export default function TrimGRNDetailPage() {
                         ))}
                       </select>
                     ) : (
-                      <span className="tabular-nums text-slate-700">
+                      <span className="tabular-nums text-ink">
                         {styles.find((s: any) => String(s.id) === String(line.style_id))?.style_code || '-'}
                       </span>
                     )}
@@ -1045,7 +1045,7 @@ export default function TrimGRNDetailPage() {
                         ))}
                       </select>
                     ) : (
-                      <span className="font-semibold text-slate-900">{line.trim_name || 'Trim Item'}</span>
+                      <span className="font-semibold text-ink">{line.trim_name || 'Trim Item'}</span>
                     )}
                   </td>
 
@@ -1059,7 +1059,7 @@ export default function TrimGRNDetailPage() {
                         className="input text-xs py-1"
                       />
                     ) : (
-                      <span className="text-slate-600">{line.specification}</span>
+                      <span className="text-ink-secondary">{line.specification}</span>
                     )}
                   </td>
 
@@ -1073,7 +1073,7 @@ export default function TrimGRNDetailPage() {
                         className="input text-xs py-1"
                       />
                     ) : (
-                      <span className="text-slate-600">{line.color_name}</span>
+                      <span className="text-ink-secondary">{line.color_name}</span>
                     )}
                   </td>
 
@@ -1087,15 +1087,15 @@ export default function TrimGRNDetailPage() {
                         className="input text-xs py-1"
                       />
                     ) : (
-                      <span className="text-slate-600">{line.trim_size}</span>
+                      <span className="text-ink-secondary">{line.trim_size}</span>
                     )}
                   </td>
 
                   {/* PO Qty */}
                   <td className="py-2 px-2 text-right">
-                    <span className="tabular-nums text-slate-500">{fmtDecimal(line.po_qty)}</span>
+                    <span className="tabular-nums text-ink-secondary">{fmtDecimal(line.po_qty)}</span>
                     {Number(line.prev_received) > 0 && (
-                      <div className="text-micro text-slate-500">
+                      <div className="text-micro text-ink-secondary">
                         {fmtDecimal(line.prev_received)} recd earlier · <b className="text-amber-700">{fmtDecimal(Math.max(0, line.po_qty - Number(line.prev_received)))} pending</b>
                       </div>
                     )}
@@ -1111,7 +1111,7 @@ export default function TrimGRNDetailPage() {
                         type="number"
                         value={line.received_qty}
                         onChange={(e) => updateLine(idx, { received_qty: Number(e.target.value) })}
-                        className="input text-xs py-1 text-right tabular-nums font-bold text-slate-800 w-full min-w-[80px] !px-1.5"
+                        className="input text-xs py-1 text-right tabular-nums font-bold text-ink w-full min-w-[80px] !px-1.5"
                       />
                     ) : (
                       <span className="tabular-nums font-bold">{fmtDecimal(line.received_qty)}</span>
@@ -1176,7 +1176,7 @@ export default function TrimGRNDetailPage() {
                   </td>
 
                   {/* Taxable Amount */}
-                  <td className="py-2 px-2 text-right tabular-nums font-medium text-slate-900">
+                  <td className="py-2 px-2 text-right tabular-nums font-medium text-ink">
                     {currSymbol}{fmtDecimal(line.taxable_amount, 2)}
                   </td>
 
@@ -1205,7 +1205,7 @@ export default function TrimGRNDetailPage() {
                   </td>
 
                   {/* Total Amount */}
-                  <td className="py-2 px-2 text-right tabular-nums font-bold text-slate-900">
+                  <td className="py-2 px-2 text-right tabular-nums font-bold text-ink">
                     {currSymbol}{fmtDecimal(line.total_amount, 2)}
                   </td>
 
@@ -1219,7 +1219,7 @@ export default function TrimGRNDetailPage() {
                         className="input text-xs py-1 tabular-nums"
                       />
                     ) : (
-                      <span className="tabular-nums text-slate-700">{line.internal_lot_no}</span>
+                      <span className="tabular-nums text-ink">{line.internal_lot_no}</span>
                     )}
                   </td>
 
@@ -1249,7 +1249,7 @@ export default function TrimGRNDetailPage() {
                         type="button"
                         onClick={() => removeLine(idx)}
                         disabled={lines.length === 1}
-                        className="text-slate-400 hover:text-red-600 disabled:opacity-30 p-1"
+                        className="text-ink-muted hover:text-red-600 disabled:opacity-30 p-1"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1258,11 +1258,11 @@ export default function TrimGRNDetailPage() {
                 </tr>
               ))}
             </tbody>
-            <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
+            <tfoot className="bg-surface-muted/80 border-t border-surface-border font-bold text-ink">
               <tr>
-                <td colSpan={8} className="py-3 px-3 text-right text-slate-600">Totals:</td>
-                <td className="py-3 px-2 text-right tabular-nums text-slate-500">{fmtDecimal(totals.totalPo)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-slate-800">{fmtDecimal(totals.totalReceived)}</td>
+                <td colSpan={8} className="py-3 px-3 text-right text-ink-secondary">Totals:</td>
+                <td className="py-3 px-2 text-right tabular-nums text-ink-secondary">{fmtDecimal(totals.totalPo)}</td>
+                <td className="py-3 px-2 text-right tabular-nums text-ink">{fmtDecimal(totals.totalReceived)}</td>
                 <td className="py-3 px-2 text-right tabular-nums text-emerald-800">{fmtDecimal(totals.totalAccepted)}</td>
                 <td className="py-3 px-2 text-right tabular-nums text-rose-700">{fmtDecimal(totals.totalRejected)}</td>
                 <td className="py-3 px-2 text-right tabular-nums text-amber-700">{fmtDecimal(totals.totalHold)}</td>
@@ -1270,7 +1270,7 @@ export default function TrimGRNDetailPage() {
                 <td className="py-3 px-2 text-right tabular-nums">{currSymbol}{fmtDecimal(totals.taxableAmount, 2)}</td>
                 <td className="py-3 px-2"></td>
                 <td className="py-3 px-2 text-right tabular-nums text-purple-700">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-sm font-bold text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-sm font-bold text-ink">
                   {currSymbol}{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td colSpan={isNew ? 3 : 2}></td>
@@ -1280,7 +1280,7 @@ export default function TrimGRNDetailPage() {
         </div>
 
         {/* Common invoice financial summary */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <div className="p-4 bg-surface-muted border-t border-surface-border flex justify-end">
           <InvoiceSummary
             className="w-full max-w-md"
             totals={totals.inv}

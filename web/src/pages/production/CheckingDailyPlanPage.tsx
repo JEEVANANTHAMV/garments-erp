@@ -316,8 +316,8 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Daily Plan – {label}</h1>
-          <p className="text-sm text-slate-500">Plan the day's {label.toLowerCase()} target per line from confirmed line allocations</p>
+          <h1 className="text-2xl font-bold text-ink">Daily Plan – {label}</h1>
+          <p className="text-sm text-ink-secondary">Plan the day's {label.toLowerCase()} target per line from confirmed line allocations</p>
         </div>
         <div className="flex items-center gap-2">
           <DocStatus no={docNo} status={docStatus} />
@@ -331,8 +331,8 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
           <Input label="Plan Date *" type="date" className="w-40" value={planDate} disabled={!editable} onChange={(e) => setPlanDate(e.target.value)} />
           <Input label={`${label} Floor`} className="w-44" value={floorName} disabled={!editable} onChange={(e) => setFloorName(e.target.value)} />
           <Select label="Shift" className="w-44" value={shiftId} disabled={!editable} onChange={(e) => setShiftId(e.target.value)} placeholder="Select shift" options={toOptions(shifts.data)} />
-          <div className="flex h-10 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3">
-            <span className="text-xs font-medium text-slate-600">Plan Type</span>
+          <div className="flex h-10 items-center gap-3 rounded-lg border border-surface-border bg-white px-3">
+            <span className="text-xs font-medium text-ink-secondary">Plan Type</span>
             {(['LINE_WISE', 'JOB_WISE'] as const).map((t) => (
               <label key={t} className="flex cursor-pointer items-center gap-1.5">
                 <input type="radio" className="accent-brand-600" checked={planType === t}
@@ -357,7 +357,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
         </Card>
         <Card title={`Line Capacity (${fmtDate(planDate)} · ${shiftName})`}>
           <div className="grid grid-cols-2 gap-2 p-3 md:grid-cols-4">
-            <SummaryCard icon={<Layers size={18} />} label="Total Lines" value={lines.length} tone="bg-slate-50 border-slate-200 text-slate-800" />
+            <SummaryCard icon={<Layers size={18} />} label="Total Lines" value={lines.length} tone="bg-surface-muted border-surface-border text-ink" />
             <SummaryCard icon={<CheckCircle2 size={18} />} label="Total Capacity (PCS)" value={fmtNumber(totals.capacity)} tone="bg-cyan-50 border-cyan-200 text-cyan-800" />
             <SummaryCard icon={<AlertTriangle size={18} />} label="Planned Qty (PCS)" value={fmtNumber(totals.planned + lines.reduce((a, l) => a + n(l.planned_other), 0))} tone="bg-rose-50 border-rose-200 text-rose-800" />
             <SummaryCard icon={<Settings2 size={18} />} label="Utilization" value={`${totals.util}%`} tone="bg-blue-50 border-blue-200 text-blue-800" />
@@ -383,7 +383,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
           <Card title={`${label} Line Plan – ${fmtDate(planDate)} (${shiftName})`}>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500">
+                <thead className="bg-surface-muted text-ink-secondary">
                   <tr>
                     <th className="px-2 py-2 text-left">Line Code</th>
                     <th className="px-2 py-2 text-left">Line Name</th>
@@ -402,7 +402,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                     const s = lineStat(l);
                     const st = settings[l.id];
                     return (
-                      <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <tr key={l.id} className="border-t border-surface-divider hover:bg-surface-muted">
                         <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{l.line_code}</td>
                         <td className="px-2 py-1.5 font-medium">{l.line_name}</td>
                         <td className="px-2 py-1.5">
@@ -433,7 +433,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                       </tr>
                     );
                   })}
-                  {!lines.length && <tr><td colSpan={10} className="px-4 py-6 text-center text-slate-400">No active {label.toLowerCase()} lines</td></tr>}
+                  {!lines.length && <tr><td colSpan={10} className="px-4 py-6 text-center text-ink-muted">No active {label.toLowerCase()} lines</td></tr>}
                 </tbody>
               </table>
               <datalist id={`sup-${proc}`}>{supervisors.map((s) => <option key={s} value={s} />)}</datalist>
@@ -450,7 +450,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-100 bg-brand-50 px-4 py-2">
                   <span className="text-sm font-bold text-brand-900">
                     {l.line_code} – {l.line_name}
-                    <span className="ml-2 font-normal text-slate-600">(Target: {fmtNumber(s.target)} PCS | Assigned: {fmtNumber(s.assigned)} PCS)</span>
+                    <span className="ml-2 font-normal text-ink-secondary">(Target: {fmtNumber(s.target)} PCS | Assigned: {fmtNumber(s.assigned)} PCS)</span>
                   </span>
                   {editable && (
                     <div className="flex flex-wrap items-center gap-2">
@@ -464,7 +464,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                 <div className="overflow-x-auto">
                   {lineRows.length ? (
                     <table className="w-full text-xs">
-                      <thead className="bg-white text-slate-500">
+                      <thead className="bg-white text-ink-secondary">
                         <tr>
                           <th className="w-8 px-2 py-1.5">
                             <input type="checkbox" disabled={!editable} checked={ids.length > 0 && selHere.length === ids.length}
@@ -485,7 +485,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                         {groupByJob(lineRows).map((g) => [
                           <JobHeaderRow key={g.key} group={g} colSpan={10} qty={g.rows.reduce((a, r) => a + r.planned_qty, 0)} />,
                           ...g.rows.map((r) => (
-                            <tr key={r.allocation_detail_id} className="border-t border-slate-100">
+                            <tr key={r.allocation_detail_id} className="border-t border-surface-divider">
                               <td className="px-2 py-1 text-center">
                                 <input type="checkbox" disabled={!editable} checked={sel.has(r.allocation_detail_id)}
                                   onChange={() => setSel((x) => { const y = new Set(x); y.has(r.allocation_detail_id) ? y.delete(r.allocation_detail_id) : y.add(r.allocation_detail_id); return y; })} />
@@ -494,7 +494,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                               <td className="px-2 py-1">{r.colour || '—'}</td>
                               <td className="px-2 py-1 font-semibold">{r.size || '—'}</td>
                               <td className="px-2 py-1 text-right">{fmtNumber(r.bundle_qty)}</td>
-                              <td className="px-2 py-1 text-right text-slate-500">{fmtNumber(maxOf(r))}</td>
+                              <td className="px-2 py-1 text-right text-ink-secondary">{fmtNumber(maxOf(r))}</td>
                               <td className="px-2 py-1 text-right">
                                 {editable ? (
                                   <input type="number" min={1} max={maxOf(r)} className="input h-6 w-20 text-right text-caption" value={r.planned_qty}
@@ -520,7 +520,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                       </tbody>
                     </table>
                   ) : (
-                    <p className="py-6 text-center text-sm text-slate-400">
+                    <p className="py-6 text-center text-sm text-ink-muted">
                       No bundles planned. {freePending.some((p) => p.line_id === l.id) ? 'Use Add Job / Add Bundle or Auto Plan.' : 'Nothing is allocated to this line — confirm a line allocation first.'}
                     </p>
                   )}
@@ -543,7 +543,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
             <Plus size={12} className="mr-1" /> Add {selPending.size || ''} to plan</Button></span>}>
           <div className="max-h-[60vh] overflow-auto">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50 text-slate-500">
+              <thead className="sticky top-0 bg-surface-muted text-ink-secondary">
                 <tr>
                   <th className="w-8 px-2 py-2">
                     <input type="checkbox" data-header-check disabled={!editable} title="Tick / untick every row shown (filtered)"
@@ -566,7 +566,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                     <JobHeaderRow key={g.key} group={g} colSpan={7} qty={g.rows.reduce((a, r) => a + r.free_qty, 0)} checked={all}
                       onCheck={editable ? () => setSelPending((x) => { const y = new Set(x); ids.forEach((i) => (all ? y.delete(i) : y.add(i))); return y; }) : undefined} />,
                     ...g.rows.map((p) => (
-                      <tr key={p.allocation_detail_id} className="border-t border-slate-100">
+                      <tr key={p.allocation_detail_id} className="border-t border-surface-divider">
                         <td className="px-2 py-1 text-center">
                           <input type="checkbox" disabled={!editable} checked={selPending.has(p.allocation_detail_id)}
                             onChange={() => setSelPending((x) => { const y = new Set(x); y.has(p.allocation_detail_id) ? y.delete(p.allocation_detail_id) : y.add(p.allocation_detail_id); return y; })} />
@@ -575,13 +575,13 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                         <td className="px-2 py-1 tabular-nums font-semibold">{p.bundle_no}</td>
                         <td className="px-2 py-1">{p.colour || '—'}</td>
                         <td className="px-2 py-1 font-semibold">{p.size || '—'}</td>
-                        <td className="px-2 py-1 text-slate-500">{p.allocation_no}</td>
+                        <td className="px-2 py-1 text-ink-secondary">{p.allocation_no}</td>
                         <td className="px-2 py-1 text-right font-medium">{fmtNumber(p.free_qty)}</td>
                       </tr>
                     )),
                   ];
                 })}
-                {!shownPending.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">{loading ? 'Loading…' : 'Nothing pending — confirm a line allocation to plan its bundles'}</td></tr>}
+                {!shownPending.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-muted">{loading ? 'Loading…' : 'Nothing pending — confirm a line allocation to plan its bundles'}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -592,7 +592,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card title="Line Wise Plan Summary">
           <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-surface-muted text-ink-secondary">
               <tr>
                 <th className="px-2 py-1.5 text-left">Line</th>
                 <th className="px-2 py-1.5 text-right">Target</th>
@@ -605,7 +605,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
               {lines.map((l) => {
                 const s = lineStat(l);
                 return (
-                  <tr key={l.id} className="border-t border-slate-100">
+                  <tr key={l.id} className="border-t border-surface-divider">
                     <td className="px-2 py-1 tabular-nums text-brand-700">{l.line_code}</td>
                     <td className="px-2 py-1 text-right">{fmtNumber(s.target)}</td>
                     <td className="px-2 py-1 text-right font-medium">{fmtNumber(s.used)}</td>
@@ -637,7 +637,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                 <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> Override capacity ({overLines.map((l) => l.line_code).join(', ')})
               </label>
             )}
-            <Input className="w-56 !text-slate-800" placeholder="Remarks" value={remarks} disabled={!editable} onChange={(e) => setRemarks(e.target.value)} />
+            <Input className="w-56 !text-ink" placeholder="Remarks" value={remarks} disabled={!editable} onChange={(e) => setRemarks(e.target.value)} />
             {docId && !['CANCELLED', 'COMPLETED', 'CLOSED'].includes(docStatus ?? '') && (
               <Button variant="secondary" className="!border-white/20 !bg-white/10 !text-white" onClick={() => setCancelOpen(true)}><X size={14} className="mr-1" /> Cancel Plan</Button>
             )}
@@ -662,7 +662,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
 
       <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title={`Cancel plan ${docNo ?? ''}`} size="sm"
         footer={<><Button variant="secondary" onClick={() => setCancelOpen(false)}>Back</Button><Button variant="danger" onClick={cancelDoc} disabled={cancelReason.trim().length < 3}>Cancel plan</Button></>}>
-        <p className="mb-2 text-sm text-slate-600">The planned bundles become available to plan again.</p>
+        <p className="mb-2 text-sm text-ink-secondary">The planned bundles become available to plan again.</p>
         <Input label="Reason *" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
       </Modal>
     </div>
@@ -688,7 +688,7 @@ function PendingPicker({ picker, onClose, rows, lineCode, onPick }: {
       footerStart={<><b>{sel.size}</b> bundles · <b>{fmtNumber(mine.filter((r) => sel.has(r.allocation_detail_id)).reduce((a, r) => a + r.free_qty, 0))}</b> PCS selected</>}
       footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button disabled={!sel.size} onClick={() => onPick(mine.filter((r) => sel.has(r.allocation_detail_id)))}>Add {sel.size} bundle(s)</Button></>}>
       <SearchInput value={search} onChange={setSearch} placeholder="Search bundle, job, style…" className="mb-2 w-full" />
-      {!mine.length && <p className="py-8 text-center text-sm text-slate-400">Nothing allocated to {lineCode} is left to plan.</p>}
+      {!mine.length && <p className="py-8 text-center text-sm text-ink-muted">Nothing allocated to {lineCode} is left to plan.</p>}
       <table className="w-full text-xs">
         <tbody>
           {groups.map((g) => {
@@ -697,7 +697,7 @@ function PendingPicker({ picker, onClose, rows, lineCode, onPick }: {
             return [
               <JobHeaderRow key={g.key} group={g} colSpan={5} qty={g.rows.reduce((a, r) => a + r.free_qty, 0)} checked={all} onCheck={() => toggle(ids, !all)} />,
               ...(picker.mode === 'bundle' ? g.rows.map((r) => (
-                <tr key={r.allocation_detail_id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => toggle([r.allocation_detail_id], !sel.has(r.allocation_detail_id))}>
+                <tr key={r.allocation_detail_id} className="cursor-pointer border-t border-surface-divider hover:bg-surface-muted" onClick={() => toggle([r.allocation_detail_id], !sel.has(r.allocation_detail_id))}>
                   <td className="w-8 px-2 py-1 text-center"><input type="checkbox" checked={sel.has(r.allocation_detail_id)} readOnly /></td>
                   <td className="px-2 py-1 tabular-nums font-semibold">{r.bundle_no}</td>
                   <td className="px-2 py-1">{r.colour}</td>

@@ -533,7 +533,7 @@ export function GeneralPurchaseDetailPage() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900">
+              <h1 className="text-xl font-bold text-ink">
                 {isPoMode
                   ? (isNew ? 'New General Purchase Order (PO)' : `General PO: ${head.purchase_no || 'Document'}`)
                   : (isNew ? 'New General Goods Receipt (GRN)' : `General GRN: ${head.grn_no || head.purchase_no || 'Document'}`)}
@@ -550,7 +550,7 @@ export function GeneralPurchaseDetailPage() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-secondary">
               {isPoMode
                 ? 'Issue procurement orders for consumables, maintenance spares & office items (No gate entry required for PO)'
                 : 'Controlled inward receipt note with gate inward entry mapping, stock increase & costing allocation'}
@@ -563,7 +563,7 @@ export function GeneralPurchaseDetailPage() {
             <button
               type="button"
               onClick={() => setShowPrintVoucher(true)}
-              className="btn-secondary text-xs flex items-center gap-1.5 shadow-sm border border-slate-300 hover:bg-slate-50"
+              className="btn-secondary text-xs flex items-center gap-1.5 shadow-sm border border-surface-input hover:bg-surface-muted"
             >
               <Printer size={15} /> Print {isPoMode ? 'PO Voucher' : 'GRN Voucher'}
             </button>
@@ -590,13 +590,13 @@ export function GeneralPurchaseDetailPage() {
       {/* Header Form Card */}
       <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-surface-border pb-2 gap-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
             <ShoppingCart size={16} className="text-brand-600" />
             {isPoMode ? 'General PO Details & Currency' : 'General GRN Details, Gate Linkage & Currency'}
           </div>
 
           {/* Inter-State IGST Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-xs transition">
+          <label className="flex items-center gap-2 cursor-pointer bg-surface-muted hover:bg-surface-header border border-surface-border px-3 py-1.5 rounded-lg text-xs transition">
             <input
               type="checkbox"
               checked={head.is_interstate}
@@ -619,10 +619,10 @@ export function GeneralPurchaseDetailPage() {
                   };
                 }));
               }}
-              className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              className="rounded border-surface-input text-brand-600 focus:ring-brand-500"
             />
-            <span className="font-semibold text-slate-700">Inter-State Supply (IGST Applicable)</span>
-            <span className="text-micro text-slate-400 font-normal">
+            <span className="font-semibold text-ink">Inter-State Supply (IGST Applicable)</span>
+            <span className="text-micro text-ink-muted font-normal">
               {head.is_interstate ? 'Single IGST tax rate' : 'Split CGST + SGST'}
             </span>
           </label>
@@ -642,7 +642,7 @@ export function GeneralPurchaseDetailPage() {
           {!isPoMode && (
             isNew ? (
               <div>
-                <label className="text-xs font-semibold text-slate-700 mb-1.5 block">Link to General PO (Optional)</label>
+                <label className="text-xs font-semibold text-ink mb-1.5 block">Link to General PO (Optional)</label>
                 <select
                   value={head.reference_po_id}
                   onChange={(e) => handleSelectReferencePo(e.target.value)}
@@ -787,10 +787,10 @@ export function GeneralPurchaseDetailPage() {
       <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-surface-border pb-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-800">
+            <h2 className="text-sm font-semibold text-ink">
               Purchase Line Items &amp; Allocation ({lines.length})
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-secondary">
               Multi-purpose invoice: each line can be allocated to General Stock, Buyer Order, Production Order, Sample, or Maintenance.
             </p>
           </div>
@@ -809,7 +809,7 @@ export function GeneralPurchaseDetailPage() {
           {lines.map((line, idx) => (
             <div
               key={line._key}
-              className="rounded-lg border border-slate-200 bg-slate-50/50 p-4 transition-all hover:border-slate-300"
+              className="rounded-lg border border-surface-border bg-surface-muted/50 p-4 transition-all hover:border-surface-input"
             >
               {/* Top Row: Item, Qty, Rate, Tax, Line Total, Actions */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
@@ -886,8 +886,8 @@ export function GeneralPurchaseDetailPage() {
                 </div>
 
                 <div className="md:col-span-1">
-                  <div className="text-xs font-semibold text-slate-500 mb-1.5">Line Total</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right tabular-nums font-bold text-slate-900 text-xs">
+                  <div className="text-xs font-semibold text-ink-secondary mb-1.5">Line Total</div>
+                  <div className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-right tabular-nums font-bold text-ink text-xs">
                     {currSymbol}{fmtDecimal(line.amount, 2)}
                   </div>
                 </div>
@@ -896,7 +896,7 @@ export function GeneralPurchaseDetailPage() {
                   <button
                     type="button"
                     onClick={() => handleDuplicateLine(line._key)}
-                    className="rounded p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                    className="rounded p-1.5 text-ink-muted hover:bg-surface-border hover:text-ink"
                     title="Duplicate line"
                   >
                     <Copy size={15} />
@@ -913,7 +913,7 @@ export function GeneralPurchaseDetailPage() {
               </div>
 
               {/* Bottom Row: Allocation Type, Dynamic References & Direct Issue */}
-              <div className="mt-3 pt-3 border-t border-slate-200/80 grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white/60 -mx-4 -mb-4 p-3 rounded-b-lg">
+              <div className="mt-3 pt-3 border-t border-surface-border/80 grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white/60 -mx-4 -mb-4 p-3 rounded-b-lg">
                 <div className="md:col-span-3">
                   <Select
                     label="Allocation Type *"
@@ -1072,20 +1072,20 @@ export function GeneralPurchaseDetailPage() {
                 </div>
 
                 {/* Direct Issue Checkbox / Toggle */}
-                <div className="md:col-span-4 flex items-center justify-between border-l border-slate-200 pl-3">
+                <div className="md:col-span-4 flex items-center justify-between border-l border-surface-border pl-3">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      className="h-4 w-4 rounded border-surface-input text-emerald-600 focus:ring-emerald-500"
                       checked={line.direct_issue === 1}
                       onChange={(e) => handleUpdateLine(line._key, 'direct_issue', e.target.checked ? 1 : 0)}
                     />
                     <div>
-                      <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                        <Zap size={13} className={line.direct_issue ? "fill-emerald-500 text-emerald-600" : "text-slate-400"} />
+                      <div className="text-xs font-bold text-ink flex items-center gap-1">
+                        <Zap size={13} className={line.direct_issue ? "fill-emerald-500 text-emerald-600" : "text-ink-muted"} />
                         Direct Issue to Order / Job
                       </div>
-                      <div className="text-micro text-slate-500">
+                      <div className="text-micro text-ink-secondary">
                         {line.direct_issue
                           ? '⚡ Immediately charges Actual Costing; 0 in unissued stock'
                           : 'Remains in inventory until officially issued'}
@@ -1105,9 +1105,9 @@ export function GeneralPurchaseDetailPage() {
         </div>
 
         {/* Grand Totals Summary Card */}
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
-          <div className="text-xs text-slate-600 space-y-1">
-            <div>Total Line Items: <span className="font-bold text-slate-800">{lines.length}</span></div>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-surface-border bg-surface-muted p-5">
+          <div className="text-xs text-ink-secondary space-y-1">
+            <div>Total Line Items: <span className="font-bold text-ink">{lines.length}</span></div>
             <div>Direct Issue Lines: <span className="font-bold text-emerald-700">{lines.filter((l) => l.direct_issue === 1).length}</span></div>
           </div>
 
@@ -1129,9 +1129,9 @@ export function GeneralPurchaseDetailPage() {
       {/* PRINTABLE GENERAL PO / GRN VOUCHER MODAL */}
       {showPrintVoucher && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 my-auto flex flex-col max-h-[96vh]">
-            <div className="px-6 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 no-print">
-              <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-surface-border my-auto flex flex-col max-h-[96vh]">
+            <div className="px-6 py-3 border-b border-surface-border flex items-center justify-between bg-surface-muted no-print">
+              <span className="font-bold text-sm text-ink flex items-center gap-2">
                 <Printer size={16} className="text-brand-600" /> Print {isPoMode ? 'General Purchase Order' : 'General GRN Voucher'}
               </span>
               <div className="flex items-center gap-2">
@@ -1153,43 +1153,43 @@ export function GeneralPurchaseDetailPage() {
             </div>
 
             {/* Printable Document Sheet */}
-            <div className="p-8 overflow-y-auto print-container text-slate-900 bg-white font-sans text-xs">
+            <div className="p-8 overflow-y-auto print-container text-ink bg-white font-sans text-xs">
               <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
-                <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900">GARMENT MANUFACTURING ERP</h1>
-                <p className="text-xs text-slate-500 font-medium">General Procurement &amp; Inventory Management</p>
+                <h1 className="text-xl font-bold uppercase tracking-wider text-ink">GARMENT MANUFACTURING ERP</h1>
+                <p className="text-xs text-ink-secondary font-medium">General Procurement &amp; Inventory Management</p>
                 <div className="inline-block mt-2 px-4 py-1 rounded bg-brand-100 text-brand-900 font-bold text-sm tracking-wide">
                   {isPoMode ? 'GENERAL PURCHASE ORDER (PO)' : 'GENERAL GOODS RECEIPT NOTE (GRN)'}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
+              <div className="grid grid-cols-2 gap-4 border border-surface-input rounded-lg p-3.5 mb-4 bg-surface-muted/50">
                 <div className="space-y-1.5">
-                  <div><span className="text-slate-500 font-medium">{isPoMode ? 'PO No:' : 'GRN No:'}</span> <span className="font-bold text-slate-900 tabular-nums text-sm">{isPoMode ? head.purchase_no : (head.grn_no || head.purchase_no)}</span></div>
-                  <div><span className="text-slate-500 font-medium">Date:</span> <span className="font-semibold text-slate-800">{head.purchase_date}</span></div>
-                  <div><span className="text-slate-500 font-medium">Purchase Type:</span> <span className="font-semibold text-slate-800">{head.purchase_type}</span></div>
-                  <div><span className="text-slate-500 font-medium">Payment Terms:</span> <span className="font-semibold text-slate-800">{head.payment_terms || '-'}</span></div>
+                  <div><span className="text-ink-secondary font-medium">{isPoMode ? 'PO No:' : 'GRN No:'}</span> <span className="font-bold text-ink tabular-nums text-sm">{isPoMode ? head.purchase_no : (head.grn_no || head.purchase_no)}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Date:</span> <span className="font-semibold text-ink">{head.purchase_date}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Purchase Type:</span> <span className="font-semibold text-ink">{head.purchase_type}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Payment Terms:</span> <span className="font-semibold text-ink">{head.payment_terms || '-'}</span></div>
                 </div>
-                <div className="space-y-1.5 border-l border-slate-200 pl-4">
-                  <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{String((suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.label || (suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.party_name || '-')}</span></div>
-                  <div><span className="text-slate-500 font-medium">Supplier Bill / Invoice:</span> <span className="tabular-nums font-semibold text-slate-800">{head.supplier_inv_no || '-'}</span></div>
-                  <div><span className="text-slate-500 font-medium">Currency:</span> <span className="font-bold text-brand-700">{currCode} ({currSymbol}) {isForeignCurrency ? `@ ₹${head.exchange_rate}` : ''}</span></div>
-                  <div><span className="text-slate-500 font-medium">Status:</span> <span className="font-bold text-emerald-700">{head.approval_state}</span></div>
+                <div className="space-y-1.5 border-l border-surface-border pl-4">
+                  <div><span className="text-ink-secondary font-medium">Supplier / Vendor:</span> <span className="font-bold text-ink">{String((suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.label || (suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.party_name || '-')}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Supplier Bill / Invoice:</span> <span className="tabular-nums font-semibold text-ink">{head.supplier_inv_no || '-'}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Currency:</span> <span className="font-bold text-brand-700">{currCode} ({currSymbol}) {isForeignCurrency ? `@ ₹${head.exchange_rate}` : ''}</span></div>
+                  <div><span className="text-ink-secondary font-medium">Status:</span> <span className="font-bold text-emerald-700">{head.approval_state}</span></div>
                 </div>
               </div>
 
               {/* Items Table */}
               <div className="mb-6">
-                <table className="w-full border-collapse border border-slate-300 text-caption">
+                <table className="w-full border-collapse border border-surface-input text-caption">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-700">
-                      <th className="border border-slate-300 py-1.5 px-2 text-left">#</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-left">Description</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-left">Allocation / Job</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">Qty</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">Rate ({currSymbol})</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">Taxable ({currSymbol})</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">{head.is_interstate ? 'IGST (%)' : 'GST (%)'}</th>
-                      <th className="border border-slate-300 py-1.5 px-2 text-right">Total ({currSymbol})</th>
+                    <tr className="bg-surface-header text-ink">
+                      <th className="border border-surface-input py-1.5 px-2 text-left">#</th>
+                      <th className="border border-surface-input py-1.5 px-2 text-left">Description</th>
+                      <th className="border border-surface-input py-1.5 px-2 text-left">Allocation / Job</th>
+                      <th className="border border-surface-input py-1.5 px-2 text-right">Qty</th>
+                      <th className="border border-surface-input py-1.5 px-2 text-right">Rate ({currSymbol})</th>
+                      <th className="border border-surface-input py-1.5 px-2 text-right">Taxable ({currSymbol})</th>
+                      <th className="border border-surface-input py-1.5 px-2 text-right">{head.is_interstate ? 'IGST (%)' : 'GST (%)'}</th>
+                      <th className="border border-surface-input py-1.5 px-2 text-right">Total ({currSymbol})</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1200,48 +1200,48 @@ export function GeneralPurchaseDetailPage() {
                       const taxable = raw - disc;
                       return (
                         <tr key={l._key || idx}>
-                          <td className="border border-slate-300 py-1 px-2 text-center text-slate-500">{idx + 1}</td>
-                          <td className="border border-slate-300 py-1 px-2 font-semibold text-slate-900">{l.item_description || 'Item'}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-slate-600">{soObj?.so_no || l.allocation_type || 'General'}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{fmtDecimal(l.qty)}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right">{currSymbol}{fmtDecimal(l.rate, 2)}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right">{currSymbol}{fmtDecimal(taxable, 2)}</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right">{head.is_interstate ? (l.igst_rate || l.gst_rate || 18) : (l.gst_rate || 18)}%</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(l.amount, 2)}</td>
+                          <td className="border border-surface-input py-1 px-2 text-center text-ink-secondary">{idx + 1}</td>
+                          <td className="border border-surface-input py-1 px-2 font-semibold text-ink">{l.item_description || 'Item'}</td>
+                          <td className="border border-surface-input py-1 px-2 text-ink-secondary">{soObj?.so_no || l.allocation_type || 'General'}</td>
+                          <td className="border border-surface-input py-1 px-2 text-right font-bold">{fmtDecimal(l.qty)}</td>
+                          <td className="border border-surface-input py-1 px-2 text-right">{currSymbol}{fmtDecimal(l.rate, 2)}</td>
+                          <td className="border border-surface-input py-1 px-2 text-right">{currSymbol}{fmtDecimal(taxable, 2)}</td>
+                          <td className="border border-surface-input py-1 px-2 text-right">{head.is_interstate ? (l.igst_rate || l.gst_rate || 18) : (l.gst_rate || 18)}%</td>
+                          <td className="border border-surface-input py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(l.amount, 2)}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-50">
-                      <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">Subtotal (Taxable):</td>
-                      <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.subtotal, 2)}</td>
+                    <tr className="bg-surface-muted">
+                      <td colSpan={7} className="border border-surface-input py-1 px-2 text-right font-semibold text-ink-secondary">Subtotal (Taxable):</td>
+                      <td className="border border-surface-input py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.subtotal, 2)}</td>
                     </tr>
                     {head.is_interstate ? (
-                      <tr className="bg-slate-50">
-                        <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-purple-700">IGST Amount:</td>
-                        <td className="border border-slate-300 py-1 px-2 text-right font-bold text-purple-800">{currSymbol}{fmtDecimal(totals.igstAmount, 2)}</td>
+                      <tr className="bg-surface-muted">
+                        <td colSpan={7} className="border border-surface-input py-1 px-2 text-right font-semibold text-purple-700">IGST Amount:</td>
+                        <td className="border border-surface-input py-1 px-2 text-right font-bold text-purple-800">{currSymbol}{fmtDecimal(totals.igstAmount, 2)}</td>
                       </tr>
                     ) : (
                       <>
-                        <tr className="bg-slate-50">
-                          <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">CGST Amount:</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.cgstAmount, 2)}</td>
+                        <tr className="bg-surface-muted">
+                          <td colSpan={7} className="border border-surface-input py-1 px-2 text-right font-semibold text-ink-secondary">CGST Amount:</td>
+                          <td className="border border-surface-input py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.cgstAmount, 2)}</td>
                         </tr>
-                        <tr className="bg-slate-50">
-                          <td colSpan={7} className="border border-slate-300 py-1 px-2 text-right font-semibold text-slate-600">SGST Amount:</td>
-                          <td className="border border-slate-300 py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.sgstAmount, 2)}</td>
+                        <tr className="bg-surface-muted">
+                          <td colSpan={7} className="border border-surface-input py-1 px-2 text-right font-semibold text-ink-secondary">SGST Amount:</td>
+                          <td className="border border-surface-input py-1 px-2 text-right font-bold">{currSymbol}{fmtDecimal(totals.sgstAmount, 2)}</td>
                         </tr>
                       </>
                     )}
-                    <tr className="bg-slate-100 font-bold">
-                      <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-slate-900">Grand Total ({currCode}):</td>
-                      <td className="border border-slate-300 py-1.5 px-2 text-right font-bold text-brand-800 text-sm">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</td>
+                    <tr className="bg-surface-header font-bold">
+                      <td colSpan={7} className="border border-surface-input py-1.5 px-2 text-right text-ink">Grand Total ({currCode}):</td>
+                      <td className="border border-surface-input py-1.5 px-2 text-right font-bold text-brand-800 text-sm">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</td>
                     </tr>
                     {isForeignCurrency && (
                       <tr className="bg-amber-50/60 font-bold">
-                        <td colSpan={7} className="border border-slate-300 py-1.5 px-2 text-right text-amber-900">Converted INR Equivalent (@ ₹{head.exchange_rate}):</td>
-                        <td className="border border-slate-300 py-1.5 px-2 text-right font-bold text-amber-950 text-sm">₹{fmtDecimal(totals.inrGrandTotal, 2)}</td>
+                        <td colSpan={7} className="border border-surface-input py-1.5 px-2 text-right text-amber-900">Converted INR Equivalent (@ ₹{head.exchange_rate}):</td>
+                        <td className="border border-surface-input py-1.5 px-2 text-right font-bold text-amber-950 text-sm">₹{fmtDecimal(totals.inrGrandTotal, 2)}</td>
                       </tr>
                     )}
                   </tfoot>
@@ -1249,22 +1249,22 @@ export function GeneralPurchaseDetailPage() {
               </div>
 
               {/* Signatures */}
-              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-slate-300 text-center text-micro">
+              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-surface-input text-center text-micro">
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">Prepared By</span>
+                  <span className="font-semibold text-ink">Prepared By</span>
                 </div>
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">Store In-Charge</span>
+                  <span className="font-semibold text-ink">Store In-Charge</span>
                 </div>
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">Accounts</span>
+                  <span className="font-semibold text-ink">Accounts</span>
                 </div>
                 <div>
                   <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-slate-700">Authorized Signatory</span>
+                  <span className="font-semibold text-ink">Authorized Signatory</span>
                 </div>
               </div>
             </div>

@@ -23,9 +23,19 @@ export interface NavItem {
   flag?: string;
 }
 export interface NavSection {
+  /** Step label — numbered steps drive the step bar ("Step 4 · Yarn & Knitting"). */
   label: string;
+  /** Sidebar group heading (C-ONE UI v1.1 reference: MASTER, SALES & PLANNING, PROCUREMENT …). */
+  group?: string;
+  /** Sidebar menu name without the step number. */
+  menu?: string;
+  /** Sidebar / collapsed-rail icon for the step. */
+  icon?: LucideIcon;
   items: NavItem[];
 }
+
+/** Sidebar group order of the reference design. */
+export const NAV_GROUPS = ['MASTER', 'SALES & PLANNING', 'PROCUREMENT', 'PRODUCTION', 'INVENTORY', 'SHIPMENT & EXPORT', 'FINANCE & REPORTS', 'ADMINISTRATION'];
 
 /**
  * Sidebar in the order the work happens — order → purchase → gate & stores → yarn / knitting → fabric process →
@@ -40,7 +50,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '1 · Orders',
+    label: '1 · Orders', group: 'SALES & PLANNING', menu: 'Orders', icon: ClipboardList,
     items: [
       { label: 'Enquiries',          to: '/sales/enquiries', icon: FileText, perms: ['ENQUIRY.VIEW'] },
       { label: 'Samples',            to: '/sales/samples', icon: Beaker, perms: ['SAMPLE.VIEW'] },
@@ -55,7 +65,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '2 · Purchase',
+    label: '2 · Purchase', group: 'PROCUREMENT', menu: 'Purchase', icon: ShoppingCart,
     items: [
       { label: 'MRP Runs',             to: '/procurement/mrp', icon: TrendingUp, perms: ['MRP.VIEW'] },
       { label: 'Yarn POs',             to: '/procurement/yarn/orders', icon: GitBranch, perms: ['PURCHASE.VIEW'] },
@@ -77,7 +87,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '3 · Gate & Stores',
+    label: '3 · Gate & Stores', group: 'INVENTORY', menu: 'Gate & Stores', icon: Warehouse,
     items: [
       { label: 'Inward Gate Entry',  to: '/gate/inwards', icon: Truck, perms: ['GATE_INWARD.VIEW'] },
       { label: 'Outward Gate Pass',  to: '/gate/outwards', icon: Shield, perms: ['GATE_OUTWARD.VIEW'] },
@@ -98,7 +108,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '4 · Yarn & Knitting',
+    label: '4 · Yarn & Knitting', group: 'PRODUCTION', menu: 'Yarn & Knitting', icon: Workflow,
     items: [
       { label: 'Knitting Programs',            to: '/production/knitting-programs', icon: Layers, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Process – Outward DC',    to: '/production/yarn-process/outward', icon: Truck, perms: ['YARN_PROCESS.VIEW'] },
@@ -113,7 +123,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '5 · Fabric Process',
+    label: '5 · Fabric Process', group: 'PRODUCTION', menu: 'Fabric Process', icon: Layers,
     items: [
       { label: 'Fabric Process – Outward DC',   to: '/production/fabric-process/outward', icon: Truck, perms: ['FABRIC_PROCESS.VIEW'] },
       { label: 'Fabric Process – Inward / GRN', to: '/production/fabric-process/inward', icon: PackageCheck, perms: ['FABRIC_PROCESS.VIEW'] },
@@ -124,7 +134,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '6 · Cutting',
+    label: '6 · Cutting', group: 'PRODUCTION', menu: 'Cutting', icon: Scissors,
     items: [
       { label: 'CAD Auto-Consumption',        to: '/production/cad-requirements', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
       { label: 'Cutting Plans',               to: '/production/cutting-plans', icon: Scissors, perms: ['PRODUCTION.VIEW'] },
@@ -135,7 +145,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '7 · Stitching',
+    label: '7 · Stitching', group: 'PRODUCTION', menu: 'Stitching', icon: Shirt,
     items: [
       { label: 'Sewing Line Allocation', to: '/production/sewing-line-allocation', icon: GitBranch, perms: ['PRODUCTION.VIEW'] },
       { label: 'Sewing Daily Plan',      to: '/production/sewing-daily-plan', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
@@ -147,7 +157,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '8 · Checking · Ironing · Packing',
+    label: '8 · Checking · Ironing · Packing', group: 'PRODUCTION', menu: 'Checking / Ironing / Packing', icon: PackageCheck,
     items: [
       { label: 'Checking Line Allocation', to: '/production/checking-line-allocation', icon: GitBranch, perms: ['PRODUCTION.VIEW'] },
       { label: 'Checking Daily Plan',      to: '/production/checking-daily-plan', icon: CalendarClock, perms: ['PRODUCTION.VIEW'] },
@@ -171,7 +181,7 @@ export const NAV: NavSection[] = [
   {
     // client 17-Oct-2026: "we had a Quality menu — bring it back". Every QC / reject screen in one place; the
     // screens also stay in their process steps (the step bar keeps showing the process step, the first match).
-    label: 'Quality',
+    label: 'Quality', group: 'PRODUCTION', menu: 'Quality', icon: ShieldCheck,
     items: [
       { label: 'Cut QC & Bundles',         to: '/production/cut-qc-bundles', icon: Scissors, perms: ['PRODUCTION.VIEW', 'QC.VIEW'] },
       { label: 'Checking Entry (QC)',      to: '/production/checking-qc-entry', icon: ClipboardCheck, perms: ['PRODUCTION.VIEW', 'QC.VIEW'] },
@@ -182,14 +192,14 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '9 · Embroidery & Printing',
+    label: '9 · Embroidery & Printing', group: 'PRODUCTION', menu: 'Embroidery & Printing', icon: Palette,
     items: [
       { label: 'Embroidery – Machine Output & Cost', to: '/production/embroidery', icon: Palette, perms: ['EMBROIDERY.VIEW'] },
       { label: 'Printing – Machine Output & Cost',   to: '/production/printing', icon: Palette, perms: ['PRINTING.VIEW'] },
     ],
   },
   {
-    label: '10 · Shipment & Export',
+    label: '10 · Shipment & Export', group: 'SHIPMENT & EXPORT', menu: 'Shipment & Export', icon: Ship,
     items: [
       { label: 'Shipment Planning',   to: '/logistics/shipment-plans', icon: CalendarClock, perms: ['PACKING.VIEW', 'EXPORT.VIEW'] },
       { label: 'Shipments',           to: '/logistics/shipments', icon: Ship, perms: ['PACKING.VIEW', 'EXPORT.VIEW'] },
@@ -204,7 +214,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '11 · Job Work & Contractors',
+    label: '11 · Job Work & Contractors', group: 'PRODUCTION', menu: 'Job Work & Contractors', icon: HandCoins,
     items: [
       { label: 'Job Work Orders',        to: '/production/job-work-orders', icon: ClipboardList, perms: ['PRODUCTION.VIEW'] },
       { label: 'Job Work Dashboard',     to: '/production/job-work-dashboard', icon: Gauge, perms: ['PRODUCTION.VIEW'] },
@@ -216,7 +226,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '12 · Finance',
+    label: '12 · Finance', group: 'FINANCE & REPORTS', menu: 'Finance', icon: Wallet,
     items: [
       { label: 'Vouchers',          to: '/finance/vouchers', icon: Landmark, perms: ['FINANCE.VIEW'] },
       { label: 'Receipts',          to: '/finance/receipts', icon: Wallet, perms: ['FINANCE.VIEW'] },
@@ -225,7 +235,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '13 · Reports',
+    label: '13 · Reports', group: 'FINANCE & REPORTS', menu: 'Reports', icon: BarChart3,
     items: [
       { label: 'WIP Stock Value',        to: '/production/wip-stock-value', icon: Coins, perms: ['PRODUCTION.VIEW'] },
       { label: 'Production Costing',     to: '/production/costs', icon: Calculator, perms: ['PRODUCTION.VIEW'] },
@@ -245,7 +255,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '14 · Masters & Setup',
+    label: '14 · Masters & Setup', group: 'MASTER', menu: 'Masters & Setup', icon: Settings,
     items: [
       { label: 'Business Partners',  to: '/masters/parties', icon: Users, perms: ['PARTY.VIEW'] },
       { label: 'Products',           to: '/masters/products', icon: Package, perms: ['PRODUCT.VIEW'] },
@@ -279,7 +289,7 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: 'Administration',
+    label: 'Administration', group: 'ADMINISTRATION', menu: 'Administration', icon: Shield,
     items: [
       { label: 'Users',    to: '/admin/users', icon: Users, perms: ['USER.VIEW'] },
       { label: 'Roles',    to: '/admin/roles', icon: Shield, perms: ['ROLE.VIEW'] },

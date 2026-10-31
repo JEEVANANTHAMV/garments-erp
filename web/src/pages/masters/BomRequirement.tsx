@@ -40,21 +40,21 @@ export function BomOrderStrip({ info }: { info: OrderInfo }) {
       <div className="flex flex-wrap items-stretch gap-x-6 gap-y-2 text-xs">
         {[['Job / IO No', info.job_no], ['Buyer', info.buyer_name], ['Buyer PO', info.buyer_po_no], ['Style', [info.style_code, info.style_name].filter(Boolean).join(' — ')]].map(([k, v]) => (
           <div key={k as string}>
-            <div className="text-caption font-semibold uppercase tracking-wider text-slate-500">{k}</div>
-            <div className="font-semibold text-slate-900">{v || '—'}</div>
+            <div className="text-caption font-semibold uppercase tracking-wider text-ink-secondary">{k}</div>
+            <div className="font-semibold text-ink">{v || '—'}</div>
           </div>
         ))}
         <table className="ml-auto text-right tabular-nums">
           <thead>
-            <tr className="text-caption uppercase tracking-wider text-slate-500">
+            <tr className="text-caption uppercase tracking-wider text-ink-secondary">
               <th className="px-2 text-left font-semibold">Size</th>
               {info.sizes.map((s) => <th key={s.size_id} className="px-2 font-semibold">{s.code}</th>)}
-              <th className="px-2 font-semibold text-slate-700">Total</th>
+              <th className="px-2 font-semibold text-ink">Total</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="px-2 text-left text-slate-500">Order qty</td>
+              <td className="px-2 text-left text-ink-secondary">Order qty</td>
               {info.sizes.map((s) => <td key={s.size_id} className="px-2">{fmtNumber(s.qty)}</td>)}
               <td className="px-2 font-semibold">{fmtNumber(info.totals.qty)}</td>
             </tr>
@@ -140,8 +140,8 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
     <div className="card mb-4 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border px-4 py-3">
         <div>
-          <h3 className="text-body-lg font-semibold text-slate-800">
-            Total Requirement — {info.job_no} · {info.style_code} <span className="font-normal text-slate-500">(one line per material, plan-cut PCS incl. size-wise excess)</span>
+          <h3 className="text-body-lg font-semibold text-ink">
+            Total Requirement — {info.job_no} · {info.style_code} <span className="font-normal text-ink-secondary">(one line per material, plan-cut PCS incl. size-wise excess)</span>
           </h3>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-caption font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
@@ -159,11 +159,11 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
             )}
           </div>
         </div>
-        <span className="text-caption text-slate-500">Same figures as MRP and the PO / quotation BOM pick</span>
+        <span className="text-caption text-ink-secondary">Same figures as MRP and the PO / quotation BOM pick</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs tabular-nums">
-          <thead className="bg-slate-50 text-slate-600">
+          <thead className="bg-surface-muted text-ink-secondary">
             <tr>
               <th rowSpan={2} className="th w-8">#</th>
               <th rowSpan={2} className="th">Type</th>
@@ -191,8 +191,8 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
               const tone = TYPE_TONE[r.l0.material_type] ?? TYPE_TONE.GENERAL;
               const src = r.l0.source_type || 'PURCHASE';
               return (
-                <tr key={i} className={`border-t border-slate-100 ${tone.row}`}>
-                  <td className={`td border-l-4 text-center text-slate-400 ${tone.bar}`}>{i + 1}</td>
+                <tr key={i} className={`border-t border-surface-divider ${tone.row}`}>
+                  <td className={`td border-l-4 text-center text-ink-muted ${tone.bar}`}>{i + 1}</td>
                   <td className="td"><span className={`rounded border px-1.5 py-0.5 text-micro font-bold ${tone.badge}`}>{r.l0.material_type}</span></td>
                   <td className="td">
                     {src === 'PRODUCTION' ? (
@@ -210,17 +210,17 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
                     )}
                   </td>
                   <td className="td">
-                    <div className="font-semibold text-slate-900">{r.name}</div>
+                    <div className="font-semibold text-ink">{r.name}</div>
                     {(r.l0.specification || r.lineCount > 1) && (
-                      <div className="text-caption text-slate-500">{[r.l0.specification, r.lineCount > 1 ? `${r.lineCount} BOM lines (size / colour wise)` : ''].filter(Boolean).join(' · ')}</div>
+                      <div className="text-caption text-ink-secondary">{[r.l0.specification, r.lineCount > 1 ? `${r.lineCount} BOM lines (size / colour wise)` : ''].filter(Boolean).join(' · ')}</div>
                     )}
                   </td>
                   <td className="td">{r.l0.color_id ? colorName(r.l0.color_id) : 'All'}</td>
                   <td className="td">{uomCode(r.l0.uom_id)}{r.l0.consumption_basis === 'PER_DOZEN' ? ' / dz' : r.fixed ? ' (fixed)' : ''}</td>
-                  {r.perSize.map((p, k) => <td key={`c${k}`} className={`td text-right ${k === 0 ? 'border-l' : ''}`}>{r.fixed || p.cons == null ? <span className="text-slate-300">—</span> : dp(p.cons)}</td>)}
+                  {r.perSize.map((p, k) => <td key={`c${k}`} className={`td text-right ${k === 0 ? 'border-l' : ''}`}>{r.fixed || p.cons == null ? <span className="text-ink-disabled">—</span> : dp(p.cons)}</td>)}
                   <td className="td text-right font-semibold">{dp(r.avg)}</td>
                   <td className="td text-right">{fmtDecimal(r.wastePct, 2)}{r.mixedWaste ? '*' : ''}</td>
-                  {r.perSize.map((p, k) => <td key={`q${k}`} className={`td text-right ${k === 0 ? 'border-l' : ''}`}>{p.qty ? fmtNumber(p.qty) : <span className="text-slate-300">—</span>}</td>)}
+                  {r.perSize.map((p, k) => <td key={`q${k}`} className={`td text-right ${k === 0 ? 'border-l' : ''}`}>{p.qty ? fmtNumber(p.qty) : <span className="text-ink-disabled">—</span>}</td>)}
                   <td className="td border-l text-right">{fmtNumber(r.orderQty)}</td>
                   <td className="td text-right">{dp(r.base)}</td>
                   <td className="td text-right">{dp(r.waste)}</td>
@@ -230,12 +230,12 @@ export function BomRequirementTable({ lines, info, materialName, uomCode }: {
               );
             })}
             {!rows.length && (
-              <tr><td colSpan={12 + info.sizes.length * 2} className="td py-6 text-center text-slate-400">Enter materials with a consumption to see the requirement</td></tr>
+              <tr><td colSpan={12 + info.sizes.length * 2} className="td py-6 text-center text-ink-muted">Enter materials with a consumption to see the requirement</td></tr>
             )}
           </tbody>
         </table>
       </div>
-      {rows.some((r) => r.mixedWaste) && <p className="px-4 py-2 text-caption text-slate-500">* the material's lines carry different wastage % — the weighted % is shown; each line's own % is used in the quantities.</p>}
+      {rows.some((r) => r.mixedWaste) && <p className="px-4 py-2 text-caption text-ink-secondary">* the material's lines carry different wastage % — the weighted % is shown; each line's own % is used in the quantities.</p>}
     </div>
   );
 }

@@ -59,37 +59,37 @@ export function ProductionCostsPage() {
 
       {/* Top Metric Cards */}
       <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
+        <div className="rounded-xl border border-surface-border bg-white p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-ink-secondary mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider">Total Actual Cost</span>
             <Calculator size={16} className="text-brand-600" />
           </div>
-          <span className="text-2xl font-bold text-slate-900 tabular-nums">
+          <span className="text-2xl font-bold text-ink tabular-nums">
             ₹{fmtDecimal(totalCost, 0)}
           </span>
-          <p className="text-caption text-slate-500 mt-1">Across all filtered cost sheets</p>
+          <p className="text-caption text-ink-secondary mt-1">Across all filtered cost sheets</p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
+        <div className="rounded-xl border border-surface-border bg-white p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-ink-secondary mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider">Produced Volume</span>
-            <Boxes size={16} className="text-slate-400" />
+            <Boxes size={16} className="text-ink-muted" />
           </div>
-          <span className="text-2xl font-bold text-slate-900 tabular-nums">
+          <span className="text-2xl font-bold text-ink tabular-nums">
             {fmtNumber(totalProduced)}
           </span>
-          <p className="text-caption text-slate-500 mt-1">Total pieces completed</p>
+          <p className="text-caption text-ink-secondary mt-1">Total pieces completed</p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
+        <div className="rounded-xl border border-surface-border bg-white p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-ink-secondary mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider">Weighted Cost / Pc</span>
-            <FileText size={16} className="text-slate-400" />
+            <FileText size={16} className="text-ink-muted" />
           </div>
           <span className="text-2xl font-bold text-brand-700 tabular-nums">
             ₹{fmtDecimal(avgCostPerPc, 2)}
           </span>
-          <p className="text-caption text-slate-500 mt-1">Average per garment execution</p>
+          <p className="text-caption text-ink-secondary mt-1">Average per garment execution</p>
         </div>
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5 shadow-xs">
@@ -176,7 +176,7 @@ export function ProductionCostsPage() {
             render: (r: any) => (
               <div>
                 <span className="tabular-nums text-body font-bold text-brand-700">{r.cost_no}</span>
-                <span className="ml-2 rounded bg-slate-100 px-1 py-0.5 text-micro font-bold text-slate-600 tabular-nums">
+                <span className="ml-2 rounded bg-surface-header px-1 py-0.5 text-micro font-bold text-ink-secondary tabular-nums">
                   v{r.version || 1}
                 </span>
               </div>
@@ -192,7 +192,7 @@ export function ProductionCostsPage() {
             key: 'po_prod_no',
             header: 'Production Order',
             render: (r: any) => (
-              <span className="tabular-nums text-xs font-bold text-slate-900">{r.po_prod_no || '—'}</span>
+              <span className="tabular-nums text-xs font-bold text-ink">{r.po_prod_no || '—'}</span>
             ),
           },
           {
@@ -200,22 +200,22 @@ export function ProductionCostsPage() {
             header: 'Style',
             render: (r: any) => (
               <div>
-                <p className="font-bold text-slate-900 text-xs">{r.style_code || '—'}</p>
-                <p className="text-caption text-slate-500">{r.style_name || '—'}</p>
+                <p className="font-bold text-ink text-xs">{r.style_code || '—'}</p>
+                <p className="text-caption text-ink-secondary">{r.style_name || '—'}</p>
               </div>
             ),
           },
           {
             key: 'buyer_name',
             header: 'Buyer',
-            render: (r: any) => <span className="font-medium text-slate-700 text-xs">{r.buyer_name || '—'}</span>,
+            render: (r: any) => <span className="font-medium text-ink text-xs">{r.buyer_name || '—'}</span>,
           },
           {
             key: 'produced_qty',
             header: 'Produced Qty',
             align: 'right',
             render: (r: any) => (
-              <span className="tabular-nums font-bold text-slate-800 text-xs">
+              <span className="tabular-nums font-bold text-ink text-xs">
                 {fmtNumber(r.produced_qty)} pcs
               </span>
             ),
@@ -225,7 +225,7 @@ export function ProductionCostsPage() {
             header: 'Total Cost (₹)',
             align: 'right',
             render: (r: any) => (
-              <span className="tabular-nums font-bold text-slate-900 text-xs">
+              <span className="tabular-nums font-bold text-ink text-xs">
                 ₹{fmtDecimal(r.total_cost, 2)}
               </span>
             ),
@@ -246,7 +246,7 @@ export function ProductionCostsPage() {
             align: 'right',
             render: (r: any) => {
               const v = Number(r.variance_pct);
-              if (!v) return <span className="text-slate-400 tabular-nums text-xs">0.0%</span>;
+              if (!v) return <span className="text-ink-muted tabular-nums text-xs">0.0%</span>;
               return (
                 <span className={`tabular-nums text-xs font-bold ${
                   v <= 0 ? 'text-emerald-600' : 'text-rose-600'

@@ -65,9 +65,9 @@ function RateFields({ kind, r, set }: { kind: Kind; r: any; set: (p: any) => voi
       {r.overhead_basis === 'HOUR'
         ? <Input label="Factory overhead ₹/hr" type="number" value={r.overhead_rate_hour} onChange={(e) => set({ overhead_rate_hour: e.target.value })} />
         : <Input label="Overhead %" type="number" value={r.overhead_pct} onChange={(e) => set({ overhead_pct: e.target.value })} />}
-      <div className="col-span-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-600 md:col-span-4">
+      <div className="col-span-2 rounded-lg bg-surface-muted p-2 text-xs text-ink-secondary md:col-span-4">
         Machine {money(machine)}/hr + labour {money(num(r.operator_rate_hour) + num(r.helper_rate_hour))}/hr{r.overhead_basis === 'HOUR' ? ` + overhead ${money(r.overhead_rate_hour)}/hr` : ''} =
-        <b className="ml-1 text-slate-900">{money(total)} / hour</b>{r.rate_basis === 'HEAD' ? ' (machine part per head)' : ''}.
+        <b className="ml-1 text-ink">{money(total)} / hour</b>{r.rate_basis === 'HEAD' ? ' (machine part per head)' : ''}.
         Machine and overhead are charged on costing hours; labour on attended hours (end − start − break).
       </div>
     </div>
@@ -174,8 +174,8 @@ function MachineEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; 
             { h: 'Used by approved', r: (r) => num(r.used_final) ? <Badge tone="green">{r.used_final} entries · locked</Badge> : '—' },
             { h: 'By', r: (r) => r.created_by_name ?? '—' },
           ]} />
-          {p.master && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-            <p className="text-xs font-semibold text-slate-600">Add a rate from a date (production on / after that date is costed with it)</p>
+          {p.master && <div className="mt-3 space-y-2 border-t border-surface-divider pt-3">
+            <p className="text-xs font-semibold text-ink-secondary">Add a rate from a date (production on / after that date is costed with it)</p>
             <RateFields kind={kind} r={rate} set={(p2) => setRate({ ...rate, ...p2 })} />
             <Button size="sm" loading={busy} id="mp-rate-add" onClick={addRate}><Plus size={12} className="mr-1 inline" />Add rate</Button>
           </div>}
@@ -201,7 +201,7 @@ function Designs({ kind }: { kind: Kind }) {
       </div>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No designs yet" onRowClick={(r: any) => setOpen(r)}
         columns={[
-          { key: 'design_code', header: 'Code', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.design_code} <span className="text-slate-400">v{r.version_no}</span></span> },
+          { key: 'design_code', header: 'Code', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.design_code} <span className="text-ink-muted">v{r.version_no}</span></span> },
           { key: 'design_name', header: 'Name' },
           ...(kind === 'EMBROIDERY' ? [{ key: 'total_stitches', header: 'Stitches', align: 'right' as const, render: (r: any) => qty(r.total_stitches, 0) }] : [{ key: 'print_type', header: 'Print type', render: (r: any) => human(r.print_type) }]),
           { key: 'no_of_colors', header: 'Colours', align: 'right' as const },
@@ -285,7 +285,7 @@ function DesignEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
             <span className="label">{kind === 'EMBROIDERY' ? 'Design file (DST / DSB / EMB / PDF / image)' : 'Artwork file (PDF / image)'}</span>
             <div className="flex items-center gap-3">
               {!ro && <label className="btn-secondary cursor-pointer text-xs"><Upload size={12} className="mr-1 inline" />Upload<input type="file" className="hidden" id="mp-design-file" onChange={(e) => void onFile(e.target.files?.[0])} /></label>}
-              {cur.file_url ? <a href={cur.file_url} target="_blank" rel="noreferrer" className="text-xs text-brand-700 underline">{cur.file_name || cur.file_url}</a> : <span className="text-xs text-slate-400">No file</span>}
+              {cur.file_url ? <a href={cur.file_url} target="_blank" rel="noreferrer" className="text-xs text-brand-700 underline">{cur.file_name || cur.file_url}</a> : <span className="text-xs text-ink-muted">No file</span>}
             </div>
           </div>
           <Textarea label="Remarks" disabled={ro} value={cur.remarks} onChange={(e) => set({ remarks: e.target.value })} />
@@ -294,14 +294,14 @@ function DesignEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
         <Section title={kind === 'EMBROIDERY' ? 'Thread colours / needle sequence' : 'Ink colours'}
           actions={!ro && <Button size="sm" variant="secondary" onClick={() => set({ colors: [...cur.colors, { needle_no: '', color_name: '', trim_id: '', stitches: '' }] })}><Plus size={12} className="mr-1 inline" />Add colour</Button>}>
           {cur.colors.length ? <table className="w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500"><tr>
+            <thead className="bg-surface-muted text-ink-secondary"><tr>
               {kind === 'EMBROIDERY' && <th className="px-2 py-1 text-left">Needle</th>}<th className="px-2 py-1 text-left">Colour</th>
               <th className="px-2 py-1 text-left">Material</th>{kind === 'EMBROIDERY' && <th className="px-2 py-1 text-left">Stitches</th>}<th />
             </tr></thead>
             <tbody>{cur.colors.map((c: any, i: number) => {
               const upd = (x: any) => set({ colors: cur.colors.map((y: any, j: number) => (j === i ? { ...y, ...x } : y)) });
               return (
-                <tr key={i} className="border-t border-slate-100">
+                <tr key={i} className="border-t border-surface-divider">
                   {kind === 'EMBROIDERY' && <td className="px-2 py-1"><input className="input h-8 w-16" type="number" disabled={ro} value={c.needle_no} onChange={(e) => upd({ needle_no: e.target.value })} /></td>}
                   <td className="px-2 py-1"><input className="input h-8 w-40" disabled={ro} value={c.color_name} onChange={(e) => upd({ color_name: e.target.value })} /></td>
                   <td className="px-2 py-1"><select className="input h-8 w-56" disabled={ro} value={c.trim_id} onChange={(e) => upd({ trim_id: e.target.value })}><option value="">—</option>{(materials.data ?? []).map((t: any) => <option key={t.id} value={t.id}>{t.code} · {t.label}</option>)}</select></td>
@@ -310,7 +310,7 @@ function DesignEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
                 </tr>
               );
             })}</tbody>
-          </table> : <p className="py-2 text-xs text-slate-400">No colours listed</p>}
+          </table> : <p className="py-2 text-xs text-ink-muted">No colours listed</p>}
         </Section>
         {row.id && (detail.data?.versions?.length ?? 0) > 1 && <Section title="Versions">
           <MiniTable rows={detail.data.versions} cols={[{ h: 'Version', r: (v) => `v${v.version_no}` }, { h: 'Status', r: (v) => <Badge tone={ST_TONE[v.status]}>{human(v.status)}</Badge> }, { h: 'Approved', r: (v) => fmtDate(v.approved_at) }]} />
@@ -336,7 +336,7 @@ function Recipes({ kind }: { kind: Kind }) {
       </div>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No recipes yet" onRowClick={(r: any) => setOpen(r)}
         columns={[
-          { key: 'recipe_no', header: 'Recipe', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.recipe_no} <span className="text-slate-400">v{r.version_no}</span></span> },
+          { key: 'recipe_no', header: 'Recipe', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.recipe_no} <span className="text-ink-muted">v{r.version_no}</span></span> },
           { key: 'recipe_name', header: 'Name' },
           { key: 'design_code', header: 'Design', render: (r: any) => r.design_code ? `${r.design_code} v${r.design_version}` : '—' },
           { key: 'base', header: 'Base', render: (r: any) => `${qty(r.base_qty)} ${r.base_uom}` },
@@ -407,7 +407,7 @@ function RecipeEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
         <Section title="Materials" actions={!ro && <Button size="sm" variant="secondary" id="mp-recipe-add-line" onClick={() => set({ items: [...cur.items, blank()] })}><Plus size={12} className="mr-1 inline" />Add material</Button>}>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-slate-500"><tr>
+              <thead className="bg-surface-muted text-ink-secondary"><tr>
                 <th className="px-2 py-1 text-left">Material (trims master)</th><th className="px-2 py-1 text-left">Role</th><th className="px-2 py-1 text-left">Basis</th>
                 <th className="px-2 py-1 text-right">Std qty</th><th className="px-2 py-1 text-left">UOM</th><th className="px-2 py-1 text-right">Per stock unit</th><th className="px-2 py-1 text-right">Loss %</th><th />
               </tr></thead>
@@ -415,7 +415,7 @@ function RecipeEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
                 const m = mat(i.trim_id);
                 const diffUom = m && i.uom_id && String(m.base_uom) !== String(i.uom_id);
                 return (
-                  <tr key={idx} className="border-t border-slate-100">
+                  <tr key={idx} className="border-t border-surface-divider">
                     <td className="px-2 py-1"><select className="input h-8 w-64" id={`mp-recipe-${idx}-trim`} disabled={ro} value={i.trim_id}
                       onChange={(e) => { const mm = mat(e.target.value); const role = ROLE_OF_TYPE[mm?.trim_type]; upd(idx, { trim_id: e.target.value, uom_id: i.uom_id || mm?.base_uom || '', ...(role && ROLES[kind].includes(role) ? { material_role: role } : {}) }); }}>
                       <option value="">— material —</option>{(materials.data ?? []).map((t: any) => <option key={t.id} value={t.id}>{t.preferred ? '' : '· '}{t.code} · {t.label} ({t.uom_code}, stock {qty(t.stock_qty)})</option>)}</select></td>
@@ -426,15 +426,15 @@ function RecipeEditor({ kind, row, onClose, onSaved }: { kind: Kind; row: any; o
                     <td className="px-2 py-1 text-right"><input className="input h-8 w-24 text-right" type="number" id={`mp-recipe-${idx}-qty`} disabled={ro} value={i.std_qty} onChange={(e) => upd(idx, { std_qty: e.target.value })} /></td>
                     <td className="px-2 py-1"><select className="input h-8 w-24" id={`mp-recipe-${idx}-uom`} disabled={ro} value={i.uom_id} onChange={(e) => upd(idx, { uom_id: e.target.value, per_stock_unit: '' })}><option value="">—</option>{toOptions(uoms.data).map((o) => <option key={o.value} value={o.value}>{(uoms.data ?? []).find((u: any) => u.id === o.value)?.code}</option>)}</select></td>
                     <td className="px-2 py-1 text-right">{diffUom
-                      ? <span className="inline-flex items-center gap-1"><input className="input h-8 w-24 text-right" type="number" id={`mp-recipe-${idx}-factor`} placeholder="from UOM master" disabled={ro} value={i.per_stock_unit ?? ''} onChange={(e) => upd(idx, { per_stock_unit: e.target.value })} /><span className="text-slate-400">/ {m.uom_code}</span></span>
-                      : <span className="text-slate-400">1</span>}</td>
+                      ? <span className="inline-flex items-center gap-1"><input className="input h-8 w-24 text-right" type="number" id={`mp-recipe-${idx}-factor`} placeholder="from UOM master" disabled={ro} value={i.per_stock_unit ?? ''} onChange={(e) => upd(idx, { per_stock_unit: e.target.value })} /><span className="text-ink-muted">/ {m.uom_code}</span></span>
+                      : <span className="text-ink-muted">1</span>}</td>
                     <td className="px-2 py-1 text-right"><input className="input h-8 w-16 text-right" type="number" disabled={ro} value={i.loss_pct} onChange={(e) => upd(idx, { loss_pct: e.target.value })} /></td>
                     <td className="px-2 py-1">{!ro && <button className="text-red-500" onClick={() => set({ items: cur.items.filter((_: any, j: number) => j !== idx) })}><Trash2 size={13} /></button>}</td>
                   </tr>
                 );
               })}</tbody>
             </table>
-            <p className="mt-2 text-caption text-slate-500">Materials are trims items (types Thread, Backing, Topping … / Dye, Pigment, Binder, Chemical). When the recipe UOM differs from the stock UOM, give how many recipe units are in one stock unit (e.g. 5000 MTR per CONE) — KG→GM etc. come from the UOM master.</p>
+            <p className="mt-2 text-caption text-ink-secondary">Materials are trims items (types Thread, Backing, Topping … / Dye, Pigment, Binder, Chemical). When the recipe UOM differs from the stock UOM, give how many recipe units are in one stock unit (e.g. 5000 MTR per CONE) — KG→GM etc. come from the UOM master.</p>
           </div>
         </Section>
         {row.id && <Section title="Standard requirement calculator">
