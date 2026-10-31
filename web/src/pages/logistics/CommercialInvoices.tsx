@@ -317,7 +317,7 @@ export function CommercialInvoiceDetailPage() {
 
       <fieldset disabled={!editable} className="min-w-0 space-y-4" id="ci-form">
         <Card title="Order, packing lists & format">
-          <div className="grid gap-3 p-4 sm:grid-cols-4">
+          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <Select label="Sales order" required id="ci-so" disabled={!isNew} placeholder="— Select —" options={toOptions(orders.data)} value={v.so_id}
               onChange={(e) => { set('so_id', e.target.value); set('pl_ids', []); setPlOptions([]); }} />
             <Select label="Layout" id="ci-format" value={v.invoice_format} onChange={(e) => set('invoice_format', e.target.value)}
@@ -351,7 +351,7 @@ export function CommercialInvoiceDetailPage() {
           </div>
         </Card>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           <Card title="Exporter · invoice · buyer's order">
             <div className="grid gap-3 p-4 sm:grid-cols-2">
               <Textarea className="sm:col-span-2" rows={5} label="Exporter (name, address, GST no — one per line)" required value={v.exporter_details} id="ci-exporter" onChange={(e) => set('exporter_details', e.target.value)} />
@@ -453,7 +453,7 @@ export function CommercialInvoiceDetailPage() {
                             <details className="text-caption text-ink-secondary" data-line={`${i}-parts`}>
                               <summary className="cursor-pointer select-none">{Number(l.desc_auto) ? 'built from the composition' : 'typed'} · build from composition</summary>
                               <div className="mt-1 space-y-1">
-                                <div className="grid grid-cols-[1fr_92px_86px] gap-1">
+                                <div className="grid grid-cols-[1fr_104px_96px] gap-1">
                                   {part('composition')}
                                   <select className="input h-8 py-0 text-small" value={l.construction ?? ''} data-line={`${i}-construction`} onChange={(e) => setPart('construction', e.target.value)}>
                                     <option value="">knit / woven</option>{['KNITTED', 'WOVEN', 'CROCHETED'].map((x) => <option key={x}>{x}</option>)}</select>
@@ -508,7 +508,7 @@ export function CommercialInvoiceDetailPage() {
           </Card>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           <Card title="Totals & words">
             <div className="grid gap-3 p-4 sm:grid-cols-3">
               <Input label="Total cartons" type="number" value={v.total_cartons} onChange={(e) => set('total_cartons', e.target.value)} />
