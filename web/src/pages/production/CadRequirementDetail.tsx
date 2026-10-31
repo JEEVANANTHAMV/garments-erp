@@ -1687,8 +1687,8 @@ export default function CadRequirementDetailPage() {
           >
             <ArrowLeft size={16} />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="p-1.5 rounded-md bg-indigo-100 text-indigo-700">
                 <Cpu size={18} />
               </span>

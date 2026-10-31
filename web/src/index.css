@@ -103,7 +103,8 @@
   input[type="number"] {
     font-variant-numeric: tabular-nums;
     text-align: right;
-    min-inline-size: calc(11ch + 2rem);
+    /* never wider than its form column; grid cells (td rule below) keep the full width and scroll */
+    min-inline-size: min(calc(11ch + 2rem), 100%);
     padding-inline: 0.5rem;
   }
   /* Quantity fields typed as text (inputMode / right-aligned) get the same room, minus the spinner. */

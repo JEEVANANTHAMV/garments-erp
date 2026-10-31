@@ -24,7 +24,7 @@ export function PageHeader({ title, subtitle, actions, breadcrumb }: {
         <h1 className="text-page font-semibold tracking-tight text-ink-heading">{title}</h1>
         {subtitle && <p className="mt-1 text-body font-medium text-ink-secondary leading-normal">{subtitle}</p>}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
@@ -166,7 +166,7 @@ export function Card({
             )}
             {subtitle && <p className="text-xs text-ink-secondary mt-0.5">{subtitle}</p>}
           </div>
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
       )}
       {children}
