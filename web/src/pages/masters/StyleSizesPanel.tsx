@@ -83,7 +83,7 @@ export const StyleSizesPanel = forwardRef<StyleSizesHandle, { styleId: number; e
           <div className="flex items-center gap-2">
             <h3 className="text-[13px] font-bold uppercase tracking-wider text-slate-700">Sizes of this style</h3>
             {cur.data?.version_no != null && (
-              <span className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+              <span className="tabular-nums text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                 Active Version: v{cur.data.version_no}
               </span>
             )}

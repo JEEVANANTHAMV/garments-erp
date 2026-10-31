@@ -244,7 +244,7 @@ export function SizeGroupsPage() {
             header: 'Group Code',
             sortable: true,
             render: (r: any) => (
-              <span className="font-mono font-bold text-brand-700">{r.group_code}</span>
+              <span className="tabular-nums font-bold text-brand-700">{r.group_code}</span>
             ),
           },
           {
@@ -290,7 +290,7 @@ export function SizeGroupsPage() {
               return (
                 <div className="flex flex-wrap items-center gap-1">
                   {parts.map((sz, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1 font-mono font-bold text-xs bg-slate-100 text-slate-800 rounded px-1.5 py-0.5 border border-slate-200">
+                    <span key={idx} className="inline-flex items-center gap-1 tabular-nums font-bold text-xs bg-slate-100 text-slate-800 rounded px-1.5 py-0.5 border border-slate-200">
                       {sz}
                     </span>
                   ))}
@@ -646,11 +646,11 @@ export function SizeGroupDetailPage() {
                 disabled={!editable}
                 onChange={(e) => setHead({ ...head, group_code: e.target.value.toUpperCase() })}
                 placeholder="e.g. SG-ADULT-ALPHA"
-                className="font-mono font-bold text-brand-700"
+                className="tabular-nums font-bold text-brand-700"
               />
               <button
                 type="button"
-                className="btn-secondary px-2 text-xs font-mono font-bold"
+                className="btn-secondary px-2 text-xs tabular-nums font-bold"
                 title="Auto Generate Code"
                 onClick={() => setHead({ ...head, group_code: `SG-${Math.floor(100 + Math.random() * 900)}` })}
               >
@@ -809,7 +809,7 @@ export function SizeGroupDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             {sizes.map((s, idx) => (
               <div key={s._key} className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-white border border-indigo-200 px-2.5 py-1 text-xs font-mono font-bold text-indigo-950 shadow-sm">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-white border border-indigo-200 px-2.5 py-1 text-xs tabular-nums font-bold text-indigo-950 shadow-sm">
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-100 text-[10px] text-indigo-700">
                     {idx + 1}
                   </span>
@@ -847,7 +847,7 @@ export function SizeGroupDetailPage() {
               {sizes.map((s, idx) => (
                 <tr key={s._key} className="hover:bg-slate-50/70">
                   <td className="py-2 px-3 text-center">
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 font-mono font-bold text-xs text-slate-700">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 tabular-nums font-bold text-xs text-slate-700">
                       {idx + 1}
                     </span>
                   </td>
@@ -858,7 +858,7 @@ export function SizeGroupDetailPage() {
                       value={s.size_code}
                       disabled={!editable}
                       onChange={(e) => handleUpdateSize(s._key, 'size_code', e.target.value.toUpperCase())}
-                      className="input py-1 px-2 font-mono font-bold text-brand-700 text-xs w-full"
+                      className="input py-1 px-2 tabular-nums font-bold text-brand-700 text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1">
@@ -888,7 +888,7 @@ export function SizeGroupDetailPage() {
                       value={s.barcode_suffix || ''}
                       disabled={!editable}
                       onChange={(e) => handleUpdateSize(s._key, 'barcode_suffix', e.target.value)}
-                      className="input py-1 px-2 font-mono text-xs w-full"
+                      className="input py-1 px-2 tabular-nums text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1 text-center">

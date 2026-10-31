@@ -110,12 +110,12 @@ export function EwayBillRegisterPage() {
               </tr></thead>
               <tbody>{shown.map((r) => (
                 <tr key={r.id} data-ewb-id={r.id} data-doc-no={r.doc_no} className="cursor-pointer hover:bg-brand-50/40" onClick={() => nav(`/logistics/eway-bills/${r.id}`)}>
-                  <td className="td font-mono font-medium text-brand-700">{r.doc_no}</td>
-                  <td className="td font-mono">{r.ewb_no ?? <span className="text-slate-400">—</span>}</td>
-                  <td className="td"><div className="text-[11px] text-slate-500">{r.source_label}</div><div className="font-mono">{r.source_no ?? '—'}</div></td>
+                  <td className="td tabular-nums font-medium text-brand-700">{r.doc_no}</td>
+                  <td className="td tabular-nums">{r.ewb_no ?? <span className="text-slate-400">—</span>}</td>
+                  <td className="td"><div className="text-[11px] text-slate-500">{r.source_label}</div><div className="tabular-nums">{r.source_no ?? '—'}</div></td>
                   <td className="td"><div>{r.document_type} {r.document_number}</div><div className="text-[11px] text-slate-500">{fmtDate(r.document_date)}</div></td>
                   <td className="td"><div className="font-medium">{r.to_name}</div><div className="text-[11px] text-slate-500">{r.to_gstin}{r.to_place ? ` · ${r.to_place}` : ''}</div></td>
-                  <td className="td font-mono">{r.vehicle_no ?? '—'}</td>
+                  <td className="td tabular-nums">{r.vehicle_no ?? '—'}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(r.total_invoice_value)}</td>
                   <td className={clsx('td whitespace-nowrap', r.view_status === 'EXPIRED' ? 'font-semibold text-red-600' : r.expiring_soon ? 'font-semibold text-amber-600' : '')}>
                     {r.valid_upto ? fmtDateTime(r.valid_upto) : '—'}
@@ -292,7 +292,7 @@ export function EwayBillEditorPage() {
       <div>
         <PageHeader title="New e-way bill" breadcrumb={['Logistics', 'E-way bills']} actions={back} />
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800" id="ewb-existing">
-          This document already has e-way bill <b className="font-mono">{x.ewb_no ?? x.doc_no}</b> ({x.status.toLowerCase()}). Cancel it before making another.
+          This document already has e-way bill <b className="tabular-nums">{x.ewb_no ?? x.doc_no}</b> ({x.status.toLowerCase()}). Cancel it before making another.
           <div className="mt-2"><Link to={`/logistics/eway-bills/${x.id}`} className="font-semibold text-brand-700 underline" id="ewb-existing-link">Open {x.doc_no}</Link></div>
         </div>
       </div>
@@ -311,7 +311,7 @@ export function EwayBillEditorPage() {
     <div>
       <PageHeader breadcrumb={['Logistics', 'E-way bills']}
         title={isNew ? 'New e-way bill' : e.ewb_no ? `E-way bill ${e.ewb_no}` : `E-way bill draft ${e.doc_no}`}
-        subtitle={<>From {sourceLabel} <span className="font-mono">{f.source_no || '—'}</span>{!isNew && <> · {e.doc_no} · created {fmtDateTime(e.created_at)}{e.created_by_name ? ` by ${e.created_by_name}` : ''}</>}</>}
+        subtitle={<>From {sourceLabel} <span className="tabular-nums">{f.source_no || '—'}</span>{!isNew && <> · {e.doc_no} · created {fmtDateTime(e.created_at)}{e.created_by_name ? ` by ${e.created_by_name}` : ''}</>}</>}
         actions={<div className="flex flex-wrap items-center gap-2">
           {back}
           {draft && can('EWAY.CREATE') && <Button id="ewb-save" variant={isNew ? 'primary' : 'secondary'} loading={busy === 'save'} disabled={!isNew && !dirty} onClick={() => save()}><Save size={15} />Save draft</Button>}
@@ -330,7 +330,7 @@ export function EwayBillEditorPage() {
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-5 py-4">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">E-way bill no</div>
-            <div id="ewb-number" className={clsx('font-mono text-[26px] font-extrabold tracking-wider', e?.ewb_no ? 'text-slate-900' : 'text-slate-300')}>{e?.ewb_no ?? 'Not generated'}</div>
+            <div id="ewb-number" className={clsx('tabular-nums text-[26px] font-extrabold tracking-wider', e?.ewb_no ? 'text-slate-900' : 'text-slate-300')}>{e?.ewb_no ?? 'Not generated'}</div>
           </div>
           <div><div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Status</div><EwbStatus id="ewb-status" value={status} size="lg" /></div>
           {e?.ewb_date && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Generated</div><div className="text-[13px] font-medium">{fmtDateTime(e.ewb_date)}</div></div>}
@@ -415,7 +415,7 @@ export function EwayBillEditorPage() {
                     <td className="td text-slate-500">{i + 1}</td>
                     <td className="td !py-1.5"><input className="input !h-8" data-f="product_name" maxLength={100} value={it.product_name} onChange={(x) => setItem(it.key, { product_name: x.target.value })} /></td>
                     <td className="td !py-1.5"><input className="input !h-8" data-f="description" maxLength={100} value={it.description} onChange={(x) => setItem(it.key, { description: x.target.value })} /></td>
-                    <td className="td !py-1.5"><input className={clsx('input !h-8 font-mono', !/^\d{4,8}$/.test(it.hsn_code) && 'input-error')} data-f="hsn_code" inputMode="numeric" maxLength={8} value={it.hsn_code}
+                    <td className="td !py-1.5"><input className={clsx('input !h-8 tabular-nums', !/^\d{4,8}$/.test(it.hsn_code) && 'input-error')} data-f="hsn_code" inputMode="numeric" maxLength={8} value={it.hsn_code}
                       onChange={(x) => setItem(it.key, { hsn_code: x.target.value.replace(/\D/g, '') })} /></td>
                     <td className="td !py-1.5"><input className="input !h-8 text-right" data-f="quantity" inputMode="decimal" value={it.quantity} onChange={(x) => setItem(it.key, { quantity: x.target.value.replace(/[^0-9.]/g, '') })} /></td>
                     <td className="td !py-1.5"><input className="input !h-8" data-f="unit" maxLength={8} value={it.unit} onChange={(x) => setItem(it.key, { unit: x.target.value.toUpperCase() })} /></td>

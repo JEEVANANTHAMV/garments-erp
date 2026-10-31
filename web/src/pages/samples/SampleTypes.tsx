@@ -112,7 +112,7 @@ function TypeEditor({ t, onSaved }: { t: any; onSaved: () => void }) {
               {rows.map((r, i) => (
                 <tr key={i}>
                   <td className="td"><input className="input h-8 w-14 py-0 text-[12px]" type="number" min={1} value={r.step_group} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, step_group: Number(e.target.value) } : x)))} /></td>
-                  <td className="td"><input className="input h-8 w-28 py-0 font-mono text-[12px]" value={r.stage_code} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, stage_code: e.target.value.toUpperCase() } : x)))} /></td>
+                  <td className="td"><input className="input h-8 w-28 py-0 tabular-nums text-[12px]" value={r.stage_code} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, stage_code: e.target.value.toUpperCase() } : x)))} /></td>
                   <td className="td"><input className="input h-8 py-0 text-[12px]" value={r.stage_name} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, stage_name: e.target.value } : x)))} /></td>
                   <td className="td"><select className="input h-8 py-0 text-[12px]" value={r.department_id} disabled={!editable} onChange={(e) => change(rows.map((x, j) => (j === i ? { ...x, department_id: e.target.value } : x)))}>
                     <option value="">—</option>{toOptions(depts.data).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></td>

@@ -57,7 +57,7 @@ function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
               <tbody>
                 {rows.map((o) => (
                   <tr key={o.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(o.id)}>
-                    <td className="px-3 py-2 font-mono font-semibold text-brand-700">{o.ypo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
+                    <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{o.ypo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
                     <td className="px-3 py-2">{fmtDate(o.ypo_date)}</td><td className="px-3 py-2">{o.process_name || o.process_code}</td><td className="px-3 py-2">{o.vendor_name}</td>
                     <td className="px-3 py-2">{o.jobs || '—'} <span className="text-slate-400">({o.job_count})</span></td>
                     <td className="px-3 py-2 text-right">{o.line_count}</td><td className="px-3 py-2 text-right">{o.cones || '—'}</td>
@@ -304,7 +304,7 @@ function JobRows({ g, editable, shade, set, remove, programs }: { g: { io_no: st
       {g.rows.map((r, i) => (
         <tr key={r.key} className="border-t border-slate-100">
           <td className="px-2 py-1 text-slate-400">{i + 1}</td><td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.shade || '—'}</td>
-          <td className="px-2 py-1 font-mono">{r.lot_no}</td><td className="px-2 py-1 font-mono text-slate-500">{r.grn_no}</td>
+          <td className="px-2 py-1 tabular-nums">{r.lot_no}</td><td className="px-2 py-1 tabular-nums text-slate-500">{r.grn_no}</td>
           <td className="px-1 py-1">{editable ? <input className={`${inp} w-20`} value={r.cone_no} onChange={(e) => set(r.key, { cone_no: e.target.value })} /> : (r.cone_no || '—')}</td>
           <td className="px-1 py-1 text-right">{editable ? <input type="number" className={`${inp} w-14 text-right`} value={r.no_of_cones} onChange={(e) => set(r.key, { no_of_cones: Number(e.target.value) })} /> : (r.no_of_cones || '—')}</td>
           {shade && <td className="px-1 py-1">{editable ? <input className={`${inp} w-28 ${!r.target_shade.trim() ? 'border-amber-400' : ''}`} placeholder="Dye colour *" value={r.target_shade} onChange={(e) => set(r.key, { target_shade: e.target.value })} /> : (r.target_shade || '—')}</td>}
@@ -394,9 +394,9 @@ function LotPicker({ mode, jobs, taken, onClose, onAdd }: {
               return (
                 <tr key={K(l)} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
                   {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[K(l)]; else x[K(l)] = { kg: l.available_kg, cone: l.cone_no ?? '', cones: l.cones ?? 0 }; return x; })} /></td>}
-                  <td className="px-2 py-1 font-mono font-semibold">{l.lot_no}{l.processed ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">processed</span> : null}</td>
+                  <td className="px-2 py-1 tabular-nums font-semibold">{l.lot_no}{l.processed ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">processed</span> : null}</td>
                   <td className="px-2 py-1">{l.yarn_name}{l.count_str ? ` ${l.count_str}` : ''}</td><td className="px-2 py-1">{l.color_name || l.shade || '—'}</td>
-                  <td className="px-2 py-1">{l.holder_job}</td><td className="px-2 py-1 font-mono">{l.grn_no}</td><td className="px-2 py-1">{l.po_no || '—'}</td><td className="px-2 py-1">{l.supplier_name || '—'}</td>
+                  <td className="px-2 py-1">{l.holder_job}</td><td className="px-2 py-1 tabular-nums">{l.grn_no}</td><td className="px-2 py-1">{l.po_no || '—'}</td><td className="px-2 py-1">{l.supplier_name || '—'}</td>
                   <td className="px-2 py-1">{l.warehouse_name || '—'}</td><td className="px-2 py-1 text-right tabular-nums">{kg(l.available_kg)}</td>
                   {mode === 'job' && <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[K(l)].kg} onChange={(e) => setSel((s) => ({ ...s, [K(l)]: { ...s[K(l)], kg: r3(Number(e.target.value)) } }))} /> : '—'}</td>}
                   {mode === 'job' && <td className="px-2 py-1">{on ? <input className="input w-20 py-0.5 text-xs" value={sel[K(l)].cone} onChange={(e) => setSel((s) => ({ ...s, [K(l)]: { ...s[K(l)], cone: e.target.value } }))} /> : (l.cone_no || '—')}</td>}

@@ -170,14 +170,14 @@ export default function YarnPurchaseOrdersPage() {
                       <div className="font-semibold text-amber-700">{p.po_no}</div>
                       <div className="text-[11px] text-slate-400">{fmtDate(p.po_date)}</div>
                     </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-700">
+                    <td className="py-3 px-3 tabular-nums text-[11px] text-slate-700">
                       {p.internal_ir_no || '—'}
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{p.supplier_name || 'Spinning Mill'}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-mono text-[11px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <span className="tabular-nums text-[11px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
                         {p.style_code || 'GEN'}
                       </span>
                     </td>

@@ -221,7 +221,7 @@ function ImportModal({ s, onClose, onDone }: { s: any; onClose: () => void; onDo
             {rows.map((r) => (
               <tr key={r.line_id} className={clsx('align-top', !r.importable && 'opacity-60')}>
                 <td className="td">{r.importable && <input type="checkbox" checked={pick[r.line_id] !== undefined} onChange={(e) => { const n = { ...pick }; if (e.target.checked) n[r.line_id] = r.suggested_category; else delete n[r.line_id]; setPick(n); }} />}</td>
-                <td className="td text-[12px]"><p className="font-mono">{r.doc_no}</p><p className="text-slate-500">{fmtDate(r.purchase_date)} · {r.supplier_name}</p></td>
+                <td className="td text-[12px]"><p className="tabular-nums">{r.doc_no}</p><p className="text-slate-500">{fmtDate(r.purchase_date)} · {r.supplier_name}</p></td>
                 <td className="td text-[12px]">{r.item_description}<p className="text-slate-500">{String(r.material_type).toLowerCase()}{r.expense_head ? ` · ${r.expense_head}` : ''}</p></td>
                 <td className="td text-right text-[12px] tabular-nums">{fmtNumber(r.qty, 2)} {r.uom_code} × {fmtNumber(r.rate, 2)}</td>
                 <td className="td text-right tabular-nums">{fmtNumber(r.amount_inr, 2)}</td>
@@ -274,7 +274,7 @@ export function AllocationTab({ s, refresh }: { s: any; refresh: () => void }) {
       <p className="text-[12px] text-slate-500">Accounting mode: <b>analytical</b> — the allocation appears as "Sample dev" in the order's Budget vs Actuals / OCR; the sample cost ledger stays the source and no journal is posted, so the expense is never counted twice.</p>
       {(q.data?.data ?? []).length === 0 && <div className="card p-8 text-center text-[13px] text-slate-500">No allocation yet.</div>}
       {(q.data?.data ?? []).map((b) => (
-        <Card key={b.id} title={<span className="flex flex-wrap items-center gap-2"><span className="font-mono">{b.batch_no}</span><Badge tone={ALLOC_STATUS_TONE[b.status] ?? 'slate'}>{b.status.replace(/_/g, ' ').toLowerCase()}</Badge>
+        <Card key={b.id} title={<span className="flex flex-wrap items-center gap-2"><span className="tabular-nums">{b.batch_no}</span><Badge tone={ALLOC_STATUS_TONE[b.status] ?? 'slate'}>{b.status.replace(/_/g, ' ').toLowerCase()}</Badge>
           <span className="text-[12px] font-normal text-slate-500">{ALLOC_METHODS.find((x) => x.value === b.method)?.label} · {inr(b.total_allocated)} · {fmtDateTime(b.created_at)} {b.created_by_name}</span></span>}
           subtitle={<>{b.reason}{b.override_reason && <span className="text-amber-700"> · Override: {b.override_reason}</span>}{b.reject_reason && <span className="text-red-600"> · {b.reject_reason}</span>}</>}
           actions={<div className="flex flex-wrap gap-1" data-batch={b.batch_no}>
@@ -291,7 +291,7 @@ export function AllocationTab({ s, refresh }: { s: any; refresh: () => void }) {
             <tbody>
               {b.lines.map((l: any) => (
                 <tr key={l.id} className={clsx(l.status === 'REVERSED' && 'opacity-60')}>
-                  <td className="td"><Link className="font-mono text-[12px] text-brand-700 hover:underline" to={`/sales/orders/${l.so_id}`}>{l.so_no}</Link>{Number(l.is_override) ? <Badge tone="amber" className="ml-1">override</Badge> : null}</td>
+                  <td className="td"><Link className="tabular-nums text-[12px] text-brand-700 hover:underline" to={`/sales/orders/${l.so_id}`}>{l.so_no}</Link>{Number(l.is_override) ? <Badge tone="amber" className="ml-1">override</Badge> : null}</td>
                   <td className="td text-[12px]">{l.buyer_name}{l.buyer_po_no ? ` · ${l.buyer_po_no}` : ''}</td>
                   <td className="td text-right text-[12px] tabular-nums">{fmtNumber(l.basis_pct, 2)}%{l.basis_qty != null ? <p className="text-slate-500">{fmtNumber(l.basis_qty)} pcs · {inr(l.basis_value, '—')}</p> : null}</td>
                   <td className="td text-right tabular-nums font-semibold">{fmtNumber(l.allocated_amount, 2)}</td>
@@ -389,7 +389,7 @@ function AllocationWizard({ s, batch, onClose, onDone }: { s: any; batch: any | 
                   {orders.map((o: any) => (
                     <tr key={o.so_id} className={clsx(lines[o.so_id] && 'bg-brand-50/40')}>
                       <td className="td"><input type="checkbox" data-so={o.so_no} checked={!!lines[o.so_id]} onChange={(e) => toggle(o, e.target.checked)} /></td>
-                      <td className="td font-mono text-[12px]">{o.so_no}{o.override && <Badge tone="amber" className="ml-1">override</Badge>}<p className="font-sans text-[11px] text-slate-400">{String(o.approval_state).toLowerCase()}</p></td>
+                      <td className="td tabular-nums text-[12px]">{o.so_no}{o.override && <Badge tone="amber" className="ml-1">override</Badge>}<p className="font-sans text-[11px] text-slate-400">{String(o.approval_state).toLowerCase()}</p></td>
                       <td className="td text-[12px]">{o.buyer_name}{o.buyer_po_no ? ` · ${o.buyer_po_no}` : ''}<p className="text-slate-400">{fmtDate(o.ship_date)}</p></td>
                       <td className="td text-right text-[12px] tabular-nums">{fmtNumber(o.basis_qty)}</td>
                       <td className="td text-right text-[12px] tabular-nums">{o.basis_value == null ? <span className="text-amber-700">no ₹ rate</span> : fmtNumber(o.basis_value, 0)}</td>
@@ -408,7 +408,7 @@ function AllocationWizard({ s, batch, onClose, onDone }: { s: any; batch: any | 
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3" id="alloc-preview-box">
               <p className="mb-1 text-[12.5px] font-semibold text-emerald-900">Split worked out by the server — total {inr(preview.total)}</p>
               <table className="w-full text-[12.5px]"><tbody>
-                {preview.lines.map((l: any) => <tr key={l.so_id}><td className="py-0.5 font-mono">{l.so_no}</td><td className="text-right tabular-nums">{fmtNumber(l.basis_pct, 2)}%</td><td className="text-right font-semibold tabular-nums">{inr(l.allocated_amount)}</td></tr>)}
+                {preview.lines.map((l: any) => <tr key={l.so_id}><td className="py-0.5 tabular-nums">{l.so_no}</td><td className="text-right tabular-nums">{fmtNumber(l.basis_pct, 2)}%</td><td className="text-right font-semibold tabular-nums">{inr(l.allocated_amount)}</td></tr>)}
               </tbody></table>
               {preview.warnings?.map((w: string) => <p key={w} className="mt-1 text-[12px] text-amber-800">{w}</p>)}
             </div>

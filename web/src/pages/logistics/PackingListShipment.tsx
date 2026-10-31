@@ -114,7 +114,7 @@ export function ShipmentPlanPage() {
           data={plans}
           loading={loading}
           columns={[
-            { key: 'plan_no', header: 'Plan No', sortable: true, render: (r: any) => <span className="font-mono text-xs font-bold text-brand-700">{r.plan_no}</span> },
+            { key: 'plan_no', header: 'Plan No', sortable: true, render: (r: any) => <span className="tabular-nums text-xs font-bold text-brand-700">{r.plan_no}</span> },
             { key: 'planned_date', header: 'Planned Date', sortable: true, render: (r: any) => fmtDate(r.planned_date) },
             { key: 'buyer_name', header: 'Buyer' },
             { key: 'packing_list_no', header: 'Packing list', render: (r: any) => r.packing_list_no
@@ -178,7 +178,7 @@ export function ShipmentPlanPage() {
                   checked={selectedPkgs.includes(p.id)}
                   onChange={e => setSelectedPkgs(prev => e.target.checked ? [...prev, p.id] : prev.filter(i => i !== p.id))}
                 />
-                <span className="font-mono font-semibold">{p.carton_no}</span>
+                <span className="tabular-nums font-semibold">{p.carton_no}</span>
                 <span className="text-slate-500">Pack: {p.pack_no}</span>
                 <span className="text-blue-700 font-bold">{p.content_qty} PCS</span>
                 <span className="text-slate-400">{p.gross_weight_kg} KG</span>
@@ -228,7 +228,7 @@ export function ShipmentListPage() {
             { key: 'shipment_no', header: 'Shipment No', sortable: true,
               render: (r: any) => (
                 <button onClick={() => nav(`/logistics/shipments/${r.id}`)}
-                  className="font-mono text-xs font-semibold text-brand-700 hover:underline">
+                  className="tabular-nums text-xs font-semibold text-brand-700 hover:underline">
                   {r.shipment_no}
                 </button>
               ) },
@@ -542,9 +542,9 @@ export function ShipmentDetailPage() {
                 <tbody>
                   {containers.map(c => (
                     <tr key={c.id} className="border-b border-slate-50">
-                      <td className="py-2 font-mono font-bold">{c.container_no}</td>
+                      <td className="py-2 tabular-nums font-bold">{c.container_no}</td>
                       <td className="py-2">{c.container_type}</td>
-                      <td className="py-2 font-mono text-xs">{c.seal_no || '—'}</td>
+                      <td className="py-2 tabular-nums text-xs">{c.seal_no || '—'}</td>
                       <td className="py-2 text-right">{fmtDecimal(c.tare_weight_kg)}</td>
                       <td className="py-2 text-right">{fmtDecimal(c.gross_weight_kg)}</td>
                       <td className="py-2 text-right">{fmtDecimal(c.loaded_cbm, 3)}</td>
@@ -594,7 +594,7 @@ export function ShipmentDetailPage() {
                           onChange={e => setSelectedPkgs(prev => e.target.checked ? [...prev, p.id] : prev.filter(i => i !== p.id))}
                         />
                       </td>
-                      <td className="py-1.5 font-mono text-xs font-semibold">{p.carton_no}</td>
+                      <td className="py-1.5 tabular-nums text-xs font-semibold">{p.carton_no}</td>
                       <td className="py-1.5">{p.pack_no}</td>
                       <td className="py-1.5 text-xs text-slate-500">{p.sku_summary}</td>
                       <td className="py-1.5 text-right font-bold">{fmtNumber(p.content_qty)}</td>
@@ -629,7 +629,7 @@ export function ShipmentDetailPage() {
               <tbody>
                 {packages.map(p => (
                   <tr key={p.id} className="border-b border-slate-50">
-                    <td className="py-1.5 font-mono text-xs font-semibold">{p.carton_no}</td>
+                    <td className="py-1.5 tabular-nums text-xs font-semibold">{p.carton_no}</td>
                     <td className="py-1.5 text-right font-bold text-blue-700">{fmtNumber(p.allocated_qty)}</td>
                     <td className="py-1.5 text-right">{fmtDecimal(p.carton_gross)}</td>
                     <td className="py-1.5 text-right">{fmtDecimal(p.carton_cbm, 3)}</td>
@@ -790,7 +790,7 @@ export function ShipmentDetailPage() {
             <div key={idx} className="border-2 border-dashed border-slate-300 rounded-lg p-4 bg-white space-y-2">
               <div className="flex justify-between border-b pb-1">
                 <span className="text-xs font-bold text-slate-800">TEXTILE EXPORTS</span>
-                <span className="font-mono text-xs font-bold text-indigo-700">{pkg.carton_no}</span>
+                <span className="tabular-nums text-xs font-bold text-indigo-700">{pkg.carton_no}</span>
               </div>
               <div className="text-[11px] space-y-0.5">
                 <p><strong>I/O:</strong> {header.io_no || 'N/A'}</p>
@@ -799,10 +799,10 @@ export function ShipmentDetailPage() {
                 <p><strong>Gross Wt:</strong> {pkg.carton_gross || pkg.gross_weight_kg} KG</p>
               </div>
               <div className="pt-2 text-center border-t">
-                <div className="font-mono text-lg font-black tracking-widest bg-slate-100 py-1 rounded">
+                <div className="tabular-nums text-lg font-black tracking-widest bg-slate-100 py-1 rounded">
                   ||| | |||| | |||||
                 </div>
-                <span className="font-mono text-[10px] text-slate-500">{pkg.carton_no}</span>
+                <span className="tabular-nums text-[10px] text-slate-500">{pkg.carton_no}</span>
               </div>
             </div>
           ))}
@@ -842,7 +842,7 @@ export function DispatchListPage() {
             { key: 'dispatch_no', header: 'Dispatch No', sortable: true,
               render: (r: any) => (
                 <button onClick={() => nav(`/logistics/dispatches/${r.id}`)}
-                  className="font-mono text-xs font-semibold text-brand-700 hover:underline">
+                  className="tabular-nums text-xs font-semibold text-brand-700 hover:underline">
                   {r.dispatch_no}
                 </button>
               ) },

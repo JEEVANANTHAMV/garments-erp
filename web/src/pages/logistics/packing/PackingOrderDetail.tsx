@@ -40,7 +40,7 @@ export function PackingOrderDetailPage() {
 
   return (
     <div>
-      <PageHeader title={<span className="font-mono">{o.pack_no}</span>} breadcrumb={['Logistics', 'Packing', 'Orders']}
+      <PageHeader title={<span className="tabular-nums">{o.pack_no}</span>} breadcrumb={['Logistics', 'Packing', 'Orders']}
         subtitle={<>{o.job_no} · {o.buyer_name} · {o.style_code} {o.style_name}{o.buyer_po_no ? ` · PO ${o.buyer_po_no}` : ''} · <PkStatus value={o.order_status} /></>}
         actions={<>
           {o.order_status === 'DRAFT' && can('PACKING.APPROVE') && <Button id="approve-order" loading={busy === 'approve'} onClick={() => act('approve', () => http.post(`/packing/orders/${id}/approve`), 'Packing order approved')}><CheckCircle2 size={15} />Approve</Button>}
@@ -120,7 +120,7 @@ export function PackingOrderDetailPage() {
                 <th className="th">Type</th><th className="th text-right">Net / gross kg</th><th className="th">Status</th><th className="th" /></tr></thead>
               <tbody>{o.cartons!.map((c) => (
                 <tr key={c.id} className={c.carton_status === 'VOID' ? 'opacity-50' : ''}>
-                  <td className="td">{c.carton_seq}</td><td className="td font-mono">{c.carton_no}</td><td className="td">{c.contents}</td>
+                  <td className="td">{c.carton_seq}</td><td className="td tabular-nums">{c.carton_no}</td><td className="td">{c.contents}</td>
                   <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-[11px] text-amber-700">partial</span> : null}</td>
                   <td className="td text-right">{c.polybag_qty} ({c.std_polybag_qty})</td><td className="td">{c.carton_trim_name}</td>
                   <td className="td text-right">{c.net_weight_kg ?? '—'} / {c.gross_weight_kg ?? '—'}</td>
@@ -177,7 +177,7 @@ function PolybagList({ orderId }: { orderId: number }) {
         <table className="w-full text-[12.5px]">
           <thead><tr><th className="th">Time</th><th className="th">Bundle</th><th className="th">Colour / size</th><th className="th text-right">Pieces</th><th className="th text-right">Bags</th><th className="th text-right">In cartons</th><th className="th">Operator</th><th className="th">Status</th></tr></thead>
           <tbody>{q.data.map((b) => (
-            <tr key={b.id}><td className="td">{fmtDateTime(b.created_at)}</td><td className="td font-mono">{b.bundle_no}</td><td className="td">{b.color_name} / {b.size_code}</td>
+            <tr key={b.id}><td className="td">{fmtDateTime(b.created_at)}</td><td className="td tabular-nums">{b.bundle_no}</td><td className="td">{b.color_name} / {b.size_code}</td>
               <td className="td text-right">{b.pieces}</td><td className="td text-right">{b.polybag_qty}</td><td className="td text-right">{b.cartoned_qty}</td><td className="td">{b.operator_name}</td><td className="td"><PkStatus value={b.status} /></td></tr>
           ))}</tbody>
         </table>

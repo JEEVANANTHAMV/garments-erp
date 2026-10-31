@@ -148,7 +148,7 @@ export function JobRateCardPage() {
         <Card title="Jobs with a rate card">
           <DataTable data={cards} emptyTitle="No job rate cards yet" onRowClick={(r: any) => { setIoNo(r.io_no); setStageId(String(r.stage_id)); loadCard(r.io_no, String(r.stage_id)); }}
             columns={[
-              { key: 'io_no', header: 'Job (IO)', render: (r: any) => <span className="font-mono font-semibold text-brand-700">{r.io_no}</span> },
+              { key: 'io_no', header: 'Job (IO)', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.io_no}</span> },
               { key: 'stage_name', header: 'Process' },
               { key: 'style_code', header: 'Style', render: (r: any) => r.style_code || '—' },
               { key: 'operations', header: 'Operations', align: 'right' as const },
@@ -583,7 +583,7 @@ export function ContractorAdvancesPage() {
         </div>
         <DataTable data={rows} emptyTitle="No advances"
           columns={[
-            { key: 'advance_no', header: 'Advance no', render: (r: any) => <span className="font-mono font-semibold text-brand-700">{r.advance_no}</span> },
+            { key: 'advance_no', header: 'Advance no', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.advance_no}</span> },
             { key: 'advance_date', header: 'Date', render: (r: any) => fmtDate(r.advance_date) },
             { key: 'vendor_name', header: 'Contractor' },
             { key: 'source', header: 'Source', render: (r: any) => (r.source === 'BILL_EXCESS' ? <Badge tone="amber">Bill excess {r.bill_no}</Badge> : <Badge tone="blue">Payment{r.pay_mode ? ` · ${r.pay_mode}` : ''}</Badge>) },
@@ -670,7 +670,7 @@ export function ContractorDebitNotesPage() {
         </div>
         <DataTable data={rows} emptyTitle="No debit notes"
           columns={[
-            { key: 'dn_no', header: 'DN no', render: (r: any) => <span className="font-mono font-semibold text-brand-700">{r.dn_no}</span> },
+            { key: 'dn_no', header: 'DN no', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.dn_no}</span> },
             { key: 'dn_date', header: 'Date', render: (r: any) => fmtDate(r.dn_date) },
             { key: 'vendor_name', header: 'Contractor' },
             { key: 'io_no', header: 'Job', render: (r: any) => r.io_no || '—' },

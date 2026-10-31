@@ -29,7 +29,7 @@ export default function SpecialRequestPage() {
   const [create, setCreate] = useState(false);
   const [view, setView] = useState<number | null>(null);
   const cols: Col[] = [
-    { key: 'req_no', label: 'Request', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.req_no}</span> }, { key: 'req_date', label: 'Date', kind: 'date' },
+    { key: 'req_no', label: 'Request', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.req_no}</span> }, { key: 'req_date', label: 'Date', kind: 'date' },
     { key: 'so_no', label: 'Job' }, { key: 'item_name', label: 'Item' }, { key: 'budget_qty', label: 'Budget', kind: 'qty' }, { key: 'ordered_qty', label: 'Ordered', kind: 'qty' },
     { key: 'requested_qty', label: 'Extra asked', kind: 'qty' }, { key: 'uom_code', label: 'UOM' }, { key: 'amount', label: 'Amount', kind: 'money' },
     { key: 'requested_by', label: 'By' }, { key: 'status', label: 'Status', kind: 'status' },

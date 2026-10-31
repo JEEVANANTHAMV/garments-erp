@@ -116,8 +116,8 @@ export function ContractorBillEditor({ kind, title, onBack, onDone }: { kind: 'f
                       return (
                         <tr key={l.key} className="border-t border-slate-100" data-key={l.key}>
                           <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${l.line_type === 'GRN' ? 'bg-sky-100 text-sky-800' : l.line_type === 'RECOVERY' ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{l.line_type === 'REPROCESS' ? 'Reprocess' : l.line_type === 'RECOVERY' ? 'Recovery' : 'GRN'}</span></td>
-                          <td className="px-2 py-1 font-mono">{l.doc_no}{l.grn_no && <span className="block text-[10px] text-slate-400">{l.grn_no}</span>}</td>
-                          <td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 font-mono">{l.dc_no ?? '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td>
+                          <td className="px-2 py-1 tabular-nums">{l.doc_no}{l.grn_no && <span className="block text-[10px] text-slate-400">{l.grn_no}</span>}</td>
+                          <td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 tabular-nums">{l.dc_no ?? '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td>
                           <td className="px-2 py-1">{l.gate_entry_no || '—'}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.process_name || l.sub_process || l.process_code}</td>
                           <td className="px-2 py-1">{kind === 'fabric' ? [l.colours, l.rolls ? `${l.rolls} rolls` : null].filter(Boolean).join(' · ') || '—' : l.lots || '—'}</td>
                           <td className="px-2 py-1 text-right">{l.input_kg != null ? kg(l.input_kg) : '—'}</td><td className="px-2 py-1 text-right font-semibold">{kg(l.qty_kg)}</td>

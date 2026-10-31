@@ -783,10 +783,10 @@ function PreCostingSheet() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 font-mono">
+              <h1 className="text-xl font-bold text-slate-900 tabular-nums">
                 {head.costing_no || 'New Merchandiser Pre-Costing'}
               </h1>
-              <span className="rounded bg-brand-50 border border-brand-200 px-2 py-0.5 text-xs font-bold text-brand-700 font-mono">
+              <span className="rounded bg-brand-50 border border-brand-200 px-2 py-0.5 text-xs font-bold text-brand-700 tabular-nums">
                 v{head.version}
               </span>
               <StatusBadge value={head.status} />
@@ -957,26 +957,26 @@ function PreCostingSheet() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Direct Cost / Pc</span>
-          <p className="text-2xl font-black text-slate-800 font-mono mt-1">₹{fmtDecimal(totalDirectCostPerPc, 2)}</p>
+          <p className="text-2xl font-black text-slate-800 tabular-nums mt-1">₹{fmtDecimal(totalDirectCostPerPc, 2)}</p>
           <p className="text-[11px] text-slate-500 mt-0.5">Fabrics, Trims, CMT & Processes</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Pre-Cost / Pc</span>
-          <p className="text-2xl font-black text-slate-900 font-mono mt-1">₹{fmtDecimal(totalCostPerPc, 2)}</p>
+          <p className="text-2xl font-black text-slate-900 tabular-nums mt-1">₹{fmtDecimal(totalCostPerPc, 2)}</p>
           <p className="text-[11px] text-slate-500 mt-0.5">Including ₹{fmtDecimal(overheadCostPerPc, 2)} Overhead</p>
         </div>
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">Target Margin</span>
-            <span className="rounded bg-emerald-200 px-1.5 py-0.2 text-[11px] font-black text-emerald-900 font-mono">
+            <span className="rounded bg-emerald-200 px-1.5 py-0.2 text-[11px] font-black text-emerald-900 tabular-nums">
               {markupPct.toFixed(1)}% Markup
             </span>
           </div>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-2xl font-black text-emerald-900 font-mono">{marginPct}%</span>
-            <span className="text-xs font-semibold text-emerald-700 font-mono">(₹{fmtDecimal(profitAmountPerPc, 2)}/pc)</span>
+            <span className="text-2xl font-black text-emerald-900 tabular-nums">{marginPct}%</span>
+            <span className="text-xs font-semibold text-emerald-700 tabular-nums">(₹{fmtDecimal(profitAmountPerPc, 2)}/pc)</span>
           </div>
           <p className="text-[11px] text-emerald-800 font-medium mt-0.5">Commercial profit target</p>
         </div>
@@ -985,7 +985,7 @@ function PreCostingSheet() {
           <span className="text-xs font-black uppercase tracking-wider text-brand-900">Quoted FOB Price / Pc{isForeign ? ` (${curCode})` : ''}</span>
           {isForeign ? (
             <>
-              <p className="text-2xl font-black text-brand-900 font-mono mt-1" data-fob-fc>
+              <p className="text-2xl font-black text-brand-900 tabular-nums mt-1" data-fob-fc>
                 {fobFc != null ? `${curSym}${fmtDecimal(fobFc, 4)}` : <span className="text-base text-amber-700">enter exchange rate</span>}
               </p>
               <p className="text-[11px] text-brand-800 font-bold mt-0.5" data-fob-inr>
@@ -997,7 +997,7 @@ function PreCostingSheet() {
             </>
           ) : (
             <>
-              <p className="text-2xl font-black text-brand-900 font-mono mt-1">₹{fmtDecimal(quotedFobPerPc, 2)}</p>
+              <p className="text-2xl font-black text-brand-900 tabular-nums mt-1">₹{fmtDecimal(quotedFobPerPc, 2)}</p>
               <p className="text-[11px] text-brand-800 font-bold mt-0.5">Total Order FOB: ₹{fmtDecimal(totalOrderFob, 0)}</p>
             </>
           )}
@@ -1063,7 +1063,7 @@ function PreCostingSheet() {
             )}
 
             <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-xs font-mono">
+              <table className="w-full text-left text-xs tabular-nums">
                 <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3">Component</th>
@@ -1129,7 +1129,7 @@ function PreCostingSheet() {
                               const val = e.target.value === '' ? '' : Number(e.target.value);
                               setFabrics((prev) => prev.map((row, idx) => idx === i ? { ...row, gsm: val } : row));
                             }}
-                            className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right font-mono text-xs"
+                            className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right tabular-nums text-xs"
                           />
                         </td>
                         <td className="py-1 px-2 font-sans">
@@ -1182,7 +1182,7 @@ function PreCostingSheet() {
                               updated[i].consumption = val;
                               setFabrics(updated);
                             }}
-                            className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-right font-mono text-xs"
+                            className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-right tabular-nums text-xs"
                           />
                         </td>
                         <td className="py-2 px-3 text-right">
@@ -1196,7 +1196,7 @@ function PreCostingSheet() {
                               updated[i].wastage_pct = val;
                               setFabrics(updated);
                             }}
-                            className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right font-mono text-xs"
+                            className="w-16 rounded border border-slate-200 px-1.5 py-0.5 text-right tabular-nums text-xs"
                           />
                         </td>
                         <td className="py-2 px-3 text-right font-bold text-slate-700">{gross.toFixed(3)} kg</td>
@@ -1211,7 +1211,7 @@ function PreCostingSheet() {
                               updated[i].rate = val;
                               setFabrics(updated);
                             }}
-                            className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-right font-mono text-xs font-bold"
+                            className="w-20 rounded border border-slate-200 px-1.5 py-0.5 text-right tabular-nums text-xs font-bold"
                           />
                         </td>
                         <td className="py-2 px-3 text-right font-black text-brand-900">₹{lineAmt.toFixed(2)}</td>
@@ -1386,7 +1386,7 @@ function PreCostingSheet() {
                   </button>
                 </div>
               </div>
-              <span className="font-mono font-black text-sm text-brand-950 bg-white border border-indigo-200 px-3 py-1 rounded-md">
+              <span className="tabular-nums font-black text-sm text-brand-950 bg-white border border-indigo-200 px-3 py-1 rounded-md">
                 {useFlatSewingRate && cmtAll ? 'CMT' : 'Sewing'} Cost: ₹{sewingCostPerPc.toFixed(2)} / Pc
               </span>
             </div>
@@ -1403,7 +1403,7 @@ function PreCostingSheet() {
                       step="0.50"
                       value={flatSewingRate}
                       onChange={(e) => setFlatSewingRate(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
-                      className="input font-mono font-black text-base text-brand-800 w-full"
+                      className="input tabular-nums font-black text-base text-brand-800 w-full"
                       placeholder="e.g. 25.00"
                     />
                   </div>
@@ -1445,11 +1445,11 @@ function PreCostingSheet() {
                       step="0.05"
                       value={head.smv_rate_per_min}
                       onChange={(e) => setHead((h) => ({ ...h, smv_rate_per_min: Number(e.target.value) || 0 }))}
-                      className="w-20 rounded border border-slate-300 px-2 py-1 text-right font-mono font-bold"
+                      className="w-20 rounded border border-slate-300 px-2 py-1 text-right tabular-nums font-bold"
                     />
                   </div>
                 </div>
-              <table className="w-full text-left text-xs font-mono">
+              <table className="w-full text-left text-xs tabular-nums">
                 <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3">#</th>
@@ -1491,7 +1491,7 @@ function PreCostingSheet() {
                               // Enter on the last row adds the next operation row (row-by-row entry).
                               if (e.key === 'Enter') { e.preventDefault(); if (i === sewingOps.length - 1) addSewingOp(); }
                             }}
-                            className="w-24 rounded border border-slate-200 px-1.5 py-0.5 text-right font-mono text-xs font-bold text-brand-700"
+                            className="w-24 rounded border border-slate-200 px-1.5 py-0.5 text-right tabular-nums text-xs font-bold text-brand-700"
                           />
                         </td>
                         <td className="py-2 px-3 text-right font-bold text-slate-800">₹{opCost.toFixed(3)}</td>
@@ -1549,7 +1549,7 @@ function PreCostingSheet() {
                       <th className="py-2.5 px-3 text-right">Share %</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
+                  <tbody className="divide-y divide-slate-100 tabular-nums">
                     {([
                       ['Fabric Materials', totalFabricCostPerPc],
                       ['Yarn (In-House Recipe)', totalYarnCostPerPc],
@@ -1579,7 +1579,7 @@ function PreCostingSheet() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-slate-50 font-mono font-black border-t-2 border-slate-300">
+                  <tfoot className="bg-slate-50 tabular-nums font-black border-t-2 border-slate-300">
                     <tr>
                       <td className="py-3 px-3 font-sans text-sm">TOTAL PRE-COST</td>
                       <td className="py-3 px-3 text-right text-sm text-brand-900">₹{totalCostPerPc.toFixed(2)}</td>
@@ -1593,7 +1593,7 @@ function PreCostingSheet() {
               <div className="rounded-xl border border-brand-200 bg-brand-50/30 p-4 space-y-4">
                 <h4 className="font-bold text-sm text-brand-950">Commercial Pricing & FOB Build-Up</h4>
 
-                <div className="space-y-3 font-mono text-xs">
+                <div className="space-y-3 tabular-nums text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-sans text-slate-700">Cost Price Basis (Per Piece):</span>
                     <strong className="text-slate-900 text-sm">₹{totalCostPerPc.toFixed(2)}</strong>
@@ -1636,7 +1636,7 @@ function PreCostingSheet() {
                     </div>
                   )}
 
-                  <div className="rounded-lg bg-white border border-brand-200 p-3 mt-4 space-y-1.5 font-mono">
+                  <div className="rounded-lg bg-white border border-brand-200 p-3 mt-4 space-y-1.5 tabular-nums">
                     <div className="flex justify-between text-slate-600">
                       <span>Order Quantity:</span>
                       <strong>{fmtNumber(orderQty)} PCS</strong>
@@ -1704,7 +1704,7 @@ function PreCostingSheet() {
                   Knitting → Knitting head · Dyeing &amp; Compacting → Dyeing head · Washing &amp; Other → Washing / Other head
                 </p>
               </div>
-              <div className="flex gap-2 font-mono text-[11px]">
+              <div className="flex gap-2 tabular-nums text-[11px]">
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Knitting ₹{H.knitting_cost.toFixed(2)}</span>
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Dyeing ₹{H.dyeing_cost.toFixed(2)}</span>
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Washing/Other ₹{H.washing_cost.toFixed(2)}</span>
@@ -1775,7 +1775,7 @@ function PreCostingSheet() {
                 </p>
                 {cmtAll && <p className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900" data-cmt-covered="finishing">Finishing rows are covered by the flat CMT rate (cutting → finishing) and are not added; Packing rows still count.</p>}
               </div>
-              <div className="flex gap-2 font-mono text-[11px]">
+              <div className="flex gap-2 tabular-nums text-[11px]">
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Finishing ₹{finishingCostPerPc.toFixed(2)}</span>
                 <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">Packing ₹{packingCostPerPc.toFixed(2)}</span>
                 <TopAddButton testId="finishing" label="Add Item" onClick={() => addTop(setFinishingItems, 'finishing', { item: '', cost_type: 'FINISHING', qty_per_pc: 1, rate: '' })} />
@@ -1829,7 +1829,7 @@ function PreCostingSheet() {
               total={otherDirectPerPc}
               addLabel="Add Charge"
             />
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 font-mono text-[11px]">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 tabular-nums text-[11px]">
               {([['Testing', H.testing_cost], ['Freight', H.freight_cost], ['Agent Comm.', H.agent_commission],
                 ['Finance', H.finance_cost], ['Other', H.other_direct_cost]] as [string, number][]).map(([l, v]) => (
                 <span key={l} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{l} ₹{v.toFixed(2)}</span>
@@ -1867,7 +1867,7 @@ function PreCostingSheet() {
                     step="0.5"
                     value={overhead.pct}
                     onChange={(e) => setOverhead((o) => ({ ...o, pct: e.target.value === '' ? '' : Number(e.target.value) }))}
-                    className="input font-mono font-bold w-full"
+                    className="input tabular-nums font-bold w-full"
                   />
                 </div>
               ) : (
@@ -1878,13 +1878,13 @@ function PreCostingSheet() {
                     step="0.05"
                     value={overhead.rate}
                     onChange={(e) => setOverhead((o) => ({ ...o, rate: e.target.value === '' ? '' : Number(e.target.value) }))}
-                    className="input font-mono font-bold w-full"
+                    className="input tabular-nums font-bold w-full"
                   />
                 </div>
               )}
               <div className="rounded-lg border border-brand-200 bg-brand-50/40 p-3">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-brand-800">Overhead / Pc</span>
-                <p className="text-xl font-black font-mono text-brand-900">₹{overheadCostPerPc.toFixed(2)}</p>
+                <p className="text-xl font-black tabular-nums text-brand-900">₹{overheadCostPerPc.toFixed(2)}</p>
               </div>
             </div>
           </div>

@@ -34,7 +34,7 @@ export function JobWorkInsPage() {
           header: 'JW In no',
           sortable: true,
           render: (r: any) => (
-            <span className="font-mono text-[12px] font-medium text-brand-700">{r.jwin_no}</span>
+            <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.jwin_no}</span>
           ),
         },
         { key: 'jwin_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.jwin_date) },
@@ -98,7 +98,7 @@ export function JobWorkInvoicesPage() {
           header: 'Invoice no',
           sortable: true,
           render: (r: any) => (
-            <span className="font-mono text-[12px] font-medium text-brand-700">{r.invoice_no}</span>
+            <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.invoice_no}</span>
           ),
         },
         { key: 'invoice_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.invoice_date) },

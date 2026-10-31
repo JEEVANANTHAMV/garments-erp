@@ -42,7 +42,7 @@ export function PackingRulesPage() {
               <th className="th">Mixing</th><th className="th">Packaging</th><th className="th">Valid</th><th className="th">Used</th><th className="th" /></tr></thead>
             <tbody>{rules.data.map((r) => (
               <tr key={r.id} className={n(r.is_active) ? '' : 'opacity-50'}>
-                <td className="td font-mono">{r.rule_code} <span className="text-slate-400">r{r.revision}</span></td><td className="td">{r.rule_name}</td><td className="td">{scope(r)}</td>
+                <td className="td tabular-nums">{r.rule_code} <span className="text-slate-400">r{r.revision}</span></td><td className="td">{r.rule_name}</td><td className="td">{scope(r)}</td>
                 <td className="td">{UNIT_LABEL[r.packing_unit ?? 'SINGLE']}{r.packing_unit === 'MASTER_POLYBAG' && r.pieces_per_master_bag ? ` (${r.pieces_per_master_bag} / bag)` : ''}
                   <div className="text-[11px] text-slate-500">{r.packing_mode === 'INDIVIDUAL_PIECE' ? 'bag each piece' : 'bundle / qty'}</div></td><td className="td text-right">{r.pieces_per_polybag}</td><td className="td text-right">{r.standard_pieces_per_carton}</td>
                 <td className="td">{[n(r.allow_mixed_sizes) && 'sizes', n(r.allow_mixed_colours) && 'colours'].filter(Boolean).join(' + ') || 'solid'}{n(r.allow_partial_carton) ? ' · partial' : ''}{n(r.allow_overpack) ? ' · overpack' : ''}</td>

@@ -73,7 +73,7 @@ function RequestList() {
           <tbody>
             {(list.data ?? []).map((r) => (
               <tr key={r.id} className="border-t border-slate-100">
-                <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">{r.request_no}</td><td className="px-2 py-1.5">{fmtDate(r.request_date)}</td>
+                <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{r.request_no}</td><td className="px-2 py-1.5">{fmtDate(r.request_date)}</td>
                 <td className="px-2 py-1.5 font-semibold">{r.io_no}</td><td className="px-2 py-1.5">{r.program_no}</td>
                 <td className="px-2 py-1.5">{r.required_yarn}</td><td className="px-2 py-1.5 font-semibold text-purple-700">{r.substitute_yarn}</td>
                 <td className="px-2 py-1.5">{r.lot_no || '—'} <span className="text-slate-400">{r.grn_no}</span></td><td className="px-2 py-1.5">{r.from_job}{r.transfer_no ? <span className="block text-[10px] text-slate-400">{r.transfer_no}</span> : null}</td>
@@ -272,7 +272,7 @@ function JobLedger() {
               <tbody>
                 {withBal.map((r, i) => (
                   <tr key={i} className={`border-t border-slate-100 ${r.type === 'REQUIREMENT' ? 'bg-slate-50 text-slate-500' : ''}`}>
-                    <td className="px-2 py-1">{fmtDate(r.dt)}</td><td className="px-2 py-1 font-semibold">{r.type}</td><td className="px-2 py-1 font-mono">{r.ref}</td>
+                    <td className="px-2 py-1">{fmtDate(r.dt)}</td><td className="px-2 py-1 font-semibold">{r.type}</td><td className="px-2 py-1 tabular-nums">{r.ref}</td>
                     <td className="px-2 py-1">{r.yarn_name}</td><td className="px-2 py-1">{r.lot_no || '—'}</td>
                     <td className="px-2 py-1 text-right text-emerald-700">{n(r.in_kg) ? kg(r.in_kg) : ''}</td><td className="px-2 py-1 text-right text-rose-700">{n(r.out_kg) ? kg(r.out_kg) : ''}</td>
                     <td className="px-2 py-1 text-right">{r.bal != null ? kg(r.bal) : ''}</td><td className="px-2 py-1 text-right">{n(r.rate) ? fmtDecimal(r.rate, 2) : ''}</td>

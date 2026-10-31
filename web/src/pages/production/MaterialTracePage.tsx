@@ -38,7 +38,7 @@ export default function MaterialTracePage() {
               {rt.data.chain.map((c: any, i: number) => (
                 <div key={i} className="card p-4 text-xs" style={{ marginLeft: Math.min(c.depth, 6) * 18 }}>
                   <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                    <span className="font-mono font-bold text-brand-700">{c.roll.roll_no}</span>
+                    <span className="tabular-nums font-bold text-brand-700">{c.roll.roll_no}</span>
                     <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${c.roll.process_state === 'GREY' ? 'bg-slate-100 text-slate-700' : 'bg-purple-100 text-purple-800'}`}>{c.roll.process_state}</span>
                     <span>{c.roll.fabric_name}</span>{c.roll.color_name && <span>· {c.roll.color_name}</span>}<span>· {kg(c.roll.weight_kg)} KG</span>{c.roll.io_no && <span>· job {c.roll.io_no}</span>}
                   </div>
@@ -55,8 +55,8 @@ export default function MaterialTracePage() {
                   {c.yarn?.length > 0 && (
                     <table className="mt-2 w-full">
                       <thead className="bg-slate-50 text-slate-500"><tr>{['Yarn', 'Lot', 'DC', 'KG', 'GRN', 'PO', 'Supplier', 'Invoice', 'Link', 'Lot origin'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
-                      <tbody>{c.yarn.map((y: any, k: number) => <tr key={k} className="border-t border-slate-100"><td className="px-2 py-1">{y.yarn_name}</td><td className="px-2 py-1">{y.lot_no}</td><td className="px-2 py-1 font-mono">{y.dc_no}</td><td className="px-2 py-1">{kg(y.issued_qty_kg)}</td>
-                        <td className="px-2 py-1 font-mono">{y.grn_no || '—'}</td><td className="px-2 py-1">{y.po_no || '—'}</td><td className="px-2 py-1">{y.supplier || '—'}</td><td className="px-2 py-1">{y.supplier_inv_no || '—'}</td>
+                      <tbody>{c.yarn.map((y: any, k: number) => <tr key={k} className="border-t border-slate-100"><td className="px-2 py-1">{y.yarn_name}</td><td className="px-2 py-1">{y.lot_no}</td><td className="px-2 py-1 tabular-nums">{y.dc_no}</td><td className="px-2 py-1">{kg(y.issued_qty_kg)}</td>
+                        <td className="px-2 py-1 tabular-nums">{y.grn_no || '—'}</td><td className="px-2 py-1">{y.po_no || '—'}</td><td className="px-2 py-1">{y.supplier || '—'}</td><td className="px-2 py-1">{y.supplier_inv_no || '—'}</td>
                         <td className="px-2 py-1">{y.link === 'exact' ? 'exact lot' : <span className="text-amber-700">lot no match</span>}</td><td className="px-2 py-1"><Origin o={y.origin} /></td></tr>)}</tbody>
                     </table>
                   )}

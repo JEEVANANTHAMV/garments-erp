@@ -306,7 +306,7 @@ export function ProcessDcPage() {
           emptyTitle="No DCs yet"
           emptyMessage="Create a DC and add the jobs / bundles going to the contractor."
           columns={[
-            { key: 'challan_no', header: 'DC no', render: (r: any) => <span className="font-mono text-[12px] font-semibold text-brand-700">{r.challan_no}</span> },
+            { key: 'challan_no', header: 'DC no', render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.challan_no}</span> },
             { key: 'challan_date', header: 'Date', render: (r: any) => fmtDate(r.challan_date) },
             { key: 'stage_name', header: 'To process', render: (r: any) => r.stage_name ? <Badge tone="violet">{r.stage_name}</Badge> : '—' },
             {
@@ -378,7 +378,7 @@ function ScanCard({ value, onChange, onSubmit, disabled, placeholder, last, inpu
         <div className="relative flex-1">
           <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-600" />
           <input ref={inputRef} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}
-            placeholder={placeholder} className="input pl-9 font-mono" />
+            placeholder={placeholder} className="input pl-9 tabular-nums" />
         </div>
         <Button type="submit" disabled={disabled}>Scan</Button>
       </form>
@@ -386,7 +386,7 @@ function ScanCard({ value, onChange, onSubmit, disabled, placeholder, last, inpu
         <div className="mt-2 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
           <CheckCircle2 size={18} className="text-emerald-600" />
           <div>
-            <p className="font-semibold text-slate-800">Bundle found: <span className="font-mono">{last.bundle_no}</span></p>
+            <p className="font-semibold text-slate-800">Bundle found: <span className="tabular-nums">{last.bundle_no}</span></p>
             <p className="text-slate-600">Job: {last.io_no ?? '—'} · Style: {last.style_code ?? '—'} · Size: {last.size_code ?? '—'} · Qty: {last.qty}{last.note ? ` · ${last.note}` : ''}</p>
           </div>
         </div>
@@ -879,7 +879,7 @@ function DcEditor({ id, stages, onClose, onSaved }: {
                               <input type="checkbox" checked={checked.has(l.id)} onChange={() => setChecked(toggle(checked, l.id))} />
                             </td>
                             <td className="px-2 py-1 text-slate-400">{i + 1}</td>
-                            <td className="px-2 py-1 font-mono font-semibold text-slate-800">
+                            <td className="px-2 py-1 tabular-nums font-semibold text-slate-800">
                               {l.bundle_no}
                               {l.line_alloc && <Badge tone="amber" className="ml-1">line {l.line_alloc.line_code} · {l.line_alloc.allocation_no}</Badge>}
                               {!head.from_line_id && l.auto_line && <Badge tone="blue" className="ml-1">output of {l.auto_line}</Badge>}
@@ -1092,7 +1092,7 @@ function JobPicker({ stage, excluded, onClose, onAdd }: { stage: Stage; excluded
               <tr key={k} className={`border-t border-slate-100 ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-brand-50/40'}`}
                 onClick={() => { if (disabled) return; setPicked((cur) => { const s = new Set(cur); if (s.has(k)) s.delete(k); else s.add(k); return s; }); }}>
                 <td className="px-2 py-1.5 text-center"><input type="checkbox" readOnly disabled={disabled} checked={picked.has(k)} /></td>
-                <td className="px-2 py-1.5 font-mono font-semibold">{j.io_no ?? '—'}</td>
+                <td className="px-2 py-1.5 tabular-nums font-semibold">{j.io_no ?? '—'}</td>
                 <td className="px-2 py-1.5">{j.buyer_name ?? '—'}</td>
                 <td className="px-2 py-1.5">{j.buyer_po_no ?? '—'}</td>
                 <td className="px-2 py-1.5">{(j.style_codes || []).join(', ') || '—'}</td>
@@ -1164,7 +1164,7 @@ function ImportBundlesModal({ stage, excludeChallanId, onClose, onAdd }: {
           <tbody>
             {result.map((r) => (
               <tr key={r.code} className={`border-t border-slate-100 ${r.ok ? '' : 'bg-red-50/50'}`}>
-                <td className="px-2 py-1 font-mono">{r.code}</td><td className="px-2 py-1 font-mono">{r.bundle?.bundle_no ?? '—'}</td>
+                <td className="px-2 py-1 tabular-nums">{r.code}</td><td className="px-2 py-1 tabular-nums">{r.bundle?.bundle_no ?? '—'}</td>
                 <td className="px-2 py-1">{r.bundle?.io_no ?? '—'}</td>
                 <td className="px-2 py-1">{r.bundle ? `${r.bundle.color_name} / ${r.bundle.size_code}` : '—'}</td>
                 <td className="px-2 py-1 text-right">{r.bundle?.available_qty ?? '—'}</td>
@@ -1249,7 +1249,7 @@ function BundlePicker({ stage, excluded, fromLineId, onClose, onAdd }: { stage: 
               <label key={b.id} className={`flex cursor-pointer items-center gap-3 border-t border-slate-50 px-3 py-1.5 text-xs hover:bg-brand-50/40 ${b.open_dc_no ? 'opacity-50' : ''}`}>
                 <input type="checkbox" disabled={!!b.open_dc_no} checked={checked.has(b.id)}
                   onChange={(e) => { const n = new Set(checked); if (e.target.checked) n.add(b.id); else n.delete(b.id); setChecked(n); }} />
-                <span className="w-32 font-mono font-semibold text-slate-800">{b.bundle_no}</span>
+                <span className="w-32 tabular-nums font-semibold text-slate-800">{b.bundle_no}</span>
                 <span className="w-24 text-slate-500">{b.style_code}</span>
                 <span className="w-28">{b.color_name}</span>
                 <span className="w-12 font-semibold">{b.size_code}</span>
@@ -1391,7 +1391,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
           {dc.source_label && <Info label="From process">{dc.source_label}</Info>}
           <Info label="Rate">{dc.rate != null ? `₹${Number(dc.rate).toFixed(2)} / PCS` : '—'}</Info>
           <div className="sm:col-span-2"><Info label="Operations">{dc.operations?.length ? dc.operations.map((o: any) => `${o.op_name} ₹${Number(o.rate).toFixed(2)}`).join(', ') : '—'}</Info></div>
-          {dc.jw_no && <Info label="Job work order"><Link to={`/production/job-work-orders?open=${dc.jw_order_id}`} className="font-mono text-brand-700 hover:underline">{dc.jw_no}</Link>{dc.jw_line_seq ? ` · line ${dc.jw_line_seq}` : ''}</Info>}
+          {dc.jw_no && <Info label="Job work order"><Link to={`/production/job-work-orders?open=${dc.jw_order_id}`} className="tabular-nums text-brand-700 hover:underline">{dc.jw_no}</Link>{dc.jw_line_seq ? ` · line ${dc.jw_line_seq}` : ''}</Info>}
           {dc.outward_override_reason && <Info label="Over-plan override">{dc.outward_override_reason}</Info>}
         </FormSection>
         <FormSection title="Movement & remarks" cols={4}>
@@ -1452,7 +1452,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
                     {j.rows.map((l: any, i: number) => (
                       <tr key={l.id} className="border-t border-slate-100">
                         <td className="px-2 py-1 text-slate-400">{i + 1}</td>
-                        <td className="px-2 py-1 font-mono font-semibold">
+                        <td className="px-2 py-1 tabular-nums font-semibold">
                           <Link to={`/production/traceability?bundle=${encodeURIComponent(l.barcode ?? l.bundle_no)}`} className="text-brand-700 hover:underline">{l.bundle_no}</Link>
                         </td>
                         <td className="px-2 py-1">{l.lay_no ?? '—'}</td><td className="px-2 py-1">{l.cut_no ?? '—'}</td>
@@ -1502,7 +1502,7 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
             <tbody>
               {dc.receipts.map((r: any) => (
                 <tr key={r.id} className="border-t border-slate-100">
-                  <td className="px-2 py-1 font-mono">{r.receipt_no}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
+                  <td className="px-2 py-1 tabular-nums">{r.receipt_no}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
                   <td className="px-2 py-1">{r.party_dc_no ?? '—'}{r.party_dc_date ? ` · ${fmtDate(r.party_dc_date)}` : ''}</td>
                   <td className="px-2 py-1">{r.to_location ?? '—'}</td>
                   <td className="px-2 py-1 text-right text-emerald-700">{fmtNumber(r.received_qty)}</td>
@@ -1605,7 +1605,7 @@ function ReturnModal({ dc, onClose, onDone }: { dc: any; onClose: () => void; on
           <th className="px-2 py-1 text-right">With contractor</th><th className="px-2 py-1 text-right">Return (PCS)</th></tr></thead>
         <tbody>{open.map((l) => (
           <tr key={l.id} className="border-t border-slate-100">
-            <td className="px-2 py-1 font-mono">{l.bundle_no ?? '—'}</td><td className="px-2 py-1">{l.color_name}</td><td className="px-2 py-1">{l.size_code}</td>
+            <td className="px-2 py-1 tabular-nums">{l.bundle_no ?? '—'}</td><td className="px-2 py-1">{l.color_name}</td><td className="px-2 py-1">{l.size_code}</td>
             <td className="px-2 py-1 text-right">{num(l.pending_qty)}</td>
             <td className="px-2 py-1 text-right"><input type="number" min={0} max={num(l.pending_qty)} id={`dc-return-qty-${l.id}`} className="input h-7 w-16 px-1.5 text-right" value={qty[l.id] ?? 0}
               onChange={(e) => setQty({ ...qty, [l.id]: Math.min(num(l.pending_qty), Math.max(0, Math.floor(Number(e.target.value) || 0))) })} /></td>
@@ -1916,7 +1916,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                   {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                 </button>
                 <span className="mr-auto font-bold text-slate-800">
-                  {ji + 1}. {dcs.length > 1 && <span className="font-mono text-xs text-slate-500">DC {j.dc.challan_no} · </span>}{jobTitle(m)}
+                  {ji + 1}. {dcs.length > 1 && <span className="tabular-nums text-xs text-slate-500">DC {j.dc.challan_no} · </span>}{jobTitle(m)}
                 </span>
                 <span className="text-xs text-slate-600">Bundles: <b>{j.rows.length}</b>{filtering && <> ({jShown.length} shown)</>}</span>
                 <span className="text-xs text-slate-600">Sent (pending): <b>{fmtNumber(jp)}</b></span>
@@ -1952,7 +1952,7 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
                         return (
                           <tr key={l.id} className={`border-t border-slate-100 ${bad ? 'bg-red-50' : x.s > 0 || x.r > 0 ? 'bg-amber-50/50' : ''}`}>
                             <td className="px-2 py-1 text-slate-400">{i + 1}</td>
-                            <td className="px-2 py-1 font-mono font-semibold">{l.bundle_no}</td>
+                            <td className="px-2 py-1 tabular-nums font-semibold">{l.bundle_no}</td>
                             <td className="px-2 py-1">{l.lay_no ?? '—'}</td><td className="px-2 py-1">{l.cut_no ?? '—'}</td>
                             <td className="px-2 py-1">{l.color_name}</td><td className="px-2 py-1 text-slate-500">{l.assort_color ?? '—'}</td>
                             <td className="px-2 py-1 font-semibold">{l.size_code}</td>
@@ -2132,10 +2132,10 @@ export function ProcessDcReceiptsPage() {
         </div>
         <DataTable data={rows} loading={loading} emptyTitle="No inwards yet"
           columns={[
-            { key: 'receipt_no', header: 'Inward no', render: (r: any) => <span className="font-mono text-[12px] font-semibold text-brand-700">{r.receipt_no}</span> },
+            { key: 'receipt_no', header: 'Inward no', render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.receipt_no}</span> },
             { key: 'receipt_date', header: 'Date', render: (r: any) => fmtDate(r.receipt_date) },
-            { key: 'challan_no', header: 'Source DC', render: (r: any) => <Link className="font-mono text-brand-700 hover:underline" to={`/production/jobwork-challans?dc=${r.challan_id}`}>{r.challan_no}</Link> },
-            { key: 'party_dc_no', header: 'Party DC / Ref', render: (r: any) => <span className="text-xs">{r.party_dc_no ?? '—'}{r.ref_no ? ` · ${r.ref_no}` : ''}{r.inward_group_no ? <span className="block font-mono text-[10px] text-slate-400">{r.inward_group_no}</span> : null}</span> },
+            { key: 'challan_no', header: 'Source DC', render: (r: any) => <Link className="tabular-nums text-brand-700 hover:underline" to={`/production/jobwork-challans?dc=${r.challan_id}`}>{r.challan_no}</Link> },
+            { key: 'party_dc_no', header: 'Party DC / Ref', render: (r: any) => <span className="text-xs">{r.party_dc_no ?? '—'}{r.ref_no ? ` · ${r.ref_no}` : ''}{r.inward_group_no ? <span className="block tabular-nums text-[10px] text-slate-400">{r.inward_group_no}</span> : null}</span> },
             { key: 'stage_name', header: 'Process', render: (r: any) => r.stage_name ? <Badge tone="violet">{r.stage_name}</Badge> : '—' },
             { key: 'vendor_name', header: 'Contractor / unit' },
             { key: 'io_list', header: 'Jobs', render: (r: any) => <span className="text-xs">{r.io_list ?? '—'}</span> },
@@ -2244,7 +2244,7 @@ function SelectDcModal({ onClose, onPick }: { onClose: () => void; onPick: (ids:
             <tr key={r.id} onClick={() => { if (other) return; setPicked((cur) => { const n2 = new Set(cur); if (n2.has(r.id)) n2.delete(r.id); else n2.add(r.id); return n2; }); }}
               className={`border-t border-slate-100 ${other ? 'opacity-40' : 'cursor-pointer hover:bg-brand-50/40'}`}>
               <td className="px-2 py-1.5 text-center"><input type="checkbox" readOnly disabled={other} checked={picked.has(r.id)} /></td>
-              <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">{r.challan_no}</td>
+              <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{r.challan_no}</td>
               <td className="px-2 py-1.5">{fmtDate(r.challan_date)}</td>
               <td className="px-2 py-1.5">{r.vendor_name}</td>
               <td className="px-2 py-1.5">{r.stage_name}</td>
@@ -2320,7 +2320,7 @@ function PanelConversionModal({ onClose }: { onClose: () => void }) {
       </>}>
       {done ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
-          <p className="font-semibold text-emerald-800">New bundle <span className="font-mono">{done.bundle_no}</span> · barcode <span className="font-mono">{done.barcode}</span></p>
+          <p className="font-semibold text-emerald-800">New bundle <span className="tabular-nums">{done.bundle_no}</span> · barcode <span className="tabular-nums">{done.barcode}</span></p>
           <p className="mt-1 text-slate-700">{done.qty} PCS of {done.part_name}, made from {done.sources.map((x: any) => `${x.bundle_no} (${x.part_name ?? '—'})`).join(' + ')}.</p>
           <p className="mt-1 text-xs text-slate-500">It is at cutting and can go on a Stitching DC; the panel bundles keep their history in traceability.</p>
         </div>
@@ -2330,7 +2330,7 @@ function PanelConversionModal({ onClose }: { onClose: () => void }) {
           <form onSubmit={onScan} className="mb-3 flex gap-2">
             <div className="relative flex-1">
               <ScanLine size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-600" />
-              <input value={scan} onChange={(e) => setScan(e.target.value)} className="input pl-9 font-mono" placeholder="Scan panel bundle + Enter" autoFocus />
+              <input value={scan} onChange={(e) => setScan(e.target.value)} className="input pl-9 tabular-nums" placeholder="Scan panel bundle + Enter" autoFocus />
             </div>
             <Button type="submit" variant="secondary">Add</Button>
           </form>
@@ -2344,7 +2344,7 @@ function PanelConversionModal({ onClose }: { onClose: () => void }) {
               {!panels.length && <tr><td colSpan={8} className="py-6 text-center text-slate-400">No panels yet.</td></tr>}
               {panels.map((p) => (
                 <tr key={p.id} className="border-t border-slate-100">
-                  <td className="px-2 py-1 font-mono font-semibold">{p.bundle_no}</td><td className="px-2 py-1">{p.io_no}</td>
+                  <td className="px-2 py-1 tabular-nums font-semibold">{p.bundle_no}</td><td className="px-2 py-1">{p.io_no}</td>
                   <td className="px-2 py-1">{p.style_code}</td><td className="px-2 py-1">{p.part_name ?? '—'}</td>
                   <td className="px-2 py-1">{p.color_name}</td><td className="px-2 py-1 font-semibold">{p.size_code}</td>
                   <td className="px-2 py-1 text-right">{p.available_qty}</td>

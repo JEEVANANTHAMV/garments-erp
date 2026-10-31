@@ -59,7 +59,7 @@ export function TraceabilitySearchPage() {
         <form onSubmit={submit} className="p-4 flex gap-3 items-start">
           <div className="flex-1 relative">
             <Input placeholder="Scan / type a bundle barcode, fabric roll, lot, carton, shipment, IO or style…"
-              value={queryText} onChange={(e) => setQueryText(e.target.value)} className="font-mono" autoFocus />
+              value={queryText} onChange={(e) => setQueryText(e.target.value)} className="tabular-nums" autoFocus />
             {quick.length > 0 && (
               <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden divide-y">
                 {quick.map((item, idx) => (
@@ -113,7 +113,7 @@ function ChainTrace({ kind, value }: { kind: Kind; value: string }) {
       <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-5 text-white shadow-xl flex flex-wrap items-center justify-between gap-4">
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-indigo-300">{dirLabel} · {data.root?.type}</span>
-          <h2 className="font-mono text-3xl font-black tracking-tight">{data.root?.key ?? value}</h2>
+          <h2 className="tabular-nums text-3xl font-black tracking-tight">{data.root?.key ?? value}</h2>
         </div>
         <div className="flex flex-wrap gap-6 text-right">
           <Stat label="Bundles" v={s.bundles} />
@@ -127,19 +127,19 @@ function ChainTrace({ kind, value }: { kind: Kind; value: string }) {
 
       {/* The chain, left = fabric source, right = shipment */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-        <Col title="Fabric PO" items={data.pos ?? []} render={(p: any) => <span className="font-mono">{p.po_no}</span>} sub={(p: any) => fmtDate(p.po_date)} />
-        <Col title="GRN" items={data.grns ?? []} render={(g: any) => <span className="font-mono">{g.grn_no}</span>} sub={(g: any) => g.supplier_name} />
-        <Col title="Lot" items={data.lots ?? []} render={(l: string) => <Link className="font-mono text-brand-700 hover:underline" to={link('lot', l)}>{l}</Link>} />
-        <Col title="Fabric rolls" items={dedupe(data.rolls ?? [], 'roll_no')} render={(r: any) => <Link className="font-mono text-brand-700 hover:underline" to={link('roll', r.roll_no)}>{r.roll_no}</Link>}
+        <Col title="Fabric PO" items={data.pos ?? []} render={(p: any) => <span className="tabular-nums">{p.po_no}</span>} sub={(p: any) => fmtDate(p.po_date)} />
+        <Col title="GRN" items={data.grns ?? []} render={(g: any) => <span className="tabular-nums">{g.grn_no}</span>} sub={(g: any) => g.supplier_name} />
+        <Col title="Lot" items={data.lots ?? []} render={(l: string) => <Link className="tabular-nums text-brand-700 hover:underline" to={link('lot', l)}>{l}</Link>} />
+        <Col title="Fabric rolls" items={dedupe(data.rolls ?? [], 'roll_no')} render={(r: any) => <Link className="tabular-nums text-brand-700 hover:underline" to={link('roll', r.roll_no)}>{r.roll_no}</Link>}
           sub={(r: any) => r.actual_consumed_kg != null ? `${fmtDecimal(r.actual_consumed_kg, 3)} KG used` : r.weight_kg != null ? `${fmtDecimal(r.weight_kg, 3)} KG` : ''} />
-        <Col title="Cut order / Lay" items={data.lays ?? []} render={(l: any) => <span className="font-mono">{l.lay_no}</span>} sub={(l: any) => [l.plan_no, l.status].filter(Boolean).join(' · ')} />
+        <Col title="Cut order / Lay" items={data.lays ?? []} render={(l: any) => <span className="tabular-nums">{l.lay_no}</span>} sub={(l: any) => [l.plan_no, l.status].filter(Boolean).join(' · ')} />
         <Col title="Bundles" items={bundles.filter((b) => !['SPLIT', 'CLOSED'].includes(b.status))} max={12}
-          render={(b: any) => <Link className="font-mono text-brand-700 hover:underline" to={link('bundle', b.barcode ?? b.bundle_no)}>{b.bundle_no}</Link>}
+          render={(b: any) => <Link className="tabular-nums text-brand-700 hover:underline" to={link('bundle', b.barcode ?? b.bundle_no)}>{b.bundle_no}</Link>}
           sub={(b: any) => `${b.color_name ?? ''} ${b.size_code ?? ''} · ${b.qty} PCS · ${String(b.status).replace(/_/g, ' ')}`} />
-        <Col title="Cartons" items={data.cartons ?? []} render={(c: any) => <Link className="font-mono text-brand-700 hover:underline" to={link('carton', c.carton_no)}>{c.carton_no}</Link>}
+        <Col title="Cartons" items={data.cartons ?? []} render={(c: any) => <Link className="tabular-nums text-brand-700 hover:underline" to={link('carton', c.carton_no)}>{c.carton_no}</Link>}
           sub={(c: any) => [c.pack_no, c.pcs != null ? `${c.pcs} PCS` : ''].filter(Boolean).join(' · ')} />
         <Col title="Packing list → Shipment" items={[...(data.packingLists ?? []).map((p: any) => ({ t: 'PL', ...p })), ...(data.shipments ?? []).map((x: any) => ({ t: 'SH', ...x }))]}
-          render={(x: any) => x.t === 'PL' ? <span className="font-mono">{x.pl_no}</span> : <Link className="font-mono text-brand-700 hover:underline" to={link('shipment', x.shipment_no)}>{x.shipment_no}</Link>}
+          render={(x: any) => x.t === 'PL' ? <span className="tabular-nums">{x.pl_no}</span> : <Link className="tabular-nums text-brand-700 hover:underline" to={link('shipment', x.shipment_no)}>{x.shipment_no}</Link>}
           sub={(x: any) => x.t === 'PL' ? `Packing list · ${x.status ?? ''}` : `Shipment${x.destination ? ` · ${x.destination}` : ''}`} />
       </div>
       {cutOrders.length > 0 && <p className="text-xs text-slate-500">Cut orders: {cutOrders.map((c) => c.plan_no).join(', ')}</p>}
@@ -157,7 +157,7 @@ function ChainTrace({ kind, value }: { kind: Kind; value: string }) {
               <tbody>
                 {bundles.map((b) => (
                   <tr key={b.id} className={`border-t border-slate-100 ${['SPLIT', 'CLOSED'].includes(b.status) ? 'text-slate-400' : ''}`}>
-                    <td className="px-2 py-1 font-mono"><Link className="text-brand-700 hover:underline" to={link('bundle', b.barcode ?? b.bundle_no)}>{b.bundle_no}</Link>
+                    <td className="px-2 py-1 tabular-nums"><Link className="text-brand-700 hover:underline" to={link('bundle', b.barcode ?? b.bundle_no)}>{b.bundle_no}</Link>
                       {b.parent_bundle_no && <span className="ml-1 text-[10px] text-slate-400">← {b.parent_bundle_no}</span>}</td>
                     <td className="px-2 py-1">{b.color_name}</td><td className="px-2 py-1">{b.size_code}</td><td className="px-2 py-1">{b.lay_no ?? '—'}</td>
                     <td className="px-2 py-1 text-right">{b.qty}</td><td className="px-2 py-1 text-right">{b.sew_good_qty}</td>
@@ -183,13 +183,13 @@ function ChainTrace({ kind, value }: { kind: Kind; value: string }) {
               <tbody>
                 {(data.rolls as any[]).map((r, i) => (
                   <tr key={i} className="border-t border-slate-100">
-                    <td className="px-2 py-1 font-mono"><Link className="text-brand-700 hover:underline" to={link('roll', r.roll_no)}>{r.roll_no}</Link></td>
+                    <td className="px-2 py-1 tabular-nums"><Link className="text-brand-700 hover:underline" to={link('roll', r.roll_no)}>{r.roll_no}</Link></td>
                     <td className="px-2 py-1">{r.lot_no ? <Link className="text-brand-700 hover:underline" to={link('lot', r.lot_no)}>{r.lot_no}</Link> : '—'}</td>
                     <td className="px-2 py-1">{r.fabric_name ?? '—'}</td><td className="px-2 py-1">{r.lay_no ?? '—'}</td><td className="px-2 py-1">{r.dc_no ?? r.issue_no ?? '—'}</td>
                     <td className="px-2 py-1">{r.before_kg != null ? fmtDecimal(r.before_kg, 3) : r.weight_kg != null ? fmtDecimal(r.weight_kg, 3) : '—'}</td>
                     <td className="px-2 py-1">{r.after_kg != null ? fmtDecimal(r.after_kg, 3) : '—'}</td>
                     <td className="px-2 py-1 font-semibold">{r.actual_consumed_kg != null ? fmtDecimal(r.actual_consumed_kg, 3) : '—'}</td>
-                    <td className="px-2 py-1 font-mono">{r.grn_no ?? '—'}</td><td className="px-2 py-1 font-mono">{r.po_no ?? '—'}</td>
+                    <td className="px-2 py-1 tabular-nums">{r.grn_no ?? '—'}</td><td className="px-2 py-1 tabular-nums">{r.po_no ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -207,7 +207,7 @@ function dedupe(rows: any[], key: string) {
 }
 
 function Stat({ label, v, dp = 0 }: { label: string; v?: number; dp?: number }) {
-  return <div><span className="text-xs text-indigo-300">{label}</span><p className="font-mono text-xl font-bold">{dp ? fmtDecimal(v ?? 0, dp) : fmtNumber(v ?? 0)}</p></div>;
+  return <div><span className="text-xs text-indigo-300">{label}</span><p className="tabular-nums text-xl font-bold">{dp ? fmtDecimal(v ?? 0, dp) : fmtNumber(v ?? 0)}</p></div>;
 }
 
 function Col<T>({ title, items, render, sub, max = 8 }: { title: string; items: T[]; render: (x: T) => React.ReactNode; sub?: (x: T) => React.ReactNode; max?: number }) {
@@ -238,7 +238,7 @@ function BundleCard({ b }: { b: any }) {
       actions={<StatusBadge value={b.status} />}>
       <div className="p-4 space-y-4 text-sm">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <KV k="Barcode" v={<span className="font-mono">{b.barcode}</span>} />
+          <KV k="Barcode" v={<span className="tabular-nums">{b.barcode}</span>} />
           <KV k="Bundle qty" v={`${fmtNumber(b.qty)} PCS`} />
           <KV k="Cut order" v={b.plan_no ?? '—'} />
           <KV k="Lay" v={b.lay_no ?? '—'} />
@@ -246,11 +246,11 @@ function BundleCard({ b }: { b: any }) {
           <KV k="Cut output" v={b.output_no ?? '—'} />
           <KV k="Allocated fabric" v={b.allocated_kg != null ? `${fmtDecimal(b.allocated_kg, 3)} KG (${b.allocation_method ?? '—'})` : '—'} />
           <KV k="Lots" v={(b.lots ?? []).join(', ') || '—'} />
-          {b.parent_bundle_no && <KV k="Split from" v={<Link className="font-mono text-brand-700" to={link('bundle', b.parent_barcode ?? b.parent_bundle_no)}>{b.parent_bundle_no}</Link>} />}
-          {b.children?.length > 0 && <KV k="Split into" v={b.children.map((c: any) => <Link key={c.id} className="mr-2 font-mono text-brand-700" to={link('bundle', c.barcode ?? c.bundle_no)}>{c.bundle_no} ({c.qty})</Link>)} />}
-          {b.merge_sources?.length > 0 && <KV k="Merged from" v={b.merge_sources.map((c: any) => <Link key={c.source_bundle_id} className="mr-2 font-mono text-brand-700" to={link('bundle', c.barcode ?? c.bundle_no)}>{c.bundle_no} ({c.qty})</Link>)} />}
-          {b.merged_into?.length > 0 && <KV k="Merged into" v={b.merged_into.map((c: any) => <Link key={c.merged_bundle_id} className="mr-2 font-mono text-brand-700" to={link('bundle', c.barcode ?? c.bundle_no)}>{c.bundle_no}</Link>)} />}
-          {b.current_carton && <KV k="Carton" v={<Link className="font-mono text-brand-700" to={link('carton', b.current_carton.carton_no)}>{b.current_carton.carton_no}</Link>} />}
+          {b.parent_bundle_no && <KV k="Split from" v={<Link className="tabular-nums text-brand-700" to={link('bundle', b.parent_barcode ?? b.parent_bundle_no)}>{b.parent_bundle_no}</Link>} />}
+          {b.children?.length > 0 && <KV k="Split into" v={b.children.map((c: any) => <Link key={c.id} className="mr-2 tabular-nums text-brand-700" to={link('bundle', c.barcode ?? c.bundle_no)}>{c.bundle_no} ({c.qty})</Link>)} />}
+          {b.merge_sources?.length > 0 && <KV k="Merged from" v={b.merge_sources.map((c: any) => <Link key={c.source_bundle_id} className="mr-2 tabular-nums text-brand-700" to={link('bundle', c.barcode ?? c.bundle_no)}>{c.bundle_no} ({c.qty})</Link>)} />}
+          {b.merged_into?.length > 0 && <KV k="Merged into" v={b.merged_into.map((c: any) => <Link key={c.merged_bundle_id} className="mr-2 tabular-nums text-brand-700" to={link('bundle', c.barcode ?? c.bundle_no)}>{c.bundle_no}</Link>)} />}
+          {b.current_carton && <KV k="Carton" v={<Link className="tabular-nums text-brand-700" to={link('carton', b.current_carton.carton_no)}>{b.current_carton.carton_no}</Link>} />}
         </div>
         <div className="grid grid-cols-3 gap-2 md:grid-cols-7 text-center">
           {[['At cutting', a.cut], ['Sewing WIP', a.sewing_wip], ['Sewn', a.sewn], ['Finishing WIP', a.finishing_wip], ['Awaiting QC', a.qc], ['Ready to pack', a.pack], ['Packed', a.packed]].map(([k, v]) => (
@@ -265,7 +265,7 @@ function BundleCard({ b }: { b: any }) {
             <div className="flex flex-wrap gap-2 text-xs">
               {b.dcs.map((d: any) => (
                 <Link key={d.line_id} to={`/production/jobwork-challans?dc=${d.challan_id}`} className="rounded border border-slate-200 px-2 py-1 hover:border-brand-400">
-                  <span className="font-mono">{d.challan_no}</span> · {d.stage_name} · {d.vendor_name} · sent {d.qty} / recd {d.received_qty} PCS <StatusBadge value={d.status} />
+                  <span className="tabular-nums">{d.challan_no}</span> · {d.stage_name} · {d.vendor_name} · sent {d.qty} / recd {d.received_qty} PCS <StatusBadge value={d.status} />
                 </Link>
               ))}
             </div>
@@ -315,20 +315,20 @@ function IoTrace({ ioNo }: { ioNo: string }) {
   if (error) return <Card><p className="p-6 text-sm text-red-600">{error}</p></Card>;
   if (!d) return <p className="text-sm text-slate-500">Loading {ioNo}…</p>;
   const sections: [string, any[], (x: any) => React.ReactNode][] = [
-    ['Sales orders', d.salesOrders, (x) => <><b className="font-mono">{x.so_no}</b> · {fmtNumber(x.order_qty)} PCS</>],
-    ['Cutting plans', d.cuttingPlans, (x) => <><b className="font-mono">{x.plan_no}</b> · planned {fmtNumber(x.planned_cut_qty)} / cut {fmtNumber(x.actual_cut_qty)} PCS · {x.status}</>],
-    ['Fabric DCs', d.fabricIssues, (x) => <><b className="font-mono">{x.issue_no}</b> · {x.total_rolls} rolls · {fmtDecimal(x.total_kg, 3)} KG</>],
-    ['Lays', d.layPlans, (x) => <><b className="font-mono">{x.lay_no}</b> · {x.ply_count ?? 0} plies · {x.status}</>],
-    ['Bundles', d.bundles, (x) => <Link className="font-mono text-brand-700 hover:underline" to={link('bundle', x.barcode ?? x.bundle_no)}>{x.bundle_no} · {x.qty} PCS · {x.status}</Link>],
-    ['Sewing inputs', d.sewingInputs, (x) => <><b className="font-mono">{x.input_no}</b> · {x.line_name} · {x.input_qty} PCS</>],
-    ['Finishing outputs', d.finishingOutputs, (x) => <><b className="font-mono">{x.output_no}</b> · {x.output_qty} PCS</>],
-    ['Final QC', d.finalQcs, (x) => <><b className="font-mono">{x.qc_no}</b> · pass {x.passed_qty} / rej {x.reject_qty} PCS</>],
-    ['Packing lists', d.packingLists, (x) => <><b className="font-mono">{x.pl_no}</b> · {x.total_cartons ?? 0} cartons · {fmtNumber(x.total_qty)} PCS</>],
-    ['Shipments', d.shipments, (x) => <Link className="font-mono text-brand-700 hover:underline" to={link('shipment', x.shipment_no)}>{x.shipment_no} · {fmtNumber(x.total_qty)} PCS</Link>],
+    ['Sales orders', d.salesOrders, (x) => <><b className="tabular-nums">{x.so_no}</b> · {fmtNumber(x.order_qty)} PCS</>],
+    ['Cutting plans', d.cuttingPlans, (x) => <><b className="tabular-nums">{x.plan_no}</b> · planned {fmtNumber(x.planned_cut_qty)} / cut {fmtNumber(x.actual_cut_qty)} PCS · {x.status}</>],
+    ['Fabric DCs', d.fabricIssues, (x) => <><b className="tabular-nums">{x.issue_no}</b> · {x.total_rolls} rolls · {fmtDecimal(x.total_kg, 3)} KG</>],
+    ['Lays', d.layPlans, (x) => <><b className="tabular-nums">{x.lay_no}</b> · {x.ply_count ?? 0} plies · {x.status}</>],
+    ['Bundles', d.bundles, (x) => <Link className="tabular-nums text-brand-700 hover:underline" to={link('bundle', x.barcode ?? x.bundle_no)}>{x.bundle_no} · {x.qty} PCS · {x.status}</Link>],
+    ['Sewing inputs', d.sewingInputs, (x) => <><b className="tabular-nums">{x.input_no}</b> · {x.line_name} · {x.input_qty} PCS</>],
+    ['Finishing outputs', d.finishingOutputs, (x) => <><b className="tabular-nums">{x.output_no}</b> · {x.output_qty} PCS</>],
+    ['Final QC', d.finalQcs, (x) => <><b className="tabular-nums">{x.qc_no}</b> · pass {x.passed_qty} / rej {x.reject_qty} PCS</>],
+    ['Packing lists', d.packingLists, (x) => <><b className="tabular-nums">{x.pl_no}</b> · {x.total_cartons ?? 0} cartons · {fmtNumber(x.total_qty)} PCS</>],
+    ['Shipments', d.shipments, (x) => <Link className="tabular-nums text-brand-700 hover:underline" to={link('shipment', x.shipment_no)}>{x.shipment_no} · {fmtNumber(x.total_qty)} PCS</Link>],
   ];
   return (
     <div className="space-y-4">
-      <h2 className="font-mono text-2xl font-black text-slate-800">{ioNo}</h2>
+      <h2 className="tabular-nums text-2xl font-black text-slate-800">{ioNo}</h2>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {sections.map(([title, rows, render]) => (
           <Card key={title} title={`${title} (${rows?.length ?? 0})`}>
@@ -364,7 +364,7 @@ function StyleTrace({ style }: { style: string }) {
         <div className="p-3 space-y-1.5 text-xs">
           {d.orders.length ? d.orders.map((o: any, i: number) => (
             <div key={i} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
-              <b className="font-mono">{o.so_no}</b> · {fmtNumber(o.order_qty)} PCS · {o.io_no ? <Link className="text-brand-700 hover:underline" to={link('io', o.io_no)}>{o.io_no}</Link> : '—'}
+              <b className="tabular-nums">{o.so_no}</b> · {fmtNumber(o.order_qty)} PCS · {o.io_no ? <Link className="text-brand-700 hover:underline" to={link('io', o.io_no)}>{o.io_no}</Link> : '—'}
             </div>)) : <p className="italic text-slate-400">None</p>}
         </div>
       </Card>

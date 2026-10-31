@@ -65,7 +65,7 @@ export function JobWorkOrdersPage() {
         </div>
         <DataTable data={rows} emptyTitle="No job work orders"
           columns={[
-            { key: 'jw_no', header: 'Order no', render: (r: any) => <button className="font-mono font-semibold text-brand-700 hover:underline" id={`jw-open-${r.id}`} onClick={() => setSp({ open: String(r.id) })}>{r.jw_no}</button> },
+            { key: 'jw_no', header: 'Order no', render: (r: any) => <button className="tabular-nums font-semibold text-brand-700 hover:underline" id={`jw-open-${r.id}`} onClick={() => setSp({ open: String(r.id) })}>{r.jw_no}</button> },
             { key: 'order_date', header: 'Date', render: (r: any) => fmtDate(r.order_date) },
             { key: 'vendor_name', header: 'Contractor' },
             { key: 'io_no', header: 'Job / style', render: (r: any) => <span>{r.io_no ?? '—'}{r.style_code ? <span className="text-slate-500"> · {r.style_code}</span> : null}</span> },
@@ -281,7 +281,7 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
               </tr></thead>
               <tbody>{o.dcs.map((d: any) => (
                 <tr key={d.id} className="border-t border-slate-100">
-                  <td className="px-2 py-1 font-mono">{d.challan_no}</td><td className="px-2 py-1">{fmtDate(d.challan_date)}</td><td className="px-2 py-1">{d.stage_name}</td>
+                  <td className="px-2 py-1 tabular-nums">{d.challan_no}</td><td className="px-2 py-1">{fmtDate(d.challan_date)}</td><td className="px-2 py-1">{d.stage_name}</td>
                   <td className="px-2 py-1"><Badge tone={d.dc_kind === 'FABRIC' ? 'violet' : 'blue'}>{d.dc_kind}</Badge></td>
                   <td className="px-2 py-1 text-right">{fmtNumber(d.total_qty)}</td>
                   <td className="px-2 py-1 text-right">{num(d.fabric_kg) ? `${num(d.fabric_kg)} (${num(d.fabric_balance_kg)})` : '—'}</td>
@@ -302,7 +302,7 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
                 </tr></thead>
                 <tbody>{o.receipts.map((r: any) => (
                   <tr key={r.id} className="border-t border-slate-100">
-                    <td className="px-2 py-1 font-mono">{r.receipt_no}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
+                    <td className="px-2 py-1 tabular-nums">{r.receipt_no}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
                     <td className="px-2 py-1 text-right">{fmtNumber(r.received_qty)}</td><td className="px-2 py-1 text-right">{fmtNumber(r.rejected_qty)}</td>
                     <td className="px-2 py-1 text-right">{fmtNumber(r.shortage_qty)}</td><td className="px-2 py-1 text-right">{fmtNumber(r.loss_qty)}</td>
                     <td className="px-2 py-1 text-right">{fmtNumber(r.return_qty)}</td><td className="px-2 py-1 text-right">{fmtNumber(r.rework_qty)}</td>
@@ -320,7 +320,7 @@ function OrderDetail({ id, onClose, onEdit }: { id: number; onClose: () => void;
           <table className="w-full text-xs" id="jw-ledger">
             <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Date</th><th className="px-2 py-1 text-left">Movement</th><th className="px-2 py-1 text-left">Ref</th><th className="px-2 py-1 text-left">Detail</th></tr></thead>
             <tbody>{ledger.map((r, i) => (
-              <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{fmtDate(r.date)}</td><td className="px-2 py-1 font-semibold">{r.type}</td><td className="px-2 py-1 font-mono">{r.ref}</td>
+              <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{fmtDate(r.date)}</td><td className="px-2 py-1 font-semibold">{r.type}</td><td className="px-2 py-1 tabular-nums">{r.ref}</td>
                 <td className="px-2 py-1 text-slate-600">{Object.entries(r).filter(([k, v]) => !['date', 'type', 'ref'].includes(k) && v != null && v !== 0).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' · ')}</td></tr>
             ))}</tbody>
           </table>
@@ -355,7 +355,7 @@ function Genealogy({ g }: { g: any }) {
           {p.dcs.length === 0 && <p className="text-slate-400">No DC yet</p>}
           {p.dcs.map((d: any) => (
             <div key={d.id} className="ml-4 mt-1 border-l-2 border-slate-200 pl-2">
-              <p><b className="font-mono">{d.challan_no}</b> {fmtDate(d.challan_date)} · {d.dc_kind} · {human(d.status)}</p>
+              <p><b className="tabular-nums">{d.challan_no}</b> {fmtDate(d.challan_date)} · {d.dc_kind} · {human(d.status)}</p>
               {d.rolls.length > 0 && <p className="text-slate-600">Rolls: {d.rolls.map((r: any) => `${r.roll_no}${r.grn_no ? ` (GRN ${r.grn_no})` : ''} ${num(r.issue_kg)} KG → used ${num(r.consumed_kg)} · back ${num(r.returned_kg)} · waste ${num(r.waste_kg)}`).join('; ')}</p>}
               {d.bundles.length > 0 && <p className="text-slate-600">Bundles: {d.bundles.map((b: any) => `${b.bundle_no ?? `${b.color_name ?? ''} ${b.size_code ?? ''}`} ${b.qty}`).join(', ')}</p>}
               {d.receipts.map((r: any) => <p key={r.id} className="ml-3 text-emerald-700">↳ {r.receipt_no} {fmtDate(r.receipt_date)}: good {r.received_qty}, reject {r.rejected_qty}, loss {num(r.loss_qty) + num(r.shortage_qty)}, returned {num(r.return_qty)}, rework {num(r.rework_qty)} · QC {r.qc_status}{r.bill_no ? ` · bill ${r.bill_no}` : ''}</p>)}
@@ -418,7 +418,7 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
                 <th className="px-2 py-1 text-right">Free KG</th><th className="px-2 py-1 text-right">Issue KG</th></tr></thead>
               <tbody>{opts.rolls.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100">
-                  <td className="px-2 py-1 font-mono">{r.roll_no}</td><td className="px-2 py-1">{r.lot_no ?? '—'}</td><td className="px-2 py-1">{r.fabric_name}{r.color_name ? ` · ${r.color_name}` : ''}{!r.so_id ? <span className="text-slate-400"> (no job)</span> : null}</td>
+                  <td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1">{r.lot_no ?? '—'}</td><td className="px-2 py-1">{r.fabric_name}{r.color_name ? ` · ${r.color_name}` : ''}{!r.so_id ? <span className="text-slate-400"> (no job)</span> : null}</td>
                   <td className="px-2 py-1 text-right">{num(r.free_kg)}</td>
                   <td className="px-2 py-1 text-right"><div className="flex justify-end gap-1">
                     <input className={`input h-7 w-20 text-right ${num(kg[r.id]) > num(r.free_kg) ? 'input-error' : ''}`} type="number" min={0} step="0.001" id={`jwf-roll-${r.id}`} value={kg[r.id] ?? ''} onChange={(e) => setKg({ ...kg, [r.id]: e.target.value })} />
@@ -505,7 +505,7 @@ function FabricInwardModal({ dcId, onClose, onDone }: { dcId: number; onClose: (
               <th className="px-2 py-1 text-right">Used</th><th className="px-2 py-1 text-right">Returned</th><th className="px-2 py-1 text-right">Waste</th></tr></thead>
             <tbody>{dc.rolls.map((r: any) => { const v = rolls[r.id] ?? { u: '', b: '', w: '' }; const bad = num(v.u) + num(v.b) + num(v.w) > num(r.balance_kg) + 0.0005; return (
               <tr key={r.id} className={`border-t border-slate-100 ${bad ? 'bg-red-50' : ''}`}>
-                <td className="px-2 py-1 font-mono">{r.roll_no}</td><td className="px-2 py-1 text-right">{num(r.issue_kg)}</td><td className="px-2 py-1 text-right font-semibold">{num(r.balance_kg)}</td>
+                <td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1 text-right">{num(r.issue_kg)}</td><td className="px-2 py-1 text-right font-semibold">{num(r.balance_kg)}</td>
                 {(['u', 'b', 'w'] as const).map((k) => <td key={k} className="px-1 py-1 text-right"><input className="input h-7 w-20 text-right" type="number" min={0} step="0.001" id={`jwfi-roll-${r.id}-${k}`}
                   disabled={!(num(r.balance_kg) > 0)} value={v[k]} onChange={(e) => setRolls({ ...rolls, [r.id]: { ...v, [k]: e.target.value } })} /></td>)}
               </tr>); })}</tbody>
@@ -554,7 +554,7 @@ export function JobWorkDashboardPage() {
           </Card>
           <Card title="Overdue DCs (past expected return)">
             <DataTable data={dash.overdue} emptyTitle="No overdue DC" columns={[
-              { key: 'challan_no', header: 'DC', render: (r: any) => <span className="font-mono">{r.challan_no}</span> }, { key: 'vendor_name', header: 'Contractor' },
+              { key: 'challan_no', header: 'DC', render: (r: any) => <span className="tabular-nums">{r.challan_no}</span> }, { key: 'vendor_name', header: 'Contractor' },
               { key: 'stage_name', header: 'Process' }, { key: 'expected_return', header: 'Expected', render: (r: any) => fmtDate(r.expected_return) },
               { key: 'days_late', header: 'Days late', align: 'right' as const, render: (r: any) => <b className="text-red-600">{r.days_late}</b> },
               { key: 'pending_pcs', header: 'Pending', align: 'right' as const }]} />
@@ -577,12 +577,12 @@ export function JobWorkDashboardPage() {
                 <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-1 text-left">Contractor</th><th className="px-2 py-1 text-left">DC</th><th className="px-2 py-1 text-left">Process</th>
                   <th className="px-2 py-1 text-left">Job</th><th className="px-2 py-1 text-left">Bundle / colour / size</th><th className="px-2 py-1 text-right">Pending</th><th className="px-2 py-1 text-right">Days out</th></tr></thead>
                 <tbody>{stock.lines.map((l: any, i: number) => (
-                  <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{l.vendor_name}</td><td className="px-2 py-1 font-mono">{l.challan_no}</td><td className="px-2 py-1">{l.stage_name}</td>
+                  <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{l.vendor_name}</td><td className="px-2 py-1 tabular-nums">{l.challan_no}</td><td className="px-2 py-1">{l.stage_name}</td>
                     <td className="px-2 py-1">{l.io_no}{l.jw_no ? ` · ${l.jw_no}` : ''}</td><td className="px-2 py-1">{l.bundle_no ?? ''} {l.color_name} {l.size_code}</td>
                     <td className="px-2 py-1 text-right font-semibold">{l.pending_qty}</td><td className="px-2 py-1 text-right">{l.days_out}</td></tr>
                 ))}
                 {stock.fabric.map((f: any, i: number) => (
-                  <tr key={`f${i}`} className="border-t border-slate-100 bg-violet-50/40"><td className="px-2 py-1">{f.vendor_name}</td><td className="px-2 py-1 font-mono">{f.challan_no}</td><td className="px-2 py-1">Fabric</td>
+                  <tr key={`f${i}`} className="border-t border-slate-100 bg-violet-50/40"><td className="px-2 py-1">{f.vendor_name}</td><td className="px-2 py-1 tabular-nums">{f.challan_no}</td><td className="px-2 py-1">Fabric</td>
                     <td className="px-2 py-1">{f.jw_no ?? ''}</td><td className="px-2 py-1">Roll {f.roll_no}</td><td className="px-2 py-1 text-right font-semibold">{num(f.balance_kg)} KG</td><td /></tr>
                 ))}</tbody>
               </table>
@@ -732,7 +732,7 @@ export function ContractorAccountsPage() {
               <tbody>
                 <tr className="border-t border-slate-100 font-semibold"><td className="px-2 py-1" colSpan={6}>Opening balance</td><td className="px-2 py-1 text-right">{money(st.opening)}</td></tr>
                 {st.lines.map((l: any, i: number) => (
-                  <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{fmtDate(l.date)}</td><td className="px-2 py-1">{l.type}</td><td className="px-2 py-1 font-mono">{l.ref}</td><td className="px-2 py-1 text-slate-500">{l.note ?? ''}</td>
+                  <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1">{fmtDate(l.date)}</td><td className="px-2 py-1">{l.type}</td><td className="px-2 py-1 tabular-nums">{l.ref}</td><td className="px-2 py-1 text-slate-500">{l.note ?? ''}</td>
                     <td className="px-2 py-1 text-right">{l.credit ? money(l.credit) : ''}</td><td className="px-2 py-1 text-right">{l.debit ? money(l.debit) : ''}</td><td className="px-2 py-1 text-right font-semibold">{money(l.balance)}</td></tr>
                 ))}
               </tbody>
@@ -740,13 +740,13 @@ export function ContractorAccountsPage() {
           </div>
         ))}
         {tab === 'cn' && <DataTable data={cns} emptyTitle="No credit notes" columns={[
-          { key: 'cn_no', header: 'CN no', render: (r: any) => <span className="font-mono">{r.cn_no}</span> }, { key: 'cn_date', header: 'Date', render: (r: any) => fmtDate(r.cn_date) },
+          { key: 'cn_no', header: 'CN no', render: (r: any) => <span className="tabular-nums">{r.cn_no}</span> }, { key: 'cn_date', header: 'Date', render: (r: any) => fmtDate(r.cn_date) },
           { key: 'vendor_name', header: 'Contractor' }, { key: 'reason', header: 'Reason' }, { key: 'io_no', header: 'Job', render: (r: any) => r.io_no ?? r.jw_no ?? '—' },
           { key: 'amount', header: 'Amount', align: 'right' as const, render: (r: any) => money(num(r.amount) + num(r.tax)) },
           { key: 'status', header: 'Status', render: (r: any) => <Badge tone={r.status === 'OPEN' ? 'green' : 'red'}>{r.status}</Badge> },
           { key: 'act', header: '', render: (r: any) => r.status === 'OPEN' ? <Button size="sm" variant="ghost" onClick={() => { setReason(''); setCancel({ ...r, kind: 'cn' }); }}><Ban size={12} /></Button> : null }]} />}
         {tab === 'pay' && <DataTable data={pays} emptyTitle="No payments" columns={[
-          { key: 'payment_no', header: 'Payment no', render: (r: any) => <span className="font-mono">{r.payment_no}</span> }, { key: 'payment_date', header: 'Date', render: (r: any) => fmtDate(r.payment_date) },
+          { key: 'payment_no', header: 'Payment no', render: (r: any) => <span className="tabular-nums">{r.payment_no}</span> }, { key: 'payment_date', header: 'Date', render: (r: any) => fmtDate(r.payment_date) },
           { key: 'vendor_name', header: 'Contractor' }, { key: 'mode', header: 'Mode' }, { key: 'reference_no', header: 'Ref' }, { key: 'bill_no', header: 'Bill', render: (r: any) => r.bill_no ?? '—' },
           { key: 'amount', header: 'Amount', align: 'right' as const, render: (r: any) => money(r.amount) },
           { key: 'status', header: 'Status', render: (r: any) => <Badge tone={r.status === 'POSTED' ? 'green' : 'red'}>{r.status}</Badge> },

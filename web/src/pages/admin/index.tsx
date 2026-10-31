@@ -59,7 +59,7 @@ export function UsersPage() {
       <DataTable
         columns={[
           { key: 'username', header: 'Username', sortable: true,
-            render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.username}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.username}</span> },
           { key: 'full_name', header: 'Full name', sortable: true,
             render: (r: any) => <span className="font-medium text-slate-800">{r.full_name}</span> },
           { key: 'email', header: 'Email' },
@@ -200,7 +200,7 @@ export function RolesPage() {
             <tbody>
               {(roles.data ?? []).map((r: any) => (
                 <tr key={r.id} className="row-hover cursor-pointer" onClick={() => void openEdit(r)}>
-                  <td className="td"><span className="font-mono text-[12px] font-medium text-brand-700">{r.role_code}</span></td>
+                  <td className="td"><span className="tabular-nums text-[12px] font-medium text-brand-700">{r.role_code}</span></td>
                   <td className="td font-medium text-slate-800">{r.role_name}</td>
                   <td className="td"><Badge tone="blue">{r.permission_count ?? 0} permissions</Badge></td>
                   <td className="td">{r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge>}</td>
@@ -462,7 +462,7 @@ export function CompanyPage() {
                 key: 'company_code',
                 header: 'Code',
                 render: (r: any) => (
-                  <span className="font-mono text-[12.5px] font-bold text-brand-700">
+                  <span className="tabular-nums text-[12.5px] font-bold text-brand-700">
                     {r.company_code}
                   </span>
                 ),
@@ -483,7 +483,7 @@ export function CompanyPage() {
                 key: 'gstin',
                 header: 'GSTIN / PAN',
                 render: (r: any) => (
-                  <div className="font-mono text-[11.5px]">
+                  <div className="tabular-nums text-[11.5px]">
                     {r.gstin ? (
                       <span className="font-medium text-slate-800">{r.gstin}</span>
                     ) : (
@@ -655,7 +655,7 @@ export function CompanyPage() {
             <div>
               <label className="label font-semibold text-slate-800">Company Code * (e.g. TEX02)</label>
               <input
-                className="input font-mono font-bold uppercase"
+                className="input tabular-nums font-bold uppercase"
                 placeholder="e.g. TEX02"
                 value={newCompany.company_code}
                 onChange={(e) => setNewCompany({ ...newCompany, company_code: e.target.value.toUpperCase() })}
@@ -687,7 +687,7 @@ export function CompanyPage() {
             <div>
               <label className="label">GSTIN (15 Digits)</label>
               <input
-                className="input font-mono"
+                className="input tabular-nums"
                 placeholder="e.g. 33AABCK9999Z1ZR"
                 maxLength={15}
                 value={newCompany.gstin}
@@ -697,7 +697,7 @@ export function CompanyPage() {
             <div>
               <label className="label">PAN</label>
               <input
-                className="input font-mono"
+                className="input tabular-nums"
                 placeholder="e.g. AABCK9999Z"
                 maxLength={10}
                 value={newCompany.pan}
@@ -805,7 +805,7 @@ export function CompanyPage() {
                         className="rounded border-slate-300 text-brand-600 focus:ring-brand-500/30"
                       />
                       <span className="truncate font-medium text-slate-700">
-                        {u.full_name} <span className="font-mono text-slate-400">({u.username})</span>
+                        {u.full_name} <span className="tabular-nums text-slate-400">({u.username})</span>
                       </span>
                     </label>
                   );
@@ -864,7 +864,7 @@ export function CompanyPage() {
                     />
                     <div>
                       <p className="text-[13px] font-semibold text-slate-900">{u.full_name}</p>
-                      <p className="font-mono text-[11px] text-slate-500">@{u.username} {u.email ? `· ${u.email}` : ''}</p>
+                      <p className="tabular-nums text-[11px] text-slate-500">@{u.username} {u.email ? `· ${u.email}` : ''}</p>
                     </div>
                   </div>
                   {isChecked && (
@@ -933,7 +933,7 @@ export function SettingsPage() {
             return (
               <div key={s.key} className="flex flex-wrap items-center gap-4 py-3.5 first:pt-0 last:pb-0" data-setting={s.key}>
                 <div className="min-w-0 flex-1">
-                  <p className="font-mono text-[12.5px] font-medium text-brand-700">{s.key}</p>
+                  <p className="tabular-nums text-[12.5px] font-medium text-brand-700">{s.key}</p>
                   {s.description && <p className="text-[11.5px] text-slate-500">{s.description}</p>}
                 </div>
                 <div className="w-full sm:w-64">
@@ -1032,7 +1032,7 @@ export function MenuAccessPage() {
                         <div className="min-w-0 flex-1">
                           <p className="text-[13px] font-medium text-slate-800">{i.label}
                             {i.hidden && <Badge tone="slate" className="ml-2">hidden by default</Badge>}</p>
-                          <p className="font-mono text-[11px] text-slate-400">{i.to} · needs {i.perms.join(' or ')}</p>
+                          <p className="tabular-nums text-[11px] text-slate-400">{i.to} · needs {i.perms.join(' or ')}</p>
                         </div>
                         <div className="flex overflow-hidden rounded-lg border border-surface-border text-[12px]">
                           {([['', 'Default'], ['SHOW', 'Show'], ['HIDE', 'Hide']] as const).map(([v, label]) => (

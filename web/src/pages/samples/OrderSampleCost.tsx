@@ -31,9 +31,9 @@ export function OrderSampleCost({ soId }: { soId: number }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.line_id} className={r.line_status === 'REVERSED' ? 'opacity-60' : 'row-hover'}>
-                <td className="td"><Link className="font-mono text-[12px] font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.sample_id}?tab=costing`}>{r.sample_no}</Link>
+                <td className="td"><Link className="tabular-nums text-[12px] font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.sample_id}?tab=costing`}>{r.sample_no}</Link>
                   <p className="text-[11px] text-slate-500">{r.sample_type} · {r.style_code} · {fmtNumber(r.sample_qty)} pcs</p></td>
-                <td className="td text-[12px]"><Link className="font-mono hover:underline" to={`/sales/samples/${r.sample_id}?tab=allocation`}>{r.batch_no}</Link> · {String(r.method).toLowerCase()}
+                <td className="td text-[12px]"><Link className="tabular-nums hover:underline" to={`/sales/samples/${r.sample_id}?tab=allocation`}>{r.batch_no}</Link> · {String(r.method).toLowerCase()}
                   <p className="text-slate-500">{r.posted_at ? `posted ${fmtDate(r.posted_at)}` : ''} {r.reason}</p></td>
                 <td className="td text-right text-[12px] tabular-nums">{fmtNumber(r.basis_pct, 2)}%</td>
                 <td className="td text-right tabular-nums font-semibold">{fmtNumber(r.allocated_amount, 2)}</td>

@@ -144,11 +144,11 @@ export function ProcessBillCharges({ h, setH, charges, setCharges, totals, gross
         </div>
         <table className="w-full max-w-md" id={`${idPrefix}-base`}>
           <tbody>
-            <tr><td className="py-0.5">Job-work charges (GRN KG × rate{recovery ? ' + billable reprocess' : ''})</td><td className="text-right font-mono">{money(gross)}</td></tr>
-            {recovery > 0 && <tr className="text-red-700"><td>Less: recovery from contractor</td><td className="text-right font-mono">− {money(recovery)}</td></tr>}
-            {n(h.discount_amount) > 0 && <tr><td>Less: discount</td><td className="text-right font-mono">− {money(h.discount_amount)}</td></tr>}
-            {n(h.debit_amount) > 0 && <tr><td>Less: debit / shortage</td><td className="text-right font-mono">− {money(h.debit_amount)}</td></tr>}
-            <tr className="border-t border-slate-200 font-semibold"><td className="pt-1">Taxable value</td><td className={`pt-1 text-right font-mono ${totals.base < 0 ? 'text-red-700' : ''}`}>{money(totals.base)}</td></tr>
+            <tr><td className="py-0.5">Job-work charges (GRN KG × rate{recovery ? ' + billable reprocess' : ''})</td><td className="text-right tabular-nums">{money(gross)}</td></tr>
+            {recovery > 0 && <tr className="text-red-700"><td>Less: recovery from contractor</td><td className="text-right tabular-nums">− {money(recovery)}</td></tr>}
+            {n(h.discount_amount) > 0 && <tr><td>Less: discount</td><td className="text-right tabular-nums">− {money(h.discount_amount)}</td></tr>}
+            {n(h.debit_amount) > 0 && <tr><td>Less: debit / shortage</td><td className="text-right tabular-nums">− {money(h.debit_amount)}</td></tr>}
+            <tr className="border-t border-slate-200 font-semibold"><td className="pt-1">Taxable value</td><td className={`pt-1 text-right tabular-nums ${totals.base < 0 ? 'text-red-700' : ''}`}>{money(totals.base)}</td></tr>
           </tbody>
         </table>
         <Textarea label="Remarks" rows={2} value={h.remarks} id={`${idPrefix}-remarks`} onChange={(e) => setH((x) => ({ ...x, remarks: e.target.value }))} />
@@ -161,7 +161,7 @@ export function ProcessBillCharges({ h, setH, charges, setCharges, totals, gross
 
 /** Read-only summary rows of a saved job-work bill (calc_version 2 shows every head; older bills their simple totals). */
 export function ProcessBillTotalsView({ b }: { b: any }) {
-  const row = (label: string, v: unknown, cls = '') => <tr className={cls}><td className="px-2 py-0.5">{label}</td><td className="px-2 py-0.5 text-right font-mono">{money(v)}</td></tr>;
+  const row = (label: string, v: unknown, cls = '') => <tr className={cls}><td className="px-2 py-0.5">{label}</td><td className="px-2 py-0.5 text-right tabular-nums">{money(v)}</td></tr>;
   const v2 = Number(b.calc_version) === 2;
   const sign = Number(b.other_charges_sign) < 0 ? -1 : 1;
   return (
@@ -180,7 +180,7 @@ export function ProcessBillTotalsView({ b }: { b: any }) {
         {v2 && n(b.tcs_amount) > 0 && row(`TCS ${b.tcs_section ?? ''} ${fmtDecimal(b.tcs_pct, 3)}%`, b.tcs_amount)}
         {v2 && n(b.tds_amount) > 0 && row(`Less TDS ${b.tds_section ?? ''} ${fmtDecimal(b.tds_pct, 3)}%`, -n(b.tds_amount), 'text-red-700')}
         {v2 && n(b.round_off) !== 0 && row('Round off', b.round_off)}
-        <tr className="border-t border-slate-300 text-sm font-bold"><td className="px-2 py-1">Net payable</td><td className="px-2 py-1 text-right font-mono" id="pb-net">{money(b.net_amount)}</td></tr>
+        <tr className="border-t border-slate-300 text-sm font-bold"><td className="px-2 py-1">Net payable</td><td className="px-2 py-1 text-right tabular-nums" id="pb-net">{money(b.net_amount)}</td></tr>
       </tbody>
     </table>
   );

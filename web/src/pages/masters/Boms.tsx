@@ -298,7 +298,7 @@ function TrimMatrixModal({
               step="0.01"
               value={defaultCons}
               onChange={(e) => setDefaultCons(parseFloat(e.target.value) || 0)}
-              className="w-16 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white font-mono"
+              className="w-16 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white tabular-nums"
               placeholder="Cons"
               title="Default consumption"
             />
@@ -307,7 +307,7 @@ function TrimMatrixModal({
               step="0.5"
               value={defaultWaste}
               onChange={(e) => setDefaultWaste(parseFloat(e.target.value) || 0)}
-              className="w-14 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white font-mono"
+              className="w-14 text-xs text-right border border-slate-300 rounded px-1.5 py-1 bg-white tabular-nums"
               placeholder="Waste %"
               title="Wastage %"
             />
@@ -531,7 +531,7 @@ function TrimMatrixModal({
                           </td>
                         );
                       })}
-                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-700">
+                      <td className="py-2 px-3 text-right tabular-nums font-bold text-slate-700">
                         {fmtDecimal(rowSum, 2)}
                       </td>
                     </tr>
@@ -567,7 +567,7 @@ export function BomsPage() {
       <DataTable
         columns={[
           { key: 'bom_no', header: 'BOM no',
-            render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.bom_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.bom_no}</span> },
           { key: 'version', header: 'Version', render: (r: any) => `v${r.version}` },
           { key: 'style_code', header: 'Style',
             render: (r: any) => <div><p className="font-medium">{r.style_code}</p>
@@ -575,7 +575,7 @@ export function BomsPage() {
           { key: 'so_no', header: 'Mapped Order',
             render: (r: any) => r.so_no ? (
               <div>
-                <span className="inline-flex items-center gap-1 font-mono text-[11.5px] font-semibold text-brand-800 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
+                <span className="inline-flex items-center gap-1 tabular-nums text-[11.5px] font-semibold text-brand-800 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                   {r.so_no}
                 </span>
                 {r.buyer_po_no && <p className="text-[10.5px] text-slate-400">PO: {r.buyer_po_no}</p>}
@@ -1487,14 +1487,14 @@ export function BomDetailPage() {
                     </td>
                     {/* Consumption */}
                     <td className="td p-1.5">
-                      <input type="number" step="0.00001" className="input py-1 text-right text-[11.5px] tabular-nums font-mono font-semibold"
+                      <input type="number" step="0.00001" className="input py-1 text-right text-[11.5px] tabular-nums font-semibold"
                         value={l.consumption} disabled={!editable}
                         placeholder="0.00"
                         onChange={(e) => setLine(l._key, { consumption: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
                     {/* Additional Qty */}
                     <td className="td p-1.5">
-                      <input type="number" step="0.01" className="input py-1 text-right text-[11.5px] tabular-nums font-mono"
+                      <input type="number" step="0.01" className="input py-1 text-right text-[11.5px] tabular-nums"
                         value={l.additional_qty} disabled={!editable}
                         placeholder="0"
                         onChange={(e) => setLine(l._key, { additional_qty: e.target.value === '' ? '' : Number(e.target.value) })} />
@@ -1514,7 +1514,7 @@ export function BomDetailPage() {
                         placeholder="0"
                         onChange={(e) => setLine(l._key, { wastage_pct: e.target.value === '' ? '' : Number(e.target.value) })} />
                     </td>
-                    <td className="td text-right tabular-nums font-mono text-slate-700" title={rateTitle(l)}>
+                    <td className="td text-right tabular-nums text-slate-700" title={rateTitle(l)}>
                       {l.material_type === 'FABRIC' && (l.source_type || 'PRODUCTION') === 'PRODUCTION' ? (
                         <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800" title="Knitted from Yarn in-house — Raw material purchase cost is captured in Yarn line">
                           In-House Knit

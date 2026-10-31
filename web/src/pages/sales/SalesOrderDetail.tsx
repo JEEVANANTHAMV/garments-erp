@@ -462,7 +462,7 @@ export default function SalesOrderDetail() {
           <div>
             <label className="mb-1 block text-[12px] font-medium text-slate-700">SO number</label>
             <input
-              className="input font-mono font-semibold w-full"
+              className="input tabular-nums font-semibold w-full"
               placeholder={isNew ? (soPreview.data?.so_no ?? 'Auto-generated') : undefined}
               value={head.so_no ?? ''}
               onChange={(e) => setH('so_no', e.target.value)}
@@ -475,7 +475,7 @@ export default function SalesOrderDetail() {
                 {head.so_no?.trim()
                   ? 'Manual number — clear to auto-generate'
                   : soPreview.data?.so_no
-                    ? <>Blank to auto-generate: <span className="font-mono font-bold text-brand-700">{soPreview.data.so_no}</span></>
+                    ? <>Blank to auto-generate: <span className="tabular-nums font-bold text-brand-700">{soPreview.data.so_no}</span></>
                     : 'Blank to auto-generate — pick group, order type, date and buyer'}
               </p>
             ) : null}
@@ -495,7 +495,7 @@ export default function SalesOrderDetail() {
               )}
             </div>
             <input
-              className="input font-mono font-semibold text-brand-700 w-full"
+              className="input tabular-nums font-semibold text-brand-700 w-full"
               placeholder="e.g. ZAR-IO-2026-001"
               value={head.io_no ?? ''}
               onChange={(e) => setH('io_no', e.target.value)}
@@ -676,20 +676,20 @@ export default function SalesOrderDetail() {
                 {isForeign ? (
                   <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-brand-200 px-2.5 py-1 text-slate-700 shadow-2xs">
                     <span className="font-semibold text-slate-500">Applied Exchange Rate:</span>
-                    <span className="font-mono font-bold text-brand-800">
+                    <span className="tabular-nums font-bold text-brand-800">
                       1 {currencyCode} = ₹ {exchangeRate.toFixed(2)} INR
                     </span>
                   </div>
                 ) : (
                   <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-slate-200 px-2.5 py-1 text-slate-700 shadow-2xs">
                     <span className="font-semibold text-slate-500">Order Currency:</span>
-                    <span className="font-mono font-bold text-slate-800">INR (Domestic)</span>
+                    <span className="tabular-nums font-bold text-slate-800">INR (Domestic)</span>
                   </div>
                 )}
                 {totals.qty > 0 && (
                   <div className="inline-flex items-center gap-1.5 rounded-md bg-white border border-slate-200 px-2.5 py-1 text-slate-700 shadow-2xs">
                     <span className="font-semibold text-slate-500">Shipment Tolerance Window:</span>
-                    <span className="font-mono font-bold text-slate-900">
+                    <span className="tabular-nums font-bold text-slate-900">
                       {fmtNumber(totals.minShipment)} – {fmtNumber(totals.maxShipment)} pcs
                     </span>
                     <span className="text-[11px] font-medium text-slate-400">
@@ -856,7 +856,7 @@ export default function SalesOrderDetail() {
                     const pct = p.order_qty > 0 ? Math.min(100, Math.round((Number(p.produced_qty) / Number(p.order_qty)) * 100)) : 0;
                     return (
                       <tr key={p.id} className="row-hover">
-                        <td className="td font-mono text-[12px] text-brand-700 font-semibold">{p.po_prod_no}</td>
+                        <td className="td tabular-nums text-[12px] text-brand-700 font-semibold">{p.po_prod_no}</td>
                         <td className="td text-right tabular-nums">{fmtNumber(p.order_qty)}</td>
                         <td className="td text-right tabular-nums">{fmtNumber(p.produced_qty)}</td>
                         <td className="td">
@@ -901,7 +901,7 @@ export default function SalesOrderDetail() {
               <tbody>
                 {d.invoices.map((i: any) => (
                   <tr key={i.id} className="row-hover">
-                    <td className="td font-mono text-[12px] text-brand-700 font-semibold">{i.invoice_no}</td>
+                    <td className="td tabular-nums text-[12px] text-brand-700 font-semibold">{i.invoice_no}</td>
                     <td className="td">{fmtDate(i.invoice_date)}</td>
                     <td className="td text-right tabular-nums font-medium">{fmtDecimal(i.total_value, 2)}</td>
                   </tr>
@@ -1182,7 +1182,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
       <div className="card p-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
           <div className="flex flex-wrap items-center gap-4 text-[12.5px]">
-            <span className="font-mono font-bold text-brand-700">{latestRun.mrp_no}</span>
+            <span className="tabular-nums font-bold text-brand-700">{latestRun.mrp_no}</span>
             <span className="text-slate-500">Run date: <strong className="text-slate-800">{fmtDate(latestRun.run_date)}</strong></span>
             {shortfalls > 0 ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-red-50 border border-red-200 px-2 py-0.5 text-[11.5px] font-semibold text-red-700">
@@ -1258,7 +1258,7 @@ function RequirementsTab({ soId, soNo }: { soId: number; soNo: string }) {
                       <Badge tone={typeColor[r.material_type] as any ?? 'blue'}>{r.material_type}</Badge>
                     </td>
                     <td className="td font-medium text-slate-900">{name}</td>
-                    <td className="td text-[12px] font-mono text-slate-500">{r.style_code ?? '—'}</td>
+                    <td className="td text-[12px] tabular-nums text-slate-500">{r.style_code ?? '—'}</td>
                     <td className="td text-right tabular-nums">{fmtDecimal(r.gross_required, 3)}</td>
                     <td className="td text-right tabular-nums text-emerald-700">{fmtDecimal(r.in_stock, 3)}</td>
                     <td className="td text-right tabular-nums text-blue-700">{fmtDecimal(r.on_order, 3)}</td>
@@ -1609,7 +1609,7 @@ function RatioSplitAssistant({
               placeholder="e.g. 1:2:3:2:1"
               value={ratioStr}
               onChange={(e) => applyRatioString(e.target.value)}
-              className="w-28 rounded border border-slate-300 px-2 py-0.5 text-xs font-mono focus:border-brand-500 focus:outline-none"
+              className="w-28 rounded border border-slate-300 px-2 py-0.5 text-xs tabular-nums focus:border-brand-500 focus:outline-none"
             />
           </div>
         </div>

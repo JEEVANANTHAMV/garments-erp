@@ -152,7 +152,7 @@ export function CartonEntryPage() {
                       <tr key={c.id} className={clsx(c.carton_status === 'VOID' && 'opacity-50', sel.has(c.id) && 'bg-brand-50/40')} data-row={c.carton_no}>
                         <td className="td">{c.carton_status !== 'VOID' && !n(c.is_posted) && <input type="checkbox" data-sel={c.carton_no} checked={sel.has(c.id)} onChange={() => toggle(c.id)} />}</td>
                         <td className="td">{c.carton_seq}</td>
-                        <td className="td font-mono">{c.carton_no}{c.pl_plan_no && <div className="font-sans text-[11px] text-blue-700" data-plan-ctn={c.carton_no}>{c.pl_plan_no} · ctn {c.pl_ctn_no}</div>}</td>
+                        <td className="td tabular-nums">{c.carton_no}{c.pl_plan_no && <div className="font-sans text-[11px] text-blue-700" data-plan-ctn={c.carton_no}>{c.pl_plan_no} · ctn {c.pl_ctn_no}</div>}</td>
                         <td className="td whitespace-nowrap" title={c.contents ?? ''}>{shortContents(c.contents)}</td>
                         <td className="td text-right">{c.pieces_total}{n(c.is_partial) ? <span className="ml-1 text-[11px] text-amber-700">partial</span> : null}</td>
                         <td className="td text-right">{c.polybag_qty} <span className="text-slate-400">({c.std_polybag_qty})</span></td>

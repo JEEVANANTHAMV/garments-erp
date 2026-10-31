@@ -99,7 +99,7 @@ export default function FabricPurchaseOrdersPage() {
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total PO Value</p>
           <div className="mt-1 flex items-baseline justify-between">
             <span className="text-2xl font-black text-slate-900">₹{fmtDecimal(kpis.totalVal, 2)}</span>
-            <span className="text-xs font-mono text-slate-400">INR</span>
+            <span className="text-xs tabular-nums text-slate-400">INR</span>
           </div>
         </div>
       </div>
@@ -172,13 +172,13 @@ export default function FabricPurchaseOrdersPage() {
                     onClick={() => nav(`/procurement/fabric/orders/${r.id}`)}
                     className="hover:bg-slate-50/80 cursor-pointer transition-colors"
                   >
-                    <td className="py-3 px-4 font-mono font-bold text-brand-700">
+                    <td className="py-3 px-4 tabular-nums font-bold text-brand-700">
                       {r.po_no}
                     </td>
                     <td className="py-3 px-4 text-slate-600">
                       {fmtDate(r.po_date)}
                     </td>
-                    <td className="py-3 px-4 font-mono font-medium text-slate-800">
+                    <td className="py-3 px-4 tabular-nums font-medium text-slate-800">
                       {r.internal_ir_no || '—'}
                     </td>
                     <td className="py-3 px-4">
@@ -190,7 +190,7 @@ export default function FabricPurchaseOrdersPage() {
                     <td className="py-3 px-4">
                       <Badge tone="sky">{r.order_type || 'Production'}</Badge>
                     </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                    <td className="py-3 px-4 text-right tabular-nums font-bold text-slate-900">
                       ₹{fmtDecimal(r.grand_total, 2)}
                     </td>
                     <td className="py-3 px-3 text-center"><ReceiptStatusBadge value={r.receipt_status} /></td>

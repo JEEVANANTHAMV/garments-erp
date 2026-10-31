@@ -39,7 +39,7 @@ export default function StockAuditPage() {
   const [edit, setEdit] = useState<any | null>(null);
   const [view, setView] = useState<number | null>(null);
   const cols: Col[] = [
-    { key: 'doc_no', label: 'Doc no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.doc_no}</span> },
+    { key: 'doc_no', label: 'Doc no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.doc_no}</span> },
     { key: 'doc_date', label: 'Date', kind: 'date' }, { key: 'audit_type', label: 'Type' }, { key: 'warehouse_name', label: 'Location' },
     { key: 'line_count', label: 'Items counted' }, { key: 'diff_lines', label: 'With difference' }, { key: 'diff_amount', label: 'Difference value', kind: 'money' },
     { key: 'prepared_by', label: 'Prepared by' }, { key: 'status', label: 'Status', kind: 'status' },

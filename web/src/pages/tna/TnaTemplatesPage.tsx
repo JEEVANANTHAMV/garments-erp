@@ -60,7 +60,7 @@ export default function TnaTemplatesPage() {
               }`}
             >
               <div className="flex justify-between items-start">
-                <span className="font-mono text-[11px] font-bold text-slate-400">{tpl.template_code}</span>
+                <span className="tabular-nums text-[11px] font-bold text-slate-400">{tpl.template_code}</span>
                 <span className="rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-[10px] font-bold text-indigo-700">
                   {tpl.product_type}
                 </span>
@@ -115,7 +115,7 @@ export default function TnaTemplatesPage() {
                 ) : (
                   selectedTemplate.activities.map((act: any) => (
                     <tr key={act.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2.5 px-3 text-center font-mono font-medium text-slate-500">
+                      <td className="py-2.5 px-3 text-center tabular-nums font-medium text-slate-500">
                         {act.sequence_no}
                       </td>
                       <td className="py-2.5 px-3 font-semibold text-slate-900">
@@ -126,7 +126,7 @@ export default function TnaTemplatesPage() {
                           {act.category}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-indigo-700">
+                      <td className="py-2.5 px-3 text-center tabular-nums font-bold text-indigo-700">
                         {act.default_duration} {act.duration_uom || 'days'}
                       </td>
                       <td className="py-2.5 px-3 text-slate-600">
@@ -135,7 +135,7 @@ export default function TnaTemplatesPage() {
                       <td className="py-2.5 px-3 text-slate-600">
                         {act.default_owner_role || '—'}
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono text-slate-500">
+                      <td className="py-2.5 px-3 text-center tabular-nums text-slate-500">
                         {act.dependency_sequence ? `Seq #${act.dependency_sequence}` : 'None (Start)'}
                       </td>
                       <td className="py-2.5 px-3 text-center">

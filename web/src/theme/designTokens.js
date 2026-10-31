@@ -25,4 +25,5 @@ export const chartColors = {
   cutting: '#1688ED', sewing: '#20B978', finishing: '#FF9B32', packing: '#8054E9',
   dispatch: '#EC638C', inventory: '#20B5B5', purchase: '#E5B83D', delayed: '#E84C4C', other: '#8293A8',
 };
-export const fontFamily = ['"72"', '"Segoe UI"', 'Arial', 'sans-serif'];
+// Inter ships with the app (SIL OFL) so every PC renders the same face; 72 / Segoe UI only if it fails to load.
+export const fontFamily = ['"Inter Variable"', '"72"', '"Segoe UI"', 'Arial', 'sans-serif'];

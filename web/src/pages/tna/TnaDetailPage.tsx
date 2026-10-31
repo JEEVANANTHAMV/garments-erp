@@ -214,10 +214,10 @@ export default function TnaDetailPage() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 font-mono">
+              <h1 className="text-xl font-bold text-slate-900 tabular-nums">
                 {header.tna_no || 'Time & Action Plan'}
               </h1>
-              <span className="rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-bold text-indigo-700 font-mono">
+              <span className="rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-bold text-indigo-700 tabular-nums">
                 v{header.version || 1}
               </span>
               <StatusBadge value={header.status || 'DRAFT'} />
@@ -309,12 +309,12 @@ export default function TnaDetailPage() {
 
           <div>
             <span className="text-slate-400 block text-[11px]">Buyer Style No</span>
-            <span className="font-semibold text-slate-900 font-mono">{header.buyer_style_ref || 'BST-2026'}</span>
+            <span className="font-semibold text-slate-900 tabular-nums">{header.buyer_style_ref || 'BST-2026'}</span>
           </div>
 
           <div>
             <span className="text-slate-400 block text-[11px]">Internal Style</span>
-            <span className="font-semibold text-slate-900 font-mono">
+            <span className="font-semibold text-slate-900 tabular-nums">
               {header.style_code} {header.style_name ? `(${header.style_name})` : ''}
             </span>
           </div>
@@ -326,7 +326,7 @@ export default function TnaDetailPage() {
 
           <div>
             <span className="text-slate-400 block text-[11px]">Internal Order (IO)</span>
-            <span className="font-semibold text-brand-700 font-mono">{header.io_no || 'IO-2026-001'}</span>
+            <span className="font-semibold text-brand-700 tabular-nums">{header.io_no || 'IO-2026-001'}</span>
           </div>
 
           <div>
@@ -480,7 +480,7 @@ export default function TnaDetailPage() {
                   return (
                     <div key={cat} className="flex justify-between items-center">
                       <span className="text-slate-600 font-medium">{cat}</span>
-                      <span className="text-slate-900 font-mono">
+                      <span className="text-slate-900 tabular-nums">
                         {stageDone} / {stageActs.length}
                       </span>
                     </div>
@@ -571,7 +571,7 @@ export default function TnaDetailPage() {
                         }`}
                         onClick={() => openActivityDrawer(act)}
                       >
-                        <td className="py-2.5 px-3 text-center font-mono font-medium text-slate-500">
+                        <td className="py-2.5 px-3 text-center tabular-nums font-medium text-slate-500">
                           {act.sequence_no}
                         </td>
                         <td className="py-2.5 px-3 font-medium text-slate-900">
@@ -590,10 +590,10 @@ export default function TnaDetailPage() {
                             {act.category}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-mono">{fmtDate(act.planned_start_date)}</td>
-                        <td className="py-2.5 px-3 font-mono font-medium text-slate-900">{fmtDate(act.planned_end_date)}</td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600">{fmtDate(act.actual_start_date) || '—'}</td>
-                        <td className="py-2.5 px-3 font-mono text-emerald-700 font-medium">{fmtDate(act.actual_end_date) || '—'}</td>
+                        <td className="py-2.5 px-3 tabular-nums">{fmtDate(act.planned_start_date)}</td>
+                        <td className="py-2.5 px-3 tabular-nums font-medium text-slate-900">{fmtDate(act.planned_end_date)}</td>
+                        <td className="py-2.5 px-3 tabular-nums text-slate-600">{fmtDate(act.actual_start_date) || '—'}</td>
+                        <td className="py-2.5 px-3 tabular-nums text-emerald-700 font-medium">{fmtDate(act.actual_end_date) || '—'}</td>
                         <td className="py-2.5 px-3 text-slate-600">{act.department_name || '—'}</td>
                         <td className="py-2.5 px-3 text-center">
                           {delay > 0 ? (
@@ -601,7 +601,7 @@ export default function TnaDetailPage() {
                               +{delay} d
                             </span>
                           ) : (
-                            <span className="text-slate-400 font-mono text-[11px]">0</span>
+                            <span className="text-slate-400 tabular-nums text-[11px]">0</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
@@ -695,10 +695,10 @@ export default function TnaDetailPage() {
                 return (
                   <div key={t.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-slate-50 hover:bg-slate-50/80 px-2 rounded">
                     <div className="w-48 shrink-0 truncate font-medium text-slate-800">
-                      <span className="font-mono text-slate-400 mr-1.5">{t.sequence_no}.</span>
+                      <span className="tabular-nums text-slate-400 mr-1.5">{t.sequence_no}.</span>
                       {t.activity_name}
                     </div>
-                    <div className="w-24 shrink-0 text-[11px] font-mono text-slate-500">
+                    <div className="w-24 shrink-0 text-[11px] tabular-nums text-slate-500">
                       {fmtDate(t.planned_start_date)}
                     </div>
                     <div className="flex-1 bg-slate-100 rounded-full h-4 relative overflow-hidden">
@@ -709,7 +709,7 @@ export default function TnaDetailPage() {
                         {isCompleted ? '✓' : ''}
                       </div>
                     </div>
-                    <div className="w-24 shrink-0 text-[11px] font-mono font-semibold text-slate-800 text-right">
+                    <div className="w-24 shrink-0 text-[11px] tabular-nums font-semibold text-slate-800 text-right">
                       {fmtDate(t.planned_end_date)}
                     </div>
                   </div>
@@ -757,7 +757,7 @@ export default function TnaDetailPage() {
                     </span>
                   </div>
                   <h4 className="font-bold text-slate-900 line-clamp-1">{act.activity_name}</h4>
-                  <div className="mt-2 text-[11px] text-slate-500 font-mono">
+                  <div className="mt-2 text-[11px] text-slate-500 tabular-nums">
                     Due: <span className="font-semibold text-slate-800">{fmtDate(act.planned_end_date)}</span>
                   </div>
                   {act.delay_days > 0 && (
@@ -921,7 +921,7 @@ export default function TnaDetailPage() {
                     <div key={i} className="text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
                       <div className="font-semibold text-slate-800 flex justify-between">
                         <span>{h.changed_by_name || 'User'}</span>
-                        <span className="text-slate-400 font-mono">{fmtDate(h.changed_at)}</span>
+                        <span className="text-slate-400 tabular-nums">{fmtDate(h.changed_at)}</span>
                       </div>
                       <div className="text-slate-600 mt-0.5">{h.reason || 'Status updated'}</div>
                     </div>

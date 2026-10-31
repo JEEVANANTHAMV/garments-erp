@@ -62,7 +62,7 @@ export function PackingListPage() {
           data={shown} loading={loading}
           columns={[
             { key: 'pl_no', header: 'PL No', sortable: true, render: (r: any) => (
-              <button onClick={() => nav(`/logistics/packing-lists/${r.id}`)} className="font-mono text-xs font-semibold text-brand-700 hover:underline">{r.pl_no}</button>) },
+              <button onClick={() => nav(`/logistics/packing-lists/${r.id}`)} className="tabular-nums text-xs font-semibold text-brand-700 hover:underline">{r.pl_no}</button>) },
             { key: 'pl_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.pl_date) },
             { key: 'pl_type', header: 'Type', render: (r: any) => <Badge color={TYPE_COLOR[r.pl_type] || 'slate'}>{r.pl_type || 'ASSORTED'}</Badge> },
             { key: 'buyer_order_no', header: 'Buyer PO', render: (r: any) => r.buyer_order_no || '—' },
@@ -602,9 +602,9 @@ export function PackingListDetailPage() {
                 <thead><tr className="text-left text-slate-500"><th className="py-1">Ctn</th><th>Block</th><th className="text-right">Plan</th><th className="text-right">Packed</th><th className="pl-4">Carton</th><th>State</th></tr></thead>
                 <tbody>{ps.cartons.map((c: any) => (
                   <tr key={c.ctn_no} data-ctn={c.ctn_no} data-state={c.state} className="border-t border-slate-100">
-                    <td className="py-1 font-mono">{c.ctn_no}</td><td>{c.label ?? c.block_no}</td>
+                    <td className="py-1 tabular-nums">{c.ctn_no}</td><td>{c.label ?? c.block_no}</td>
                     <td className="text-right">{c.planned}</td><td className="text-right">{c.carton_id ? c.packed : '—'}</td>
-                    <td className="pl-4 font-mono">{c.carton_no ?? ''}{c.pack_no ? <span className="ml-1 font-sans text-slate-400">{c.pack_no}</span> : null}</td>
+                    <td className="pl-4 tabular-nums">{c.carton_no ?? ''}{c.pack_no ? <span className="ml-1 font-sans text-slate-400">{c.pack_no}</span> : null}</td>
                     <td><Badge color={PLAN_STATE[c.state]?.color ?? 'slate'}>{PLAN_STATE[c.state]?.label ?? c.state}</Badge></td>
                   </tr>))}</tbody>
               </table>
@@ -939,7 +939,7 @@ export function PackingListDetailPage() {
             <table className="w-full text-xs">
               <thead className="border-b text-slate-500"><tr><th className="pb-1 text-left">Carton</th><th className="pb-1 text-left">Sizes (PCS)</th><th className="pb-1 text-right">Net (KG)</th><th className="pb-1 text-right">Gross (KG)</th><th className="pb-1 text-right">CBM</th></tr></thead>
               <tbody>{saved.cartons.map((c: any) => (
-                <tr key={c.id} className="border-b border-slate-50"><td className="py-1 font-mono">{c.carton_no}</td><td>{c.size_summary || '—'}</td>
+                <tr key={c.id} className="border-b border-slate-50"><td className="py-1 tabular-nums">{c.carton_no}</td><td>{c.size_summary || '—'}</td>
                   <td className="text-right">{fmtDecimal(c.net_weight_kg)}</td><td className="text-right">{fmtDecimal(c.gross_weight_kg)}</td><td className="text-right">{fmtDecimal(c.cbm, 3)}</td></tr>))}
               </tbody>
             </table>

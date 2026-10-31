@@ -403,7 +403,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                     const st = settings[l.id];
                     return (
                       <tr key={l.id} className="border-t border-slate-100 hover:bg-slate-50">
-                        <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">{l.line_code}</td>
+                        <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{l.line_code}</td>
                         <td className="px-2 py-1.5 font-medium">{l.line_name}</td>
                         <td className="px-2 py-1.5">
                           <input list={`sup-${proc}`} className="input h-7 w-32 text-[11px]" disabled={!editable} value={st?.supervisor_name ?? ''}
@@ -490,7 +490,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                                 <input type="checkbox" disabled={!editable} checked={sel.has(r.allocation_detail_id)}
                                   onChange={() => setSel((x) => { const y = new Set(x); y.has(r.allocation_detail_id) ? y.delete(r.allocation_detail_id) : y.add(r.allocation_detail_id); return y; })} />
                               </td>
-                              <td className="px-2 py-1 font-mono font-semibold">{r.bundle_no}</td>
+                              <td className="px-2 py-1 tabular-nums font-semibold">{r.bundle_no}</td>
                               <td className="px-2 py-1">{r.colour || '—'}</td>
                               <td className="px-2 py-1 font-semibold">{r.size || '—'}</td>
                               <td className="px-2 py-1 text-right">{fmtNumber(r.bundle_qty)}</td>
@@ -571,8 +571,8 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                           <input type="checkbox" disabled={!editable} checked={selPending.has(p.allocation_detail_id)}
                             onChange={() => setSelPending((x) => { const y = new Set(x); y.has(p.allocation_detail_id) ? y.delete(p.allocation_detail_id) : y.add(p.allocation_detail_id); return y; })} />
                         </td>
-                        <td className="px-2 py-1 font-mono text-brand-700">{lines.find((l) => l.id === p.line_id)?.line_code ?? p.line_id}</td>
-                        <td className="px-2 py-1 font-mono font-semibold">{p.bundle_no}</td>
+                        <td className="px-2 py-1 tabular-nums text-brand-700">{lines.find((l) => l.id === p.line_id)?.line_code ?? p.line_id}</td>
+                        <td className="px-2 py-1 tabular-nums font-semibold">{p.bundle_no}</td>
                         <td className="px-2 py-1">{p.colour || '—'}</td>
                         <td className="px-2 py-1 font-semibold">{p.size || '—'}</td>
                         <td className="px-2 py-1 text-slate-500">{p.allocation_no}</td>
@@ -606,7 +606,7 @@ function DailyPlanPage({ proc }: { proc: Proc }) {
                 const s = lineStat(l);
                 return (
                   <tr key={l.id} className="border-t border-slate-100">
-                    <td className="px-2 py-1 font-mono text-brand-700">{l.line_code}</td>
+                    <td className="px-2 py-1 tabular-nums text-brand-700">{l.line_code}</td>
                     <td className="px-2 py-1 text-right">{fmtNumber(s.target)}</td>
                     <td className="px-2 py-1 text-right font-medium">{fmtNumber(s.used)}</td>
                     <td className={`px-2 py-1 text-right ${s.balance < 0 ? 'text-red-600' : ''}`}>{fmtNumber(s.balance)}</td>
@@ -699,7 +699,7 @@ function PendingPicker({ picker, onClose, rows, lineCode, onPick }: {
               ...(picker.mode === 'bundle' ? g.rows.map((r) => (
                 <tr key={r.allocation_detail_id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => toggle([r.allocation_detail_id], !sel.has(r.allocation_detail_id))}>
                   <td className="w-8 px-2 py-1 text-center"><input type="checkbox" checked={sel.has(r.allocation_detail_id)} readOnly /></td>
-                  <td className="px-2 py-1 font-mono font-semibold">{r.bundle_no}</td>
+                  <td className="px-2 py-1 tabular-nums font-semibold">{r.bundle_no}</td>
                   <td className="px-2 py-1">{r.colour}</td>
                   <td className="px-2 py-1 font-semibold">{r.size}</td>
                   <td className="px-2 py-1 text-right">{fmtNumber(r.free_qty)} PCS</td>

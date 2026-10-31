@@ -33,7 +33,7 @@ export default function ScrapRejectionPage() {
   const [view, setView] = useState<number | null>(null);
   const kindSel = <Select label="Type" className="w-40" value={kind} placeholder="All" onChange={(e) => setKind(e.target.value)} options={[{ value: 'SCRAP', label: 'Scrap' }, { value: 'REJECTION', label: 'Rejection' }]} />;
   const cols: Col[] = [
-    { key: 'doc_no', label: 'Doc no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.doc_no}</span> }, { key: 'doc_date', label: 'Date', kind: 'date' },
+    { key: 'doc_no', label: 'Doc no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.doc_no}</span> }, { key: 'doc_date', label: 'Date', kind: 'date' },
     { key: 'entry_kind', label: 'Type' }, { key: 'stage', label: 'Stage' }, { key: 'warehouse_name', label: 'From' }, { key: 'rejection_warehouse_name', label: 'To (rejection)' },
     { key: 'so_no', label: 'Job' }, { key: 'total_qty', label: 'Qty', kind: 'qty' }, { key: 'total_amount', label: 'Value', kind: 'money' }, { key: 'status', label: 'Status', kind: 'status' },
   ];

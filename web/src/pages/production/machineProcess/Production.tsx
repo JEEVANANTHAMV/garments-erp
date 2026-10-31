@@ -34,7 +34,7 @@ export function ProductionTab({ kind, onOpen }: { kind: Kind; onOpen: (o: { id?:
       </div>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No production entries" onRowClick={(r: any) => onOpen({ id: r.id })}
         columns={[
-          { key: 'production_no', header: 'Entry', render: (r: any) => <span className="font-mono font-semibold text-brand-700">{r.production_no}</span> },
+          { key: 'production_no', header: 'Entry', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.production_no}</span> },
           { key: 'prod_date', header: 'Date / shift', render: (r: any) => `${fmtDate(r.prod_date)} ${r.shift_code ?? ''}` },
           { key: 'machine_code', header: 'Machine', render: (r: any) => `${r.machine_code}${kind === 'EMBROIDERY' ? ` · ${r.heads_used}h` : ''}` },
           { key: 'job_no', header: 'Job', render: (r: any) => <span>{r.job_no}<span className="text-slate-400"> · {r.io_no ?? ''} {r.style_code ?? ''}</span></span> },
@@ -371,7 +371,7 @@ export function ProductionForm({ kind, id: id0, jobId, onClose }: { kind: Kind; 
         </div>
         {entry?.audit?.length > 0 && <Section title="Audit trail">
           <MiniTable rows={entry.audit.slice(0, 20)} cols={[{ h: 'When', r: (a) => fmtDateTime(a.changed_at) }, { h: 'Who', r: (a) => a.changed_by_name ?? '—' }, { h: 'Action', r: (a) => a.action },
-            { h: 'Change', r: (a) => <span className="line-clamp-2 max-w-xl break-all font-mono text-[10px] text-slate-500">{typeof a.new_values === 'string' ? a.new_values.slice(0, 220) : JSON.stringify(a.new_values ?? '').slice(0, 220)}</span> }]} />
+            { h: 'Change', r: (a) => <span className="line-clamp-2 max-w-xl break-all tabular-nums text-[10px] text-slate-500">{typeof a.new_values === 'string' ? a.new_values.slice(0, 220) : JSON.stringify(a.new_values ?? '').slice(0, 220)}</span> }]} />
         </Section>}
       </div>
       {mat && entry && <MaterialDialog kind={kind} type="ISSUE" jobId={entry.job_id} productionId={entry.id} onClose={() => setMat(false)} onDone={() => { setMat(false); void load(entry.id); }} />}

@@ -137,7 +137,7 @@ function BillList() {
   qs.set('page_size', '50');
   const list = useQuery({ queryKey: ['stores', 'bill-tracker', qs.toString()], queryFn: async () => http.get<{ data: any[]; pagination: any }>(`/stores/bill-tracker?${qs}`) });
   const cols: Col[] = [
-    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.entry_no}</span> },
+    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.entry_no}</span> },
     { key: 'supplier_name', label: 'Supplier', render: (r) => r.supplier_name ?? (r.received_from_dept ? `Dept: ${r.received_from_dept}` : '—') },
     { key: 'bill_no', label: 'Invoice no' }, { key: 'bill_date', label: 'Inv date', kind: 'date' }, { key: 'amount', label: 'Amount', kind: 'money' },
     { key: 'bill_category', label: 'Category', render: (r) => labelOf(CATEGORY_OPTIONS, r.bill_category) },
@@ -176,7 +176,7 @@ function Inbox() {
   const navigate = useNavigate();
   const list = useQuery({ queryKey: ['stores', 'bt-inbox'], queryFn: async () => (await http.get<{ data: any[] }>('/stores/bill-tracker/approval-inbox')).data });
   const cols: Col[] = [
-    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.entry_no}</span> },
+    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.entry_no}</span> },
     { key: 'workflow_status', label: 'Waiting for', render: (r) => (r.workflow_status === 'PENDING_VERIFICATION' ? 'Verification' : 'Approval') },
     { key: 'supplier_name', label: 'Supplier' }, { key: 'bill_no', label: 'Invoice no' }, { key: 'amount', label: 'Amount', kind: 'money' },
     { key: 'bill_category', label: 'Category', render: (r) => labelOf(CATEGORY_OPTIONS, r.bill_category) },
@@ -226,9 +226,9 @@ function PostingQueue() {
   const list = useQuery({ queryKey: ['stores', 'bt-posting', status], queryFn: async () => (await http.get<{ data: any[] }>(`/stores/bill-tracker/posting-queue${status ? `?status=${status}` : ''}`)).data });
   const act = useAction();
   const cols: Col[] = [
-    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.entry_no}</span> },
+    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.entry_no}</span> },
     { key: 'supplier_name', label: 'Supplier' }, { key: 'bill_no', label: 'Invoice no' }, { key: 'amount', label: 'Amount', kind: 'money' },
-    { key: 'idempotency_key', label: 'Idempotency key', render: (r) => <span className="font-mono text-[11px]">{r.idempotency_key}</span> }, { key: 'adapter', label: 'Adapter' },
+    { key: 'idempotency_key', label: 'Idempotency key', render: (r) => <span className="tabular-nums text-[11px]">{r.idempotency_key}</span> }, { key: 'adapter', label: 'Adapter' },
     { key: 'status', label: 'Status', kind: 'status' }, { key: 'attempts', label: 'Attempts' },
     { key: 'external_voucher_no', label: 'Voucher', render: (r) => (r.external_voucher_no ? `${r.external_voucher_no} · ${fmtDate(r.external_voucher_date)}` : '—') },
     { key: 'last_error_summary', label: 'Last error' }, { key: 'created_at', label: 'Queued', kind: 'date' },
@@ -254,7 +254,7 @@ function Reconciliation() {
   const d = useQuery({ queryKey: ['stores', 'bt-recon'], queryFn: async () => http.get<{ data: any[]; summary: Record<string, { bills: number; amount: number }> }>('/stores/bill-tracker/reconciliation') });
   const rows = (d.data?.data ?? []).filter((r) => !f || r.recon === f);
   const cols: Col[] = [
-    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.entry_no}</span> }, { key: 'supplier_name', label: 'Supplier' },
+    { key: 'entry_no', label: 'Tracking no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.entry_no}</span> }, { key: 'supplier_name', label: 'Supplier' },
     { key: 'bill_no', label: 'Invoice no' }, { key: 'amount', label: 'ERP amount', kind: 'money' }, { key: 'payload_amount', label: 'Sent for posting', kind: 'money' },
     { key: 'approved_at', label: 'Approved', kind: 'date' }, { key: 'queue_status', label: 'Queue', kind: 'status' },
     { key: 'external_voucher_no', label: 'Voucher', render: (r) => (r.external_voucher_no ? `${r.external_voucher_no} · ${fmtDate(r.external_voucher_date)}` : '—') },

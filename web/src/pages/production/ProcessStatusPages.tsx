@@ -92,7 +92,7 @@ export function OperationStatusPage() {
             <thead className="bg-slate-50 text-slate-500"><tr>{cols.map((c) => <th key={c.k} className={`px-2 py-1.5 font-semibold ${['dcs', 'bundles', 'sent', 'good', 'lost', 'pending'].includes(c.k) ? 'text-right' : 'text-left'}`}>{c.h}</th>)}</tr></thead>
             <tbody>{rows.map((r, i) => (
               <tr key={i} className="border-t border-slate-100">
-                <td className="px-2 py-1">{r.stage_name}</td><td className="px-2 py-1 font-semibold">{r.operation}</td><td className="px-2 py-1 font-mono">{r.io_no ?? '—'}</td>
+                <td className="px-2 py-1">{r.stage_name}</td><td className="px-2 py-1 font-semibold">{r.operation}</td><td className="px-2 py-1 tabular-nums">{r.io_no ?? '—'}</td>
                 <td className="px-2 py-1">{r.style_code ?? '—'}</td><td className="px-2 py-1">{r.color_name ?? '—'}</td><td className="px-2 py-1 text-slate-500">{r.sent_to ?? '—'}</td>
                 <td className="px-2 py-1 text-right">{r.dcs}</td><td className="px-2 py-1 text-right">{r.bundles}</td>
                 <td className="px-2 py-1 text-right">{fmtNumber(r.sent)}</td><td className="px-2 py-1 text-right text-emerald-700">{fmtNumber(r.good)}</td>

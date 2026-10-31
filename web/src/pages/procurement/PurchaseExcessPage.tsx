@@ -129,7 +129,7 @@ function JobLimits({ editable }: { editable: boolean }) {
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(r.ordered, 3)}</td>
                     <td className={`px-2 py-1.5 text-right tabular-nums ${r.balance < 0 ? 'text-red-700' : 'text-emerald-700'}`}>{fmtDecimal(Math.max(0, r.balance), 3)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-red-700">{r.over > 0 ? fmtDecimal(r.over, 3) : ''}</td>
-                    <td className="px-2 py-1.5 font-mono text-[11px] text-slate-500">{r.pos ?? '—'}</td>
+                    <td className="px-2 py-1.5 tabular-nums text-[11px] text-slate-500">{r.pos ?? '—'}</td>
                   </tr>))}
                 {!d.rows.length && <tr><td colSpan={10} className="px-3 py-6 text-center text-slate-400">No BOM materials for this job</td></tr>}
               </tbody>

@@ -68,7 +68,7 @@ export function SourcePickerModal({ open, onClose, meta }: { open: boolean; onCl
                 <tbody>{docs.data.map((d) => (
                   <tr key={d.id} data-src-id={d.id} className="cursor-pointer hover:bg-brand-50/50"
                     onClick={() => nav(`/logistics/eway-bills/new?source_type=${type}&source_id=${d.id}`)}>
-                    <td className="td font-mono font-medium text-brand-700">{d.no}</td><td className="td">{fmtDate(d.dt)}</td><td className="td">{d.party ?? '—'}</td>
+                    <td className="td tabular-nums font-medium text-brand-700">{d.no}</td><td className="td">{fmtDate(d.dt)}</td><td className="td">{d.party ?? '—'}</td>
                   </tr>
                 ))}</tbody>
               </table>

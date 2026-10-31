@@ -751,7 +751,7 @@ export function PartyDetailPage() {
               <h1 className="text-lg font-bold text-slate-900">
                 {isNew ? 'Create Business Partner' : form.party_name || 'Business Partner'}
               </h1>
-              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+              <span className="tabular-nums text-xs font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
                 {form.party_code || 'BP-NEW'}
               </span>
               {form.is_draft ? (
@@ -868,7 +868,7 @@ export function PartyDetailPage() {
                       }
                     }}
                     placeholder="Enter 15-digit GSTIN (e.g. 33AALCD8217G1ZO)"
-                    className="input font-mono font-bold tracking-wider uppercase text-brand-900 text-xs pl-8 placeholder:font-normal placeholder:tracking-normal"
+                    className="input tabular-nums font-bold tracking-wider uppercase text-brand-900 text-xs pl-8 placeholder:font-normal placeholder:tracking-normal"
                   />
                   <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 </div>
@@ -919,7 +919,7 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">BP Code *</label>
                 <input
-                  className="input font-mono font-semibold text-brand-700"
+                  className="input tabular-nums font-semibold text-brand-700"
                   value={form.party_code}
                   onChange={(e) => handleField('party_code', e.target.value.toUpperCase())}
                   placeholder="e.g. B001 or BP000123"
@@ -973,14 +973,14 @@ export function PartyDetailPage() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                   <input
-                    className="input font-mono font-semibold text-brand-700 uppercase tracking-wide bg-white"
+                    className="input tabular-nums font-semibold text-brand-700 uppercase tracking-wide bg-white"
                     value={form.io_prefix || ''}
                     onChange={(e) => handleField('io_prefix', e.target.value.toUpperCase())}
                     placeholder="e.g. ZARA, HM, or BYR"
                   />
                   <input
                     id="party-short-code"
-                    className="input font-mono font-semibold text-brand-700 uppercase tracking-wide bg-white"
+                    className="input tabular-nums font-semibold text-brand-700 uppercase tracking-wide bg-white"
                     value={form.short_code || ''}
                     maxLength={3}
                     title="3-letter buyer code used in the SO number (G01 E 26 ACT 0001)"
@@ -988,8 +988,8 @@ export function PartyDetailPage() {
                     placeholder="Short code, e.g. ACT"
                   />
                   <div className="text-[12px] text-slate-500">
-                    Prefix used when auto-generating Sales Internal Orders (e.g. <span className="font-mono font-bold text-brand-700">{form.io_prefix || 'PREFIX'}-IO-2026-001</span>);
-                    the 3-letter short code is the buyer block of the SO number (<span className="font-mono font-bold text-brand-700">G01E26{form.short_code || 'ACT'}0001</span>).
+                    Prefix used when auto-generating Sales Internal Orders (e.g. <span className="tabular-nums font-bold text-brand-700">{form.io_prefix || 'PREFIX'}-IO-2026-001</span>);
+                    the 3-letter short code is the buyer block of the SO number (<span className="tabular-nums font-bold text-brand-700">G01E26{form.short_code || 'ACT'}0001</span>).
                   </div>
                 </div>
               </div>
@@ -1486,7 +1486,7 @@ export function PartyDetailPage() {
                       <td className="p-3 font-semibold text-slate-800">{c.contact_name || '—'}</td>
                       <td className="p-3 text-slate-600">{c.designation || '—'}</td>
                       <td className="p-3 text-slate-600">{c.department || '—'}</td>
-                      <td className="p-3 font-mono">{c.mobile || c.whatsapp_no || '—'}</td>
+                      <td className="p-3 tabular-nums">{c.mobile || c.whatsapp_no || '—'}</td>
                       <td className="p-3 text-brand-600">{c.email || '—'}</td>
                       <td className="p-3 text-center">
                         {c.is_primary ? <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">Yes</span> : '—'}
@@ -1656,7 +1656,7 @@ export function PartyDetailPage() {
               </div>
               <div>
                 <label className="label">IFSC Code</label>
-                <input id="party-bank-ifsc" className={`input font-mono ${ifscInvalid ? 'input-error' : ''}`} maxLength={11}
+                <input id="party-bank-ifsc" className={`input tabular-nums ${ifscInvalid ? 'input-error' : ''}`} maxLength={11}
                   value={primaryIfsc} onChange={(e) => setPrimaryBank('ifsc_code', e.target.value.toUpperCase().replace(/\s/g, ''))}
                   placeholder="HDFC0001234" />
                 {ifscInvalid
@@ -1665,7 +1665,7 @@ export function PartyDetailPage() {
               </div>
               <div>
                 <label className="label">Account Number</label>
-                <input id="party-bank-account" className="input font-mono" value={primaryBank?.account_no || ''}
+                <input id="party-bank-account" className="input tabular-nums" value={primaryBank?.account_no || ''}
                   onChange={(e) => setPrimaryBank('account_no', e.target.value.replace(/\s/g, ''))} placeholder="Bank account number" />
               </div>
               <div>
@@ -1705,7 +1705,7 @@ export function PartyDetailPage() {
                   </div>
                   <div>
                     <label className="label">MSME Number (Udyam) *</label>
-                    <input id="party-msme-number" className="input font-mono" value={form.udyam_no || ''}
+                    <input id="party-msme-number" className="input tabular-nums" value={form.udyam_no || ''}
                       onChange={(e) => handleField('udyam_no', e.target.value.toUpperCase())} placeholder="UDYAM-TN-02-0001234" />
                   </div>
                   <div>
@@ -1740,7 +1740,7 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">GSTIN (India)</label>
                 <input
-                  className="input font-mono font-semibold"
+                  className="input tabular-nums font-semibold"
                   value={form.gstin || ''}
                   onChange={(e) => handleField('gstin', e.target.value.toUpperCase())}
                   placeholder="33AABCT1234B1Z5"
@@ -1750,7 +1750,7 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">PAN (Income Tax)</label>
                 <input
-                  className="input font-mono font-semibold"
+                  className="input tabular-nums font-semibold"
                   value={form.pan || ''}
                   onChange={(e) => handleField('pan', e.target.value.toUpperCase())}
                   placeholder="AABCT1234B"
@@ -1760,7 +1760,7 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">TAN No.</label>
                 <input
-                  className="input font-mono"
+                  className="input tabular-nums"
                   value={form.tan || ''}
                   onChange={(e) => handleField('tan', e.target.value.toUpperCase())}
                   placeholder="CHNA12345D"
@@ -1770,7 +1770,7 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">Foreign Tax ID (VAT / EIN)</label>
                 <input
-                  className="input font-mono"
+                  className="input tabular-nums"
                   value={form.tax_id_foreign || ''}
                   onChange={(e) => handleField('tax_id_foreign', e.target.value)}
                   placeholder="Overseas VAT / EIN ID"
@@ -1787,7 +1787,7 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">IEC No. (Import Export Code)</label>
                 <input
-                  className="input font-mono font-semibold"
+                  className="input tabular-nums font-semibold"
                   value={form.iec_no || ''}
                   onChange={(e) => handleField('iec_no', e.target.value.toUpperCase())}
                   placeholder="0412001234"
@@ -1796,7 +1796,7 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">CIN (Corporate ID)</label>
                 <input
-                  className="input font-mono"
+                  className="input tabular-nums"
                   value={form.cin || ''}
                   onChange={(e) => handleField('cin', e.target.value)}
                   placeholder="U17110TN2015PTC098765"
@@ -2007,9 +2007,9 @@ export function PartyDetailPage() {
                       <td className="p-3 font-semibold text-slate-800">{b.bank_name}</td>
                       <td className="p-3 text-slate-600">{b.branch_name || '—'}</td>
                       <td className="p-3 text-slate-600">{b.account_name || '—'}</td>
-                      <td className="p-3 font-mono font-medium">{b.account_no || '—'}</td>
-                      <td className="p-3 font-mono text-slate-600">{b.ifsc_code || '—'}</td>
-                      <td className="p-3 font-mono text-slate-600">{b.swift_code || '—'}</td>
+                      <td className="p-3 tabular-nums font-medium">{b.account_no || '—'}</td>
+                      <td className="p-3 tabular-nums text-slate-600">{b.ifsc_code || '—'}</td>
+                      <td className="p-3 tabular-nums text-slate-600">{b.swift_code || '—'}</td>
                       <td className="p-3 text-slate-600">{b.account_type || 'CURRENT'}</td>
                       <td className="p-3 text-center">
                         {b.is_default ? <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">Yes</span> : '—'}
@@ -2088,7 +2088,7 @@ export function PartyDetailPage() {
                 <div>
                   <label className="label">Account Number *</label>
                   <input
-                    className="input font-mono font-semibold"
+                    className="input tabular-nums font-semibold"
                     value={currentBank.account_no || ''}
                     onChange={(e) => updateBank('account_no', e.target.value)}
                     placeholder="Bank Account Number"
@@ -2097,7 +2097,7 @@ export function PartyDetailPage() {
                 <div>
                   <label className="label">IFSC Code (Domestic INR)</label>
                   <input
-                    className="input font-mono"
+                    className="input tabular-nums"
                     value={currentBank.ifsc_code || ''}
                     onChange={(e) => updateBank('ifsc_code', e.target.value.toUpperCase())}
                     placeholder="e.g. HDFC0001234"
@@ -2106,7 +2106,7 @@ export function PartyDetailPage() {
                 <div>
                   <label className="label">SWIFT Code (Overseas / Forex)</label>
                   <input
-                    className="input font-mono"
+                    className="input tabular-nums"
                     value={currentBank.swift_code || ''}
                     onChange={(e) => updateBank('swift_code', e.target.value.toUpperCase())}
                     placeholder="e.g. HDFCINBBXXX"
@@ -2115,7 +2115,7 @@ export function PartyDetailPage() {
                 <div>
                   <label className="label">IBAN No.</label>
                   <input
-                    className="input font-mono"
+                    className="input tabular-nums"
                     value={currentBank.iban || ''}
                     onChange={(e) => updateBank('iban', e.target.value)}
                     placeholder="International Bank Account No."
@@ -2547,14 +2547,14 @@ export function PartyDetailPage() {
               <div>
                 <label className="label">Merchandiser Group</label>
                 <input
-                  className="input font-mono font-semibold uppercase"
+                  className="input tabular-nums font-semibold uppercase"
                   maxLength={3}
                   value={form.group_code || ''}
                   onChange={(e) => handleField('group_code', e.target.value.toUpperCase())}
                   placeholder="e.g. G11"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  G + 2 digits. Starts the SO number (e.g. <span className="font-mono font-bold text-brand-700">{form.group_code || 'G11'}E26CAPE0001</span>).
+                  G + 2 digits. Starts the SO number (e.g. <span className="tabular-nums font-bold text-brand-700">{form.group_code || 'G11'}E26CAPE0001</span>).
                 </p>
               </div>
               <div>
@@ -2597,7 +2597,7 @@ export function PartyDetailPage() {
                 <input
                   type="number"
                   min={0}
-                  className="input font-mono"
+                  className="input tabular-nums"
                   value={form.merchandiser_target ?? 0}
                   onChange={(e) => handleField('merchandiser_target', e.target.value)}
                   placeholder="e.g. 50000000"
@@ -2610,7 +2610,7 @@ export function PartyDetailPage() {
                   step="0.01"
                   min={0}
                   max={100}
-                  className="input font-mono"
+                  className="input tabular-nums"
                   value={form.merchandiser_commission ?? 0}
                   onChange={(e) => handleField('merchandiser_commission', e.target.value)}
                   placeholder="e.g. 1.5"

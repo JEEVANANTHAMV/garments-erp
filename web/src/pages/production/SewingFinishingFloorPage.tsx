@@ -126,7 +126,7 @@ export function SewingFinishingFloorPage() {
               <ScanLine size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-brand-600" />
               <input ref={scanRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)}
                 placeholder="Scan bundle barcode (or type bundle no) and press Enter"
-                className="input h-11 pl-10 font-mono text-base" />
+                className="input h-11 pl-10 tabular-nums text-base" />
             </div>
             <Button type="submit" loading={scanning}>Scan</Button>
           </form>
@@ -136,7 +136,7 @@ export function SewingFinishingFloorPage() {
             <div className="p-4 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-mono text-lg font-bold text-slate-900">{bundle.bundle_no}</p>
+                  <p className="tabular-nums text-lg font-bold text-slate-900">{bundle.bundle_no}</p>
                   <p className="text-xs text-slate-500">
                     {bundle.style_code} · {bundle.color_name} · Size {bundle.size_code} · {bundle.part_name ?? ''} · IO {bundle.io_no ?? '—'}
                   </p>
@@ -243,15 +243,15 @@ export function SewingFinishingFloorPage() {
             <DataTable data={register} loading={regLoading} emptyTitle="Nothing yet"
               onRowClick={(r: any) => { const c = r.barcode ?? r.bundle_no; if (c) { setCode(c); scan(c); } }}
               columns={tab === 'FINAL_QC' ? [
-                { key: 'qc_no', header: 'QC no', render: (r: any) => <span className="font-mono text-[11px]">{r.qc_no}</span> },
-                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="font-mono text-[11px]">{r.bundle_no ?? '—'}</span> },
+                { key: 'qc_no', header: 'QC no', render: (r: any) => <span className="tabular-nums text-[11px]">{r.qc_no}</span> },
+                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="tabular-nums text-[11px]">{r.bundle_no ?? '—'}</span> },
                 { key: 'inspected_qty', header: 'Insp', align: 'right' as const },
                 { key: 'passed_qty', header: 'Pass', align: 'right' as const },
                 { key: 'reject_qty', header: 'Rej', align: 'right' as const },
                 { key: 'qc_status', header: '', render: (r: any) => <StatusBadge value={r.qc_status} /> },
               ] : [
-                { key: 'input_no', header: 'Input', render: (r: any) => <span className="font-mono text-[11px]">{r.input_no}</span> },
-                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="font-mono text-[11px]">{r.bundle_no ?? '—'}</span> },
+                { key: 'input_no', header: 'Input', render: (r: any) => <span className="tabular-nums text-[11px]">{r.input_no}</span> },
+                { key: 'bundle_no', header: 'Bundle', render: (r: any) => <span className="tabular-nums text-[11px]">{r.bundle_no ?? '—'}</span> },
                 { key: 'line_name', header: 'Line' },
                 { key: 'input_qty', header: 'In', align: 'right' as const },
                 { key: 'output_qty', header: 'Good', align: 'right' as const },

@@ -1435,7 +1435,7 @@ export default function QuotationDetailPage() {
                   return (
                     <tr key={k} className={`border-t border-slate-100 ${on ? 'bg-emerald-50/50' : ''}`} data-roll={r.roll_no}>
                       <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setPick(on ? '' : r.available_kg)} /></td>
-                      <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{stateLabel(r.process_state)}</td><td className="px-2 py-1 font-semibold text-slate-800">{rollColour(r) || '—'}</td>
+                      <td className="px-2 py-1 tabular-nums font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{stateLabel(r.process_state)}</td><td className="px-2 py-1 font-semibold text-slate-800">{rollColour(r) || '—'}</td>
                       <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1 text-slate-600">{rollTrace(r) || r.grn_no}</td><td className="px-2 py-1">QC ok</td>
                       <td className="px-2 py-1 text-right tabular-nums">{fmtDecimal(r.available_kg, 3)}</td><td className="px-2 py-1 text-right tabular-nums">{r.available_m ? fmtDecimal(r.available_m, 2) : '—'}</td>
                       <td className="px-2 py-1 text-right"><input type="number" step="0.001" className="w-24 rounded border border-surface-border px-2 py-0.5 text-right text-xs"
@@ -1584,7 +1584,7 @@ export default function QuotationDetailPage() {
                     return (
                       <Fragment key={l._key}>
                       <tr className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-2 py-1.5 text-center font-mono text-[11px] text-slate-400">
+                        <td className="px-2 py-1.5 text-center tabular-nums text-[11px] text-slate-400">
                           {i + 1}
                         </td>
 
@@ -1785,7 +1785,7 @@ export default function QuotationDetailPage() {
                                 placeholder="e.g. 30s, 2/40s"
                                 value={l.yarn_count}
                                 onChange={e => setLine(l._key, { yarn_count: e.target.value })}
-                                className="w-full rounded border border-surface-border px-2 py-1 text-xs font-mono font-bold text-brand-700 focus:border-brand-500 focus:outline-none"
+                                className="w-full rounded border border-surface-border px-2 py-1 text-xs tabular-nums font-bold text-brand-700 focus:border-brand-500 focus:outline-none"
                               />
                             </td>
                             <td className="px-1.5 py-1">
@@ -1902,7 +1902,7 @@ export default function QuotationDetailPage() {
                             readOnly={(l.rolls ?? []).length > 0}
                             title={(l.rolls ?? []).length > 0 ? 'Qty = the KG of its rolls' : undefined}
                             onChange={e => setLine(l._key, { qty: e.target.value === '' ? '' : Number(e.target.value) })}
-                            className="w-full rounded border border-surface-border px-2 py-1 text-right text-xs focus:border-brand-500 focus:outline-none font-mono"
+                            className="w-full rounded border border-surface-border px-2 py-1 text-right text-xs focus:border-brand-500 focus:outline-none tabular-nums"
                           />
                         </td>
 
@@ -1930,7 +1930,7 @@ export default function QuotationDetailPage() {
                             title={l.ref_rate ? `BOM standard rate ₹${l.ref_rate} — reference only; enter the supplier's quoted rate` : undefined}
                             value={l.quotation_rate}
                             onChange={e => setLine(l._key, { quotation_rate: e.target.value === '' ? '' : Number(e.target.value) })}
-                            className="w-full rounded border border-surface-border px-2 py-1 text-right text-xs focus:border-brand-500 focus:outline-none font-mono"
+                            className="w-full rounded border border-surface-border px-2 py-1 text-right text-xs focus:border-brand-500 focus:outline-none tabular-nums"
                           />
                         </td>
 
@@ -1943,7 +1943,7 @@ export default function QuotationDetailPage() {
                             placeholder="Confirm"
                             value={l.confirm_rate}
                             onChange={e => setLine(l._key, { confirm_rate: e.target.value === '' ? '' : Number(e.target.value) })}
-                            className="w-full rounded border border-emerald-300 bg-emerald-50/40 px-2 py-1 text-right text-xs font-semibold text-emerald-900 focus:border-emerald-500 focus:outline-none font-mono"
+                            className="w-full rounded border border-emerald-300 bg-emerald-50/40 px-2 py-1 text-right text-xs font-semibold text-emerald-900 focus:border-emerald-500 focus:outline-none tabular-nums"
                           />
                         </td>
 
@@ -1982,7 +1982,7 @@ export default function QuotationDetailPage() {
                         )}
 
                         {/* Line Total Amount */}
-                        <td className="px-2 py-1.5 text-right font-mono font-bold text-slate-800">
+                        <td className="px-2 py-1.5 text-right tabular-nums font-bold text-slate-800">
                           {fmtDecimal(lineAmt, 2)}
                         </td>
 
@@ -2007,7 +2007,7 @@ export default function QuotationDetailPage() {
                                 <span className="font-semibold text-slate-600">Rolls:</span>
                                 {(l.rolls ?? []).map((r) => (
                                   <span key={r.fabric_roll_id} className="inline-flex items-center gap-1 rounded border border-sky-200 bg-white px-1.5 py-0.5" title={r.trace}>
-                                    <b className="font-mono">{r.roll_no}</b>
+                                    <b className="tabular-nums">{r.roll_no}</b>
                                     <input type="number" step="0.001" className="w-16 rounded border border-slate-200 px-1 text-right" value={r.qty_kg}
                                       onChange={(e) => setRollKg(l._key, r.fabric_roll_id, e.target.value === '' ? '' : Number(e.target.value))} /> KG
                                     {r.trace && <span className="text-slate-400">{r.trace}</span>}
@@ -2049,12 +2049,12 @@ export default function QuotationDetailPage() {
                     <td colSpan={colsBeforeQty} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-600">
                       Total Basic Value
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-xs">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs">
                       {fmtDecimal(lines.reduce((s, l) => s + (Number(l.qty) || 0), 0), 2)}
                     </td>
                     {/* UOM, Quotation Rate, Confirm Rate (+ GST %, IGST % on domestic) */}
                     <td colSpan={isDomesticLike ? 5 : 3}></td>
-                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-brand-700">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-sm font-bold text-brand-700">
                       {currSymbol} {fmtDecimal(calc.basicAmount, 2)}
                     </td>
                     <td></td>
@@ -2153,7 +2153,7 @@ export default function QuotationDetailPage() {
                   <div className="space-y-2 pt-1">
                     <div className="flex justify-between items-center py-1">
                       <span className="text-slate-600 font-medium">Items Total ({currCode})</span>
-                      <span className="font-mono font-bold text-slate-800">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
+                      <span className="tabular-nums font-bold text-slate-800">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
@@ -2169,7 +2169,7 @@ export default function QuotationDetailPage() {
                           className="w-14 rounded border border-surface-border px-1.5 py-0.5 text-right text-xs focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
-                      <span className="font-mono text-slate-700">- {currSymbol} {fmtDecimal(d.discAmt, 2)}</span>
+                      <span className="tabular-nums text-slate-700">- {currSymbol} {fmtDecimal(d.discAmt, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
@@ -2180,7 +2180,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.freight_charges ?? 0}
                         onChange={e => hSet('freight_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
 
@@ -2192,7 +2192,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.insurance ?? 0}
                         onChange={e => hSet('insurance', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
 
@@ -2204,7 +2204,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.packing_charges ?? 0}
                         onChange={e => hSet('packing_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
 
@@ -2216,14 +2216,14 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.other_charges ?? 0}
                         onChange={e => hSet('other_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-emerald-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
 
                     <div className="border-t-2 border-emerald-600 pt-2.5 mt-2 space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold text-slate-900">Total Offer ({currCode})</span>
-                        <span className="text-lg font-bold text-emerald-700 font-mono">
+                        <span className="text-lg font-bold text-emerald-700 tabular-nums">
                           {currSymbol} {fmtDecimal(d.finalOffer, 2)}
                         </span>
                       </div>
@@ -2232,11 +2232,11 @@ export default function QuotationDetailPage() {
                       <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 space-y-1">
                         <div className="flex justify-between text-[11px] text-emerald-800">
                           <span>Exchange Rate (1 {currCode})</span>
-                          <span className="font-mono font-bold">₹ {fmtDecimal(head.exchange_rate || 1, 2)}</span>
+                          <span className="tabular-nums font-bold">₹ {fmtDecimal(head.exchange_rate || 1, 2)}</span>
                         </div>
                         <div className="flex justify-between text-xs font-bold text-emerald-950 pt-1 border-t border-emerald-200">
                           <span>INR Realization Value</span>
-                          <span className="font-mono text-sm">₹ {fmtDecimal(d.inrEquivalent, 2)}</span>
+                          <span className="tabular-nums text-sm">₹ {fmtDecimal(d.inrEquivalent, 2)}</span>
                         </div>
                       </div>
 
@@ -2260,7 +2260,7 @@ export default function QuotationDetailPage() {
                   <div className="space-y-2 pt-1">
                     <div className="flex justify-between items-center py-1">
                       <span className="text-slate-600 font-medium">Basic Amount</span>
-                      <span className="font-mono font-bold text-slate-800">₹ {fmtDecimal(d.basicAmount, 2)}</span>
+                      <span className="tabular-nums font-bold text-slate-800">₹ {fmtDecimal(d.basicAmount, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
@@ -2276,7 +2276,7 @@ export default function QuotationDetailPage() {
                           className="w-14 rounded border border-surface-border px-1.5 py-0.5 text-right text-xs focus:border-brand-500 focus:outline-none"
                         />
                       </div>
-                      <span className="font-mono text-slate-700">- ₹ {fmtDecimal(d.discAmt, 2)}</span>
+                      <span className="tabular-nums text-slate-700">- ₹ {fmtDecimal(d.discAmt, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
@@ -2287,7 +2287,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.freight_charges ?? 0}
                         onChange={e => hSet('freight_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-brand-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-brand-500 focus:outline-none"
                       />
                     </div>
 
@@ -2299,7 +2299,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.packing_charges ?? 0}
                         onChange={e => hSet('packing_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-brand-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-brand-500 focus:outline-none"
                       />
                     </div>
 
@@ -2311,20 +2311,20 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.other_charges ?? 0}
                         onChange={e => hSet('other_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-brand-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-brand-500 focus:outline-none"
                       />
                     </div>
 
                     <div className="border-t border-surface-border pt-2 flex justify-between items-center">
                       <span className="font-bold text-slate-800">Taxable Value</span>
-                      <span className="font-mono font-bold text-brand-800">₹ {fmtDecimal(d.taxableValue, 2)}</span>
+                      <span className="tabular-nums font-bold text-brand-800">₹ {fmtDecimal(d.taxableValue, 2)}</span>
                     </div>
 
                     {/* Per-line GST & IGST breakdown */}
                     <div className="rounded-lg bg-amber-50/70 border border-amber-200 p-2.5 space-y-1.5">
                       <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center justify-between">
                         <span>GST &amp; IGST Breakdown</span>
-                        <span className="text-[10px] font-mono text-amber-800">Per-Line</span>
+                        <span className="text-[10px] tabular-nums text-amber-800">Per-Line</span>
                       </div>
 
                       {/* CGST + SGST (Intrastate) */}
@@ -2332,11 +2332,11 @@ export default function QuotationDetailPage() {
                         <div key={`cgst-${g.rate}`} className="text-[11px] space-y-0.5 border-b border-amber-200/60 pb-1">
                           <div className="flex justify-between text-slate-600">
                             <span>CGST @ {(g.rate / 2).toFixed(1)}% (on ₹{fmtDecimal(g.baseAmt, 2)})</span>
-                            <span className="font-mono font-semibold">₹ {fmtDecimal(g.cgst, 2)}</span>
+                            <span className="tabular-nums font-semibold">₹ {fmtDecimal(g.cgst, 2)}</span>
                           </div>
                           <div className="flex justify-between text-slate-600">
                             <span>SGST @ {(g.rate / 2).toFixed(1)}% (on ₹{fmtDecimal(g.baseAmt, 2)})</span>
-                            <span className="font-mono font-semibold">₹ {fmtDecimal(g.sgst, 2)}</span>
+                            <span className="tabular-nums font-semibold">₹ {fmtDecimal(g.sgst, 2)}</span>
                           </div>
                         </div>
                       ))}
@@ -2346,7 +2346,7 @@ export default function QuotationDetailPage() {
                         <div key={`igst-${ig.rate}`} className="text-[11px] space-y-0.5 border-b border-amber-200/60 pb-1">
                           <div className="flex justify-between text-slate-600">
                             <span>IGST @ {ig.rate}% (on ₹{fmtDecimal(ig.baseAmt, 2)})</span>
-                            <span className="font-mono font-semibold text-amber-900">₹ {fmtDecimal(ig.igst, 2)}</span>
+                            <span className="tabular-nums font-semibold text-amber-900">₹ {fmtDecimal(ig.igst, 2)}</span>
                           </div>
                         </div>
                       ))}
@@ -2357,7 +2357,7 @@ export default function QuotationDetailPage() {
 
                       <div className="flex justify-between pt-1 font-bold text-amber-950 border-t border-amber-200">
                         <span>Total Tax (GST + IGST)</span>
-                        <span className="font-mono">₹ {fmtDecimal(d.totalGst, 2)}</span>
+                        <span className="tabular-nums">₹ {fmtDecimal(d.totalGst, 2)}</span>
                       </div>
                     </div>
 
@@ -2368,14 +2368,14 @@ export default function QuotationDetailPage() {
                         step="0.01"
                         value={head.round_off ?? 0}
                         onChange={e => hSet('round_off', Number(e.target.value))}
-                        className="w-20 rounded border border-surface-border px-1.5 py-0.5 text-right font-mono text-xs focus:border-brand-500 focus:outline-none"
+                        className="w-20 rounded border border-surface-border px-1.5 py-0.5 text-right tabular-nums text-xs focus:border-brand-500 focus:outline-none"
                       />
                     </div>
 
                     <div className="border-t-2 border-slate-800 pt-3 mt-3">
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold text-slate-900">Grand Total (INR)</span>
-                        <span className="text-lg font-bold text-brand-700 font-mono">
+                        <span className="text-lg font-bold text-brand-700 tabular-nums">
                           ₹ {fmtDecimal(d.grandTotal, 2)}
                         </span>
                       </div>
@@ -2391,7 +2391,7 @@ export default function QuotationDetailPage() {
                   <div className="space-y-2 pt-1">
                     <div className="flex justify-between items-center py-1">
                       <span className="text-slate-600 font-medium">Product Value</span>
-                      <span className="font-mono font-bold text-slate-800">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
+                      <span className="tabular-nums font-bold text-slate-800">{currSymbol} {fmtDecimal(d.basicAmount, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
@@ -2402,7 +2402,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.courier_charges ?? 0}
                         onChange={e => hSet('courier_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
@@ -2414,7 +2414,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.freight_charges ?? 0}
                         onChange={e => hSet('freight_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
@@ -2426,7 +2426,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.insurance ?? 0}
                         onChange={e => hSet('insurance', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
@@ -2438,7 +2438,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.packing_charges ?? 0}
                         onChange={e => hSet('packing_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
@@ -2450,7 +2450,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.bank_charges ?? 0}
                         onChange={e => hSet('bank_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
@@ -2462,7 +2462,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.customs_duty ?? 0}
                         onChange={e => hSet('customs_duty', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
@@ -2474,7 +2474,7 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.clearing_charges ?? 0}
                         onChange={e => hSet('clearing_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
@@ -2486,13 +2486,13 @@ export default function QuotationDetailPage() {
                         step="1"
                         value={head.other_charges ?? 0}
                         onChange={e => hSet('other_charges', Number(e.target.value))}
-                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right font-mono text-xs focus:border-violet-500 focus:outline-none"
+                        className="w-24 rounded border border-surface-border px-2 py-0.5 text-right tabular-nums text-xs focus:border-violet-500 focus:outline-none"
                       />
                     </div>
 
                     <div className="border-t border-surface-border pt-2 flex justify-between items-center">
                       <span className="font-bold text-slate-800">Landed Cost</span>
-                      <span className="font-mono font-bold text-violet-800">{currSymbol} {fmtDecimal(d.landedCost, 2)}</span>
+                      <span className="tabular-nums font-bold text-violet-800">{currSymbol} {fmtDecimal(d.landedCost, 2)}</span>
                     </div>
 
                     <div className="flex justify-between items-center py-1">
@@ -2508,19 +2508,19 @@ export default function QuotationDetailPage() {
                           className="w-14 rounded border border-surface-border px-1.5 py-0.5 text-right text-xs focus:border-violet-500 focus:outline-none"
                         />
                       </div>
-                      <span className="font-mono text-slate-700">+ {currSymbol} {fmtDecimal(d.marginAmt, 2)}</span>
+                      <span className="tabular-nums text-slate-700">+ {currSymbol} {fmtDecimal(d.marginAmt, 2)}</span>
                     </div>
 
                     <div className="border-t-2 border-slate-800 pt-3 mt-3">
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold text-slate-900">Final Quotation Value</span>
-                        <span className="text-lg font-bold text-violet-700 font-mono">
+                        <span className="text-lg font-bold text-violet-700 tabular-nums">
                           {currSymbol} {fmtDecimal(d.finalSelling, 2)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-[11px] text-slate-500 mt-1">
                         <span>INR Equivalent (@ ₹{fmtDecimal(head.exchange_rate || 1, 2)})</span>
-                        <span className="font-mono font-semibold">
+                        <span className="tabular-nums font-semibold">
                           ₹ {fmtDecimal(d.finalSelling * (Number(head.exchange_rate) || 1), 2)}
                         </span>
                       </div>

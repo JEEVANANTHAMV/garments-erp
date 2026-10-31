@@ -94,11 +94,11 @@ export function JobCostPanel({ soId }: { soId: string }) {
   return (
     <div className="card mb-3 grid gap-4 p-4 text-xs md:grid-cols-2" id="job-cost">
       <div><h3 className="mb-1 text-[13px] font-semibold text-slate-800">Standard cost (BOM)</h3>
-        {d.standard.length ? d.standard.map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}</span><span className="font-mono">{money(x.amount)}</span></div>) : <p className="text-slate-400">No BOM</p>}
-        <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="font-mono">{money(d.standard_total)}</span></div></div>
+        {d.standard.length ? d.standard.map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}</span><span className="tabular-nums">{money(x.amount)}</span></div>) : <p className="text-slate-400">No BOM</p>}
+        <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="tabular-nums">{money(d.standard_total)}</span></div></div>
       <div><h3 className="mb-1 text-[13px] font-semibold text-slate-800">Actual cost</h3>
-        {d.actual.filter((x: any) => x.amount).map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}{x.kg ? ` (${kg(x.kg)} KG)` : ''}</span><span className="font-mono">{money(x.amount)}</span></div>)}
-        <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="font-mono" id="job-cost-actual">{money(d.actual_total)}</span></div></div>
+        {d.actual.filter((x: any) => x.amount).map((x: any) => <div key={x.head} className="flex justify-between border-b border-slate-100 py-0.5"><span>{x.head}{x.kg ? ` (${kg(x.kg)} KG)` : ''}</span><span className="tabular-nums">{money(x.amount)}</span></div>)}
+        <div className="flex justify-between pt-1 font-semibold"><span>Total</span><span className="tabular-nums" id="job-cost-actual">{money(d.actual_total)}</span></div></div>
     </div>
   );
 }
@@ -110,7 +110,7 @@ export function RollCostPanel({ rollId }: { rollId: number }) {
   return (
     <div className="card p-4 text-xs" id="roll-cost">
       <h3 className="mb-1 text-[13px] font-semibold text-slate-800">Cost carried by {d.roll_no}: <span id="roll-cost-kg">{money(d.cost_per_kg)}</span> / KG · value of the KG left {money(d.value)}</h3>
-      <table className="w-full max-w-2xl"><tbody>{d.steps.map((s: any, i: number) => <tr key={i} className="border-t border-slate-100"><td className="px-2 py-0.5 font-semibold">{s.stage}</td><td className="px-2 py-0.5">{s.ref}</td><td className="px-2 py-0.5 text-slate-500">{s.note}</td><td className="px-2 py-0.5 text-right font-mono">{money(s.rate)}</td></tr>)}</tbody></table>
+      <table className="w-full max-w-2xl"><tbody>{d.steps.map((s: any, i: number) => <tr key={i} className="border-t border-slate-100"><td className="px-2 py-0.5 font-semibold">{s.stage}</td><td className="px-2 py-0.5">{s.ref}</td><td className="px-2 py-0.5 text-slate-500">{s.note}</td><td className="px-2 py-0.5 text-right tabular-nums">{money(s.rate)}</td></tr>)}</tbody></table>
     </div>
   );
 }
@@ -169,7 +169,7 @@ export function MergeRollsPanel({ onDone }: { onDone: (msg: string) => void }) {
         <table className="w-full" id="merge-table"><thead className="bg-slate-50 text-slate-500"><tr>{['', 'Roll', 'Fabric', 'State', 'Colour', 'GSM', 'Dia', 'Store', 'KG left'].map((h) => <th key={h} className="px-2 py-1 text-left">{h}</th>)}</tr></thead>
           <tbody>{open.map((r) => <tr key={r.id} className="border-t border-slate-100" data-roll={r.roll_no}>
             <td className="px-2 py-1"><input type="checkbox" checked={sel.includes(Number(r.id))} onChange={(e) => setSel(e.target.checked ? [...sel, Number(r.id)] : sel.filter((x) => x !== Number(r.id)))} /></td>
-            <td className="px-2 py-1 font-mono">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name ?? '—'}</td>
+            <td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name ?? '—'}</td>
             <td className="px-2 py-1">{r.gsm ?? '—'}</td><td className="px-2 py-1">{r.dia ?? '—'}</td><td className="px-2 py-1">{r.warehouse_name}</td><td className="px-2 py-1 tabular-nums">{kg(Number(r.weight_kg) - Number(r.issued_kg))}</td></tr>)}
             {!open.length && <tr><td colSpan={9} className="px-2 py-3 text-center text-slate-400">No open rolls</td></tr>}</tbody></table>
       )}

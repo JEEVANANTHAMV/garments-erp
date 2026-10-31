@@ -162,7 +162,7 @@ function Docs({ b, onLink }: { b: any; onLink: () => void }) {
           <tbody>
             {b.links.map((l: any) => (
               <tr key={l.id} data-link={l.link_type} className={`border-t border-slate-100 ${l.removed_at ? 'text-slate-400 line-through' : ''}`}>
-                <td className="px-2 py-1.5">{l.type_label}{l.needs_override ? <span className="ml-1 text-red-600">(over-billed)</span> : null}</td><td className="px-2 py-1.5 font-mono">{l.target_no}</td>
+                <td className="px-2 py-1.5">{l.type_label}{l.needs_override ? <span className="ml-1 text-red-600">(over-billed)</span> : null}</td><td className="px-2 py-1.5 tabular-nums">{l.target_no}</td>
                 <td className="px-2 py-1.5">{fmtDate(l.target_date)}</td><td className="px-2 py-1.5">{l.target_party ?? '—'}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{l.target_qty === null ? '—' : fmtDecimal(l.target_qty, 3)}</td><td className="px-2 py-1.5 text-right tabular-nums">{l.target_amount === null ? '—' : fmtDecimal(l.target_amount, 2)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{l.linked_qty === null ? '—' : fmtDecimal(l.linked_qty, 3)}</td><td className="px-2 py-1.5 text-right tabular-nums">{l.linked_amount === null ? '—' : fmtDecimal(l.linked_amount, 2)}</td>
@@ -223,7 +223,7 @@ function Movements({ b }: { b: any }) {
       <div className="mb-2 text-[12px] text-slate-500">Movements are never edited — a wrong hand-off is reversed by a correction entry.</div>
       <ol className="space-y-2">{b.movements.map((m: any, i: number) => (
         <li key={m.id} data-move={m.movement_type} className="rounded-lg border border-slate-200 px-3 py-2 text-[12.5px]">
-          <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-slate-400">#{m.seq}</span><Badge tone={m.movement_type === 'CORRECTION' ? 'red' : 'blue'}>{m.movement_type.replace('_', ' ')}</Badge>
+          <div className="flex flex-wrap items-center gap-2"><span className="tabular-nums text-slate-400">#{m.seq}</span><Badge tone={m.movement_type === 'CORRECTION' ? 'red' : 'blue'}>{m.movement_type.replace('_', ' ')}</Badge>
             <span>{m.from_holder ?? '—'}{m.from_dept ? ` (${m.from_dept})` : ''} → <b>{m.to_holder ?? '—'}</b>{m.to_dept ? ` (${m.to_dept})` : ''}{m.to_location ? ` · ${m.to_location}` : ''}</span>
             <span className="text-slate-500">{fmtDate(m.business_date)} · recorded {fmtDateTime(m.moved_at)} by {m.recorded_by_name ?? '—'}</span></div>
           <div className="text-slate-600">{m.purpose}{m.expected_return_date ? ` · expected back ${fmtDate(m.expected_return_date)}` : ''}{m.note ? ` · ${m.note}` : ''}</div>
@@ -284,7 +284,7 @@ function Posting({ b }: { b: any }) {
   return (
     <div className="space-y-3">{b.postings.map((p: any) => (
       <div key={p.id} className="rounded-lg border border-slate-200 p-3 text-[12.5px]">
-        <div className="flex flex-wrap items-center gap-3"><StatusBadge value={p.status} /><span className="font-mono text-[11.5px]">{p.idempotency_key}</span><span>Adapter {p.adapter}</span>
+        <div className="flex flex-wrap items-center gap-3"><StatusBadge value={p.status} /><span className="tabular-nums text-[11.5px]">{p.idempotency_key}</span><span>Adapter {p.adapter}</span>
           <span>₹{fmtDecimal(p.payload_amount, 2)}</span><span>Attempts {p.attempts}</span>
           {p.external_voucher_no && <span>Voucher <b>{p.external_voucher_no}</b> · {fmtDate(p.external_voucher_date)} · {p.posted_by_name}</span>}
           {p.reversal_voucher_no && <span className="text-red-600">Reversed by voucher {p.reversal_voucher_no}</span>}

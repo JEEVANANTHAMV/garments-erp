@@ -49,7 +49,7 @@ export default function StockDeliveryPage({ kind = 'STOCK' }: { kind?: Kind }) {
   const [view, setView] = useState<number | null>(null);
   const label = kind === 'STOCK' ? 'Stock Delivery' : 'General Delivery';
   const cols: Col[] = [
-    { key: 'doc_no', label: 'DC no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.doc_no}</span> },
+    { key: 'doc_no', label: 'DC no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.doc_no}</span> },
     { key: 'doc_date', label: 'Date', kind: 'date' }, { key: 'party_name', label: 'Party' }, { key: 'warehouse_name', label: 'From location' },
     { key: 'dc_type', label: 'Type', render: (r) => (r.dc_type === 'RETURNABLE' ? 'Returnable' : `Non-returnable · ${Number(r.is_billable) ? 'billable' : 'non-billable'}`) },
     { key: 'expected_return_date', label: 'Return by', kind: 'date' }, { key: 'total_qty', label: 'Qty', kind: 'qty' }, { key: 'returned_qty', label: 'Returned', kind: 'qty' },

@@ -13,7 +13,7 @@ export function VouchersPage() {
     defaultSort={{ key: 'voucher_date', dir: 'desc' }}
     columns={[
       { key: 'voucher_no', header: 'Voucher no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.voucher_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.voucher_no}</span> },
       { key: 'voucher_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.voucher_type)}</Badge> },
       { key: 'voucher_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.voucher_date) },
       { key: 'narration', header: 'Narration' },
@@ -45,7 +45,7 @@ export function ReceiptsPage() {
     defaultSort={{ key: 'receipt_date', dir: 'desc' }}
     columns={[
       { key: 'receipt_no', header: 'Receipt no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.receipt_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.receipt_no}</span> },
       { key: 'receipt_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.receipt_date) },
       { key: 'party_name', header: 'Party' },
       { key: 'mode', header: 'Mode', render: (r: any) => <Badge tone="green">{humanize(r.mode)}</Badge> },
@@ -81,7 +81,7 @@ export function PaymentsPage() {
     defaultSort={{ key: 'payment_date', dir: 'desc' }}
     columns={[
       { key: 'payment_no', header: 'Payment no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.payment_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.payment_no}</span> },
       { key: 'payment_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.payment_date) },
       { key: 'party_name', header: 'Party' },
       { key: 'mode', header: 'Mode', render: (r: any) => <Badge tone="amber">{humanize(r.mode)}</Badge> },
@@ -116,7 +116,7 @@ export function LedgerAccountsPage() {
     defaultSort={{ key: 'account_code', dir: 'asc' }}
     columns={[
       { key: 'account_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.account_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.account_code}</span> },
       { key: 'account_name', header: 'Account name', sortable: true },
       { key: 'account_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.account_type)}</Badge> },
       { key: 'parent_name', header: 'Parent' },
@@ -144,7 +144,7 @@ export function TaxRatesPage() {
     defaultSort={{ key: 'tax_name', dir: 'asc' }}
     columns={[
       { key: 'tax_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.tax_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.tax_code}</span> },
       { key: 'tax_name', header: 'Tax name', sortable: true },
       { key: 'tax_type', header: 'Type', render: (r: any) => <Badge tone="violet">{r.tax_type}</Badge> },
       { key: 'rate_pct', header: 'Rate %', align: 'right',

@@ -143,7 +143,7 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
         <tbody>
           {dcs.map((d) => (
             <tr key={d.dc_no} className="border-t border-slate-100">
-              <td className="px-2 py-1 font-mono font-semibold text-brand-700">{d.dc_no}</td>
+              <td className="px-2 py-1 tabular-nums font-semibold text-brand-700">{d.dc_no}</td>
               <td className="px-2 py-1">{fmtDate(d.dc_date)}</td>
               <td className="px-2 py-1">{d.vendor_name ?? '—'}</td>
               <td className="px-2 py-1">{d.io_no || '—'}{Number(d.job_count) > 1 ? <span className="ml-1 text-slate-400">({d.job_count})</span> : null}</td>

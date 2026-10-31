@@ -35,7 +35,7 @@ export default function OpeningStockPage() {
   const [edit, setEdit] = useState<any | null>(null);
   const [view, setView] = useState<number | null>(null);
   const cols: Col[] = [
-    { key: 'doc_no', label: 'Doc no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.doc_no}</span> },
+    { key: 'doc_no', label: 'Doc no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.doc_no}</span> },
     { key: 'doc_date', label: 'Date', kind: 'date' }, { key: 'warehouse_name', label: 'Location' }, { key: 'party_name', label: 'Party' },
     { key: 'so_no', label: 'Job' }, { key: 'line_count', label: 'Items' }, { key: 'total_qty', label: 'Qty', kind: 'qty' }, { key: 'total_amount', label: 'Amount', kind: 'money' },
     { key: 'prepared_by', label: 'Prepared by' }, { key: 'status', label: 'Status', kind: 'status' },

@@ -522,29 +522,29 @@ export default function YarnGRNDetailPage() {
       <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200">
           <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Total Weighed</div>
-          <div className="text-lg font-bold text-amber-900 mt-0.5 font-mono">{fmtDecimal(totals.totalKg)} KG</div>
+          <div className="text-lg font-bold text-amber-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalKg)} KG</div>
         </div>
         <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
           <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Accepted Net Qty</div>
-          <div className="text-lg font-bold text-emerald-900 mt-0.5 font-mono">{fmtDecimal(totals.acceptedKg)} KG</div>
+          <div className="text-lg font-bold text-emerald-900 mt-0.5 tabular-nums">{fmtDecimal(totals.acceptedKg)} KG</div>
         </div>
         <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200">
           <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wider">Bags / Packs</div>
-          <div className="text-lg font-bold text-indigo-900 mt-0.5 font-mono">{totals.totalPacks} Bags</div>
+          <div className="text-lg font-bold text-indigo-900 mt-0.5 tabular-nums">{totals.totalPacks} Bags</div>
         </div>
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
           <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Taxable Value</div>
-          <div className="text-lg font-bold text-slate-900 mt-0.5 font-mono">₹{fmtDecimal(totals.taxableAmount, 2)}</div>
+          <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">₹{fmtDecimal(totals.taxableAmount, 2)}</div>
         </div>
         <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
           <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">
             {header.is_interstate ? 'IGST Amount' : 'CGST + SGST'}
           </div>
-          <div className="text-lg font-bold text-purple-900 mt-0.5 font-mono">₹{fmtDecimal(totals.totalTax, 2)}</div>
+          <div className="text-lg font-bold text-purple-900 mt-0.5 tabular-nums">₹{fmtDecimal(totals.totalTax, 2)}</div>
         </div>
         <div className="p-3 bg-amber-100/60 rounded-xl border border-amber-300">
           <div className="text-[11px] font-semibold text-amber-900 uppercase tracking-wider">Net Payable</div>
-          <div className="text-lg font-bold text-amber-950 mt-0.5 font-mono">₹{fmtDecimal(totals.grandTotal, 2)}</div>
+          <div className="text-lg font-bold text-amber-950 mt-0.5 tabular-nums">₹{fmtDecimal(totals.grandTotal, 2)}</div>
         </div>
       </div>
 
@@ -577,7 +577,7 @@ export default function YarnGRNDetailPage() {
             label="GRN No"
             value={isNew ? '(Auto-generated on Save)' : header.grn_no}
             disabled
-            className="font-mono font-bold text-amber-800 bg-amber-50/40"
+            className="tabular-nums font-bold text-amber-800 bg-amber-50/40"
           />
 
           <Input
@@ -625,7 +625,7 @@ export default function YarnGRNDetailPage() {
                     return (
                       <span key={pId} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-300">
                         <span>📋 {label}</span>
-                        {lineCnt > 0 && <span className="text-[10px] bg-amber-200 text-amber-900 px-1 rounded font-mono">{lineCnt} items</span>}
+                        {lineCnt > 0 && <span className="text-[10px] bg-amber-200 text-amber-900 px-1 rounded tabular-nums">{lineCnt} items</span>}
                         <button
                           type="button"
                           onClick={() => handleRemovePO(pId)}
@@ -822,12 +822,12 @@ export default function YarnGRNDetailPage() {
                 return (
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
                     {/* # S.No */}
-                    <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-[11px]">{idx + 1}</td>
 
                     {/* PO Ref */}
                     <td className="py-2.5 px-2">
                       {l.po_no || l.po_id ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] tabular-nums font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                           {l.po_no || `PO #${l.po_id}`}
                         </span>
                       ) : (
@@ -943,14 +943,14 @@ export default function YarnGRNDetailPage() {
                             type="text"
                             value={l.shade_code || l.color_name || ''}
                             onChange={(e) => updateLine(idx, { shade_code: e.target.value, color_name: e.target.value })}
-                            className="w-20 text-xs font-mono border border-purple-300 bg-purple-50/40 rounded px-1 py-1"
+                            className="w-20 text-xs tabular-nums border border-purple-300 bg-purple-50/40 rounded px-1 py-1"
                             placeholder="Shade"
                           />
                         ) : (
                           <span className="text-slate-400 text-xs block text-center">—</span>
                         )
                       ) : (
-                        <span className="font-mono text-slate-700 text-xs">{l.shade_code || l.color_name || '—'}</span>
+                        <span className="tabular-nums text-slate-700 text-xs">{l.shade_code || l.color_name || '—'}</span>
                       )}
                     </td>
                     <td className="py-2.5 px-2">
@@ -959,10 +959,10 @@ export default function YarnGRNDetailPage() {
                           type="text"
                           value={l.lot_no}
                           onChange={(e) => updateLine(idx, { lot_no: e.target.value })}
-                          className="w-20 text-xs font-mono border border-slate-300 rounded px-1.5 py-1"
+                          className="w-20 text-xs tabular-nums border border-slate-300 rounded px-1.5 py-1"
                         />
                       ) : (
-                        <span className="font-mono text-slate-700">{l.lot_no}</span>
+                        <span className="tabular-nums text-slate-700">{l.lot_no}</span>
                       )}
                     </td>
                     <td className="py-2.5 px-2 text-right text-slate-500 whitespace-nowrap">
@@ -1048,15 +1048,15 @@ export default function YarnGRNDetailPage() {
                           step="0.1"
                           value={l.rate}
                           onChange={(e) => updateLine(idx, { rate: parseFloat(e.target.value) || 0 })}
-                          className="w-16 text-xs text-right font-mono border border-slate-300 rounded px-1 py-1"
+                          className="w-16 text-xs text-right tabular-nums border border-slate-300 rounded px-1 py-1"
                         />
                       ) : (
-                        <span className="font-mono">₹{fmtDecimal(l.rate, 2)}</span>
+                        <span className="tabular-nums">₹{fmtDecimal(l.rate, 2)}</span>
                       )}
                     </td>
 
                     {/* Taxable Amount */}
-                    <td className="py-2.5 px-2 text-right font-mono font-medium text-slate-900">
+                    <td className="py-2.5 px-2 text-right tabular-nums font-medium text-slate-900">
                       ₹{fmtDecimal(l.taxable_amount, 2)}
                     </td>
 
@@ -1066,7 +1066,7 @@ export default function YarnGRNDetailPage() {
                         <select
                           value={l.gst_rate}
                           onChange={(e) => updateLine(idx, { gst_rate: parseFloat(e.target.value) || 5 })}
-                          className="w-16 text-xs text-center border border-slate-300 rounded px-1 py-1 bg-white font-mono"
+                          className="w-16 text-xs text-center border border-slate-300 rounded px-1 py-1 bg-white tabular-nums"
                         >
                           <option value="0">0%</option>
                           <option value="5">5%</option>
@@ -1075,17 +1075,17 @@ export default function YarnGRNDetailPage() {
                           <option value="28">28%</option>
                         </select>
                       ) : (
-                        <span className="font-mono">{l.gst_rate}%</span>
+                        <span className="tabular-nums">{l.gst_rate}%</span>
                       )}
                     </td>
 
                     {/* Tax Amount */}
-                    <td className="py-2.5 px-2 text-right font-mono text-purple-700">
+                    <td className="py-2.5 px-2 text-right tabular-nums text-purple-700">
                       ₹{fmtDecimal(lineTax, 2)}
                     </td>
 
                     {/* Total Amount */}
-                    <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">
+                    <td className="py-2.5 px-2 text-right tabular-nums font-bold text-slate-900">
                       ₹{fmtDecimal(l.total_amount, 2)}
                     </td>
 
@@ -1124,16 +1124,16 @@ export default function YarnGRNDetailPage() {
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
                 <td colSpan={9} className="py-3 px-3 text-right text-slate-600">Totals:</td>
-                <td className="py-3 px-2 text-right font-mono text-amber-800">{fmtDecimal(totals.totalKg, 2)}</td>
-                <td className="py-3 px-2 text-center font-mono">{totals.totalPacks}</td>
-                <td className="py-3 px-2 text-right font-mono text-emerald-800">{fmtDecimal(totals.acceptedKg, 2)}</td>
+                <td className="py-3 px-2 text-right tabular-nums text-amber-800">{fmtDecimal(totals.totalKg, 2)}</td>
+                <td className="py-3 px-2 text-center tabular-nums">{totals.totalPacks}</td>
+                <td className="py-3 px-2 text-right tabular-nums text-emerald-800">{fmtDecimal(totals.acceptedKg, 2)}</td>
                 <td colSpan={3} className="py-3 px-2 text-right text-slate-500 text-xs">Taxable Total:</td>
-                <td className="py-3 px-2 text-right font-mono">₹{fmtDecimal(totals.taxableAmount, 2)}</td>
+                <td className="py-3 px-2 text-right tabular-nums">₹{fmtDecimal(totals.taxableAmount, 2)}</td>
                 <td className="py-3 px-2 text-center text-xs text-slate-500">
                   {header.is_interstate ? 'IGST:' : 'CGST+SGST:'}
                 </td>
-                <td className="py-3 px-2 text-right font-mono text-purple-700">₹{fmtDecimal(totals.totalTax, 2)}</td>
-                <td className="py-3 px-2 text-right font-mono text-sm font-black text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-purple-700">₹{fmtDecimal(totals.totalTax, 2)}</td>
+                <td className="py-3 px-2 text-right tabular-nums text-sm font-black text-slate-900">
                   ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td colSpan={2}></td>

@@ -211,7 +211,7 @@ export function YarnsPage() {
               header: 'Base Code',
               sortable: true,
               render: (r: any) => (
-                <span className="font-mono text-[12px] font-semibold text-brand-700">
+                <span className="tabular-nums text-[12px] font-semibold text-brand-700">
                   {r.base_code}
                 </span>
               ),
@@ -253,7 +253,7 @@ export function YarnsPage() {
               header: 'Std Rate (₹)',
               align: 'right',
               render: (r: any) => (
-                <span className="font-mono text-xs font-semibold text-slate-800">
+                <span className="tabular-nums text-xs font-semibold text-slate-800">
                   {Number(r.std_rate) > 0 ? `₹${fmtDecimal(r.std_rate, 2)}` : '—'}
                 </span>
               ),
@@ -300,7 +300,7 @@ export function YarnsPage() {
               header: 'Item SKU Code',
               sortable: true,
               render: (r: any) => (
-                <span className="font-mono text-[12px] font-semibold text-brand-700">
+                <span className="tabular-nums text-[12px] font-semibold text-brand-700">
                   {r.yarn_code}
                 </span>
               ),
@@ -324,7 +324,7 @@ export function YarnsPage() {
               key: 'count_value',
               header: 'Count / Spec',
               render: (r: any) => (
-                <span className="font-mono font-semibold text-slate-800">
+                <span className="tabular-nums font-semibold text-slate-800">
                   {r.count_value || '—'} {r.count_type || 'Ne'}
                   {Number(r.ply) > 1 ? `/${r.ply}` : ''} {r.twist ? `(${r.twist})` : ''}
                 </span>
@@ -344,7 +344,7 @@ export function YarnsPage() {
               header: 'Std Rate (₹/Kg)',
               align: 'right',
               render: (r: any) => (
-                <span className="font-mono font-bold text-slate-900">
+                <span className="tabular-nums font-bold text-slate-900">
                   {r.std_rate ? `₹${fmtDecimal(r.std_rate, 2)}` : '—'}
                 </span>
               ),
@@ -774,7 +774,7 @@ export function YarnDetailPage() {
                 Formula: Composition + Cert + Yarn Type
               </span>
             </div>
-            <div className="font-mono text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
+            <div className="tabular-nums text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
               {liveYarnAutoDescription || '(Configure attributes to generate standardized description)'}
             </div>
           </div>
@@ -833,7 +833,7 @@ export function YarnDetailPage() {
                           value={f.percentage}
                           disabled={!editable}
                           onChange={(e) => handleUpdateFibre(f._key, 'percentage', e.target.value === '' ? '' : Number(e.target.value))}
-                          className="input py-1 px-2 text-right font-mono font-bold text-slate-900 text-xs w-full"
+                          className="input py-1 px-2 text-right tabular-nums font-bold text-slate-900 text-xs w-full"
                         >
                         </input>
                       </td>
@@ -857,7 +857,7 @@ export function YarnDetailPage() {
                     <td colSpan={2} className="py-2.5 px-3 text-slate-800 uppercase tracking-wider">
                       Total Composition
                     </td>
-                    <td className={`py-2.5 px-2 text-right font-mono font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    <td className={`py-2.5 px-2 text-right tabular-nums font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       {totalPercentage.toFixed(1)}%
                     </td>
                     {editable && <td />}
@@ -918,7 +918,7 @@ export function YarnDetailPage() {
                   })()}
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-2xl font-black text-slate-800 font-mono">{totalPercentage.toFixed(0)}%</span>
+                  <span className="text-2xl font-black text-slate-800 tabular-nums">{totalPercentage.toFixed(0)}%</span>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</span>
                 </div>
               </div>
@@ -934,7 +934,7 @@ export function YarnDetailPage() {
                       />
                       <span className="font-semibold text-slate-700">{f.fibre_name}</span>
                     </div>
-                    <span className="font-mono font-bold text-slate-900">{f.percentage}%</span>
+                    <span className="tabular-nums font-bold text-slate-900">{f.percentage}%</span>
                   </div>
                 ))}
               </div>

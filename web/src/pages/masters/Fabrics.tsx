@@ -333,7 +333,7 @@ export function FabricsPage() {
               sortable: true,
               render: (r: any) => (
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-brand-700">{r.base_code}</span>
+                  <span className="tabular-nums font-bold text-brand-700">{r.base_code}</span>
                   {r.image_url && (
                     <span className="flex h-5 w-5 items-center justify-center rounded bg-slate-100 text-slate-500" title="Has swatch image">
                       <ImageIcon size={12} />
@@ -445,7 +445,7 @@ export function FabricsPage() {
               header: 'Item SKU Code',
               sortable: true,
               render: (r: any) => (
-                <span className="font-mono font-bold text-brand-700">{r.fabric_code}</span>
+                <span className="tabular-nums font-bold text-brand-700">{r.fabric_code}</span>
               ),
             },
             {
@@ -467,7 +467,7 @@ export function FabricsPage() {
               key: 'gsm_value',
               header: 'GSM',
               render: (r: any) => (
-                <span className="inline-flex rounded bg-blue-50 px-2 py-0.5 font-mono text-xs font-bold text-blue-700">
+                <span className="inline-flex rounded bg-blue-50 px-2 py-0.5 tabular-nums text-xs font-bold text-blue-700">
                   {r.gsm_value ? `${r.gsm_value} GSM` : '—'}
                 </span>
               ),
@@ -485,7 +485,7 @@ export function FabricsPage() {
               key: 'gauge',
               header: 'Gauge',
               render: (r: any) => (
-                <span className="font-mono text-xs font-semibold text-slate-600">
+                <span className="tabular-nums text-xs font-semibold text-slate-600">
                   {r.gauge || '24 GG'}
                 </span>
               ),
@@ -503,7 +503,7 @@ export function FabricsPage() {
               key: 'std_rate',
               header: 'Std Rate (₹/Kg)',
               render: (r: any) => (
-                <span className="font-mono text-xs font-bold text-slate-900">
+                <span className="tabular-nums text-xs font-bold text-slate-900">
                   ₹{fmtDecimal(r.std_rate, 2)}
                 </span>
               ),
@@ -1077,11 +1077,11 @@ export function FabricDetailPage() {
                 disabled={!editable}
                 onChange={(e) => setHead({ ...head, base_code: e.target.value.toUpperCase() })}
                 placeholder="e.g. FB-00001"
-                className="font-mono font-bold text-brand-700"
+                className="tabular-nums font-bold text-brand-700"
               />
               <button
                 type="button"
-                className="btn-secondary px-2 text-xs font-mono font-bold"
+                className="btn-secondary px-2 text-xs tabular-nums font-bold"
                 title="Auto Generate Code"
                 onClick={() => setHead({ ...head, base_code: `FB-${Math.floor(1000 + Math.random() * 9000)}` })}
               >
@@ -1153,7 +1153,7 @@ export function FabricDetailPage() {
               disabled={!editable}
               onChange={(e) => setHead({ ...head, loss_percent: e.target.value })}
               placeholder="0.00"
-              className="font-mono text-xs"
+              className="tabular-nums text-xs"
             />
           </div>
 
@@ -1164,7 +1164,7 @@ export function FabricDetailPage() {
               disabled={!editable}
               onChange={(e) => setHead({ ...head, hsn_code: e.target.value })}
               placeholder="6006"
-              className="font-mono text-xs"
+              className="tabular-nums text-xs"
             />
           </div>
 
@@ -1216,7 +1216,7 @@ export function FabricDetailPage() {
                 Formula: Composition + Effect + Construction / Structure
               </span>
             </div>
-            <div className="font-mono text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
+            <div className="tabular-nums text-xs font-bold text-slate-900 bg-white border border-brand-200 rounded p-2 shadow-xs">
               {liveAutoDescription || '(Select attributes to generate standardized description)'}
             </div>
           </div>
@@ -1238,7 +1238,7 @@ export function FabricDetailPage() {
               disabled={!editable}
               onChange={(e) => setHead({ ...head, legacy_description: e.target.value })}
               placeholder="e.g. 100% COTTON Y/D SLUB JERSEY GSM:160 (Raw text from old ERP)"
-              className="font-mono text-xs text-slate-600 bg-slate-50"
+              className="tabular-nums text-xs text-slate-600 bg-slate-50"
             />
           </div>
         </div>
@@ -1313,7 +1313,7 @@ export function FabricDetailPage() {
                                   percentage: e.target.value === '' ? '' : parseFloat(e.target.value) || 0,
                                 })
                               }
-                              className="input py-1 px-2 text-right font-mono font-bold text-xs w-full pr-6"
+                              className="input py-1 px-2 text-right tabular-nums font-bold text-xs w-full pr-6"
                             />
                             <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">%</span>
                           </div>
@@ -1338,7 +1338,7 @@ export function FabricDetailPage() {
                     <td colSpan={2} className="py-2.5 px-2 text-right text-xs uppercase text-slate-600">
                       Total Percentage:
                     </td>
-                    <td className={`py-2.5 px-2 text-right font-mono font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    <td className={`py-2.5 px-2 text-right tabular-nums font-black text-sm ${isValid100 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       {totalPercentage.toFixed(1)}%
                     </td>
                     {editable && <td />}
@@ -1400,7 +1400,7 @@ export function FabricDetailPage() {
                   })()}
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                  <span className={`text-xl font-black font-mono ${isValid100 ? 'text-slate-800' : 'text-rose-600'}`}>
+                  <span className={`text-xl font-black tabular-nums ${isValid100 ? 'text-slate-800' : 'text-rose-600'}`}>
                     {totalPercentage.toFixed(0)}%
                   </span>
                   <span className="text-[10px] uppercase font-bold text-slate-400">Composition</span>
@@ -1420,7 +1420,7 @@ export function FabricDetailPage() {
                     >
                       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
                       <span className="truncate max-w-[110px]">{item.fibre_name || 'Fibre'}</span>
-                      <span className="font-mono font-bold text-slate-900">{pct}%</span>
+                      <span className="tabular-nums font-bold text-slate-900">{pct}%</span>
                     </div>
                   );
                 })}
@@ -1534,7 +1534,7 @@ export function FabricDetailPage() {
                       value={v.fabric_code}
                       disabled={!editable}
                       onChange={(e) => handleUpdateVariant(v._key, 'fabric_code', e.target.value)}
-                      className="input py-1 px-2 font-mono font-bold text-brand-700 text-xs w-full"
+                      className="input py-1 px-2 tabular-nums font-bold text-brand-700 text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1">
@@ -1553,7 +1553,7 @@ export function FabricDetailPage() {
                       disabled={!editable}
                       title="GSM (GSM master)"
                       onChange={(e) => handleUpdateVariant(v._key, 'gsm_id', e.target.value ? Number(e.target.value) : '')}
-                      className="input py-1 px-1 font-mono font-bold text-xs w-full min-w-[72px]"
+                      className="input py-1 px-1 tabular-nums font-bold text-xs w-full min-w-[72px]"
                     >
                       <option value="">GSM</option>
                       {(gsmList.data || []).map((g: any) => <option key={g.id} value={g.id}>{Number(g.code)}</option>)}
@@ -1568,7 +1568,7 @@ export function FabricDetailPage() {
                         value={v.min_gsm}
                         disabled={!editable}
                         onChange={(e) => handleUpdateVariant(v._key, 'min_gsm', e.target.value)}
-                        className="input py-1 px-1 font-mono text-center text-xs w-1/2"
+                        className="input py-1 px-1 tabular-nums text-center text-xs w-1/2"
                       />
                       <span className="text-slate-400">-</span>
                       <input
@@ -1578,7 +1578,7 @@ export function FabricDetailPage() {
                         value={v.max_gsm}
                         disabled={!editable}
                         onChange={(e) => handleUpdateVariant(v._key, 'max_gsm', e.target.value)}
-                        className="input py-1 px-1 font-mono text-center text-xs w-1/2"
+                        className="input py-1 px-1 tabular-nums text-center text-xs w-1/2"
                       />
                     </div>
                   </td>
@@ -1591,7 +1591,7 @@ export function FabricDetailPage() {
                         value={v.grey_width}
                         disabled={!editable}
                         onChange={(e) => handleUpdateVariant(v._key, 'grey_width', e.target.value)}
-                        className="input py-1 px-1 font-mono text-center text-xs w-1/3"
+                        className="input py-1 px-1 tabular-nums text-center text-xs w-1/3"
                       />
                       <input
                         type="number"
@@ -1600,7 +1600,7 @@ export function FabricDetailPage() {
                         value={v.finished_width}
                         disabled={!editable}
                         onChange={(e) => handleUpdateVariant(v._key, 'finished_width', e.target.value)}
-                        className="input py-1 px-1 font-mono text-center text-xs w-1/3"
+                        className="input py-1 px-1 tabular-nums text-center text-xs w-1/3"
                       />
                       <input
                         type="number"
@@ -1609,7 +1609,7 @@ export function FabricDetailPage() {
                         value={v.usable_width}
                         disabled={!editable}
                         onChange={(e) => handleUpdateVariant(v._key, 'usable_width', e.target.value)}
-                        className="input py-1 px-1 font-mono text-center text-xs w-1/3"
+                        className="input py-1 px-1 tabular-nums text-center text-xs w-1/3"
                       />
                     </div>
                   </td>
@@ -1630,7 +1630,7 @@ export function FabricDetailPage() {
                       disabled={!editable}
                       title="Dia (Dia master)"
                       onChange={(e) => handleUpdateVariant(v._key, 'dia_inch', e.target.value ? Number(e.target.value) : '')}
-                      className="input py-1 px-1 font-mono text-xs w-full min-w-[64px]"
+                      className="input py-1 px-1 tabular-nums text-xs w-full min-w-[64px]"
                     >
                       <option value="">Dia</option>
                       {Number(v.dia_inch) > 0 && !(diaList.data || []).some((d: any) => Number(d.code) === Number(v.dia_inch)) && (
@@ -1646,7 +1646,7 @@ export function FabricDetailPage() {
                       value={v.gauge}
                       disabled={!editable}
                       onChange={(e) => handleUpdateVariant(v._key, 'gauge', e.target.value)}
-                      className="input py-1 px-1 font-mono text-center text-xs w-full"
+                      className="input py-1 px-1 tabular-nums text-center text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1 text-right">
@@ -1657,7 +1657,7 @@ export function FabricDetailPage() {
                       value={v.std_rate}
                       disabled={!editable}
                       onChange={(e) => handleUpdateVariant(v._key, 'std_rate', e.target.value)}
-                      className="input py-1 px-2 font-mono font-bold text-right text-xs w-full"
+                      className="input py-1 px-2 tabular-nums font-bold text-right text-xs w-full"
                     />
                   </td>
                   <td className="py-1 px-1 text-center">

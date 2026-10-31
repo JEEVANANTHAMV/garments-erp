@@ -224,7 +224,7 @@ export default function CadRequirementsPage() {
                       <div className="flex items-center gap-1.5 font-semibold text-indigo-700">
                         <span>{r.req_no}</span>
                         {r.cad_version && (
-                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200 text-indigo-800">
+                          <span className="text-[10px] tabular-nums font-bold px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200 text-indigo-800">
                             {r.cad_version}
                           </span>
                         )}
@@ -245,7 +245,7 @@ export default function CadRequirementsPage() {
                         {r.cad_type || 'KNIT_SJ'}
                       </Badge>
                     </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-700">
+                    <td className="py-3 px-3 tabular-nums text-[11px] text-slate-700">
                       {r.internal_ir_no || '—'}
                     </td>
                     <td className="py-3 px-3 text-slate-800 font-medium">

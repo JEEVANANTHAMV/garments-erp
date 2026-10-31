@@ -73,7 +73,7 @@ function VarianceTab() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className={`border-t border-slate-100 ${r.gsm_flag ? 'bg-orange-50/60' : ''}`}>
-                    <td className="px-2 py-1 font-mono">{r.roll_no}</td><td className="px-2 py-1 font-mono">{r.grn_no}</td><td className="px-2 py-1">{fmtDate(r.grn_date)}</td>
+                    <td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1 tabular-nums">{r.grn_no}</td><td className="px-2 py-1">{fmtDate(r.grn_date)}</td>
                     <td className="px-2 py-1">{r.io_no ?? '—'}</td><td className="px-2 py-1">{r.fabric_name}</td><td className="px-2 py-1">{r.dia ?? '—'}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{r.width_m ? Number(r.width_m).toFixed(3) : '—'}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{fmtDecimal(r.weight_kg, 3)}</td>
@@ -125,7 +125,7 @@ function RulesTab() {
           <thead className="bg-slate-50 text-slate-500"><tr>{['Rule', 'Form', 'What "Dia" means', 'Formula', 'Factor', 'Effective', 'Status', 'In use', ''].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
           <tbody>{(q.data ?? []).map((r: any) => (
             <tr key={r.id} className="border-t border-slate-100">
-              <td className="px-3 py-1.5 font-mono font-semibold">{r.rule_code}</td><td className="px-3 py-1.5">{FORM_LABEL[r.fabric_form as keyof typeof FORM_LABEL]}</td>
+              <td className="px-3 py-1.5 tabular-nums font-semibold">{r.rule_code}</td><td className="px-3 py-1.5">{FORM_LABEL[r.fabric_form as keyof typeof FORM_LABEL]}</td>
               <td className="px-3 py-1.5">{r.dia_definition}</td><td className="px-3 py-1.5">{r.formula_type}</td><td className="px-3 py-1.5 tabular-nums">{fmtDecimal(k(r), 4)}</td>
               <td className="px-3 py-1.5">{fmtDate(r.effective_from)}{r.effective_to ? ` – ${fmtDate(r.effective_to)}` : ' →'}</td>
               <td className="px-3 py-1.5"><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.approval_status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{r.approval_status}</span>{!r.is_active ? <span className="ml-1 text-slate-400">inactive</span> : null}</td>

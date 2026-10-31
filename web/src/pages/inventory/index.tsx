@@ -51,19 +51,19 @@ export function StockPage() {
       <DataTable
         columns={[
           { key: 'item_code', header: 'Item code',
-            render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.item_code}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.item_code}</span> },
           { key: 'item_name', header: 'Item', render: (r: any) => <span className="font-medium">{r.item_name}</span> },
           { key: 'material_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.material_type)}</Badge> },
           { key: 'warehouse_name', header: 'Warehouse' },
           { key: 'location', header: 'Rack / Bin',
             render: (r: any) => r.bin_code
-              ? <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+              ? <span className="tabular-nums text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                   {r.rack ? `Rack ${r.rack} / ` : ''}{r.bin_code}
                 </span>
               : <span className="text-slate-400">—</span> },
           { key: 'batch_no', header: 'Batch / Lot',
             render: (r: any) => r.batch_no
-              ? <span className="font-mono text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
+              ? <span className="tabular-nums text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
               : <span className="text-slate-400">—</span> },
           { key: 'total_in', header: 'In', align: 'right', render: (r: any) => fmtDecimal(r.total_in, 3) },
           { key: 'total_out', header: 'Out', align: 'right', render: (r: any) => fmtDecimal(r.total_out, 3) },
@@ -183,11 +183,11 @@ export function StockLedgerPage() {
           { key: 'job_no', header: 'Job', render: (r: any) => r.job_no ? <span className="font-semibold">{r.job_no}</span> : <span className="text-slate-400">{r.txn_type?.startsWith('TRANSFER') ? 'General' : '—'}</span> },
           { key: 'location', header: 'Rack / Bin',
             render: (r: any) => r.bin_code
-              ? <span className="font-mono text-xs text-slate-700">{r.rack ? `R-${r.rack} / ` : ''}{r.bin_code}</span>
+              ? <span className="tabular-nums text-xs text-slate-700">{r.rack ? `R-${r.rack} / ` : ''}{r.bin_code}</span>
               : <span className="text-slate-400">—</span> },
           { key: 'batch_no', header: 'Batch / Lot',
             render: (r: any) => r.batch_no
-              ? <span className="font-mono text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
+              ? <span className="tabular-nums text-xs text-brand-700">{r.batch_no}{r.shade_lot ? ` (${r.shade_lot})` : ''}</span>
               : <span className="text-slate-400">—</span> },
           { key: 'ref', header: 'Reference',
             render: (r: any) => <span className="text-[11.5px] text-slate-500">{r.ref_type} #{r.ref_id}</span> },

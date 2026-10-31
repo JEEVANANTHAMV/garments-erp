@@ -10,7 +10,7 @@ export function DailyProductionPlansPage() {
     defaultSort={{ key: 'plan_date', dir: 'desc' }}
     columns={[
       { key: 'plan_no', header: 'Plan no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.plan_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.plan_no}</span> },
       { key: 'plan_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.plan_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'style_code', header: 'Style',
@@ -69,7 +69,7 @@ export function DailyOutputsPage() {
     defaultSort={{ key: 'output_date', dir: 'desc' }}
     columns={[
       { key: 'output_no', header: 'Output no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.output_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.output_no}</span> },
       { key: 'output_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.output_date) },
       { key: 'po_prod_no', header: 'Work order' },
       { key: 'style_code', header: 'Style' },

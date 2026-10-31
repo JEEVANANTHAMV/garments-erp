@@ -74,7 +74,7 @@ export function ProcessMasterPage() {
                   <span className="w-8 text-xs text-slate-400">{st.sort_order}</span>
                   <span className="flex-1">
                     <span className="font-semibold text-slate-800">{st.stage_name}</span>
-                    <span className="ml-2 font-mono text-[11px] text-slate-400">{st.stage_code}</span>
+                    <span className="ml-2 tabular-nums text-[11px] text-slate-400">{st.stage_code}</span>
                   </span>
                   {!!st.bill_include_mistake && <Badge tone="amber">Bill incl. mistake</Badge>}
                   {!st.is_active && <Badge tone="slate">Inactive</Badge>}
@@ -97,7 +97,7 @@ export function ProcessMasterPage() {
               columns={[
                 { key: 'sort_order', header: '#', render: (o: any) => <span className="text-slate-400">{o.sort_order}</span> },
                 { key: 'op_name', header: 'Operation', render: (o: any) => <span className="font-medium">{o.op_name}</span> },
-                { key: 'op_code', header: 'Code', render: (o: any) => <span className="font-mono text-[11px]">{o.op_code}</span> },
+                { key: 'op_code', header: 'Code', render: (o: any) => <span className="tabular-nums text-[11px]">{o.op_code}</span> },
                 { key: 'default_rate', header: 'Default rate (₹ / PCS)', align: 'right' as const, render: (o: any) => num(o.default_rate).toFixed(2) },
                 { key: 'is_active', header: 'Status', render: (o: any) => o.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },
               ]} />
@@ -276,7 +276,7 @@ export function ContractorBillsPage() {
       <Card>
         <DataTable data={rows} loading={loading} emptyTitle="No contractor bills yet" onRowClick={(r: any) => setOpenId(r.id)}
           columns={[
-            { key: 'bill_no', header: 'Bill no', render: (r: any) => <span className="font-mono text-[12px] font-semibold text-brand-700">{r.bill_no}</span> },
+            { key: 'bill_no', header: 'Bill no', render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.bill_no}</span> },
             { key: 'bill_date', header: 'Date', render: (r: any) => fmtDate(r.bill_date) },
             { key: 'vendor_name', header: 'Contractor', render: (r: any) => <span>{r.vendor_name}{r.is_contractor ? <Badge tone="amber" className="ml-1">In-house</Badge> : null}</span> },
             { key: 'period', header: 'Period', render: (r: any) => r.period_from || r.period_to ? `${fmtDate(r.period_from)} – ${fmtDate(r.period_to)}` : '—' },
@@ -456,8 +456,8 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
                     const s2 = new Set(cur); if (s2.has(r.receipt_id)) s2.delete(r.receipt_id); else s2.add(r.receipt_id); return s2;
                   })} />
                 </td>
-                <td className="px-2 py-1"><span className="font-mono">{r.receipt_no}</span><span className="block text-[11px] text-slate-400">{fmtDate(r.receipt_date)}</span></td>
-                <td className="px-2 py-1"><span className="font-mono">{r.challan_no}</span> · {r.stage_name}{r.operations && <span className="block text-[11px] text-slate-400">{r.operations}</span>}</td>
+                <td className="px-2 py-1"><span className="tabular-nums">{r.receipt_no}</span><span className="block text-[11px] text-slate-400">{fmtDate(r.receipt_date)}</span></td>
+                <td className="px-2 py-1"><span className="tabular-nums">{r.challan_no}</span> · {r.stage_name}{r.operations && <span className="block text-[11px] text-slate-400">{r.operations}</span>}</td>
                 <td className="px-2 py-1">{(r.jobs || []).map((j: any) => <span key={j.io_no} className="block">{j.io_no}: {fmtNumber(j.qty)} × ₹{num(j.rate).toFixed(2)}</span>)}{!(r.jobs || []).length && (r.io_list ?? '—')}</td>
                 <td className="px-2 py-1 text-right text-slate-500">Good {fmtNumber(r.received_qty)}{r.rejected_qty ? <span className="text-red-600 block">Mistake {r.rejected_qty}</span> : null}</td>
                 <td className="px-2 py-1 text-right font-semibold"><span className="text-brand-700">{fmtNumber(r.billed_qty)}</span><span className="block text-[10px] text-slate-400">{r.bill_basis_label ?? r.bill_basis}</span></td>
@@ -488,7 +488,7 @@ function BillEditor({ billId, onClose, onSaved }: { billId?: number; onClose: ()
           {dns.map((d) => (
             <label key={d.id} className="flex items-center gap-2 py-0.5">
               <input type="checkbox" checked={dnSel.has(Number(d.id))} onChange={() => setDnSel((cur) => { const s2 = new Set(cur); s2.has(Number(d.id)) ? s2.delete(Number(d.id)) : s2.add(Number(d.id)); return s2; })} />
-              <span className="font-mono">{d.dn_no}</span> {fmtDate(d.dn_date)} · {d.reason}{d.io_no ? ` · ${d.io_no}` : ''} · <b>{money(d.amount)}</b>
+              <span className="tabular-nums">{d.dn_no}</span> {fmtDate(d.dn_date)} · {d.reason}{d.io_no ? ` · ${d.io_no}` : ''} · <b>{money(d.amount)}</b>
             </label>
           ))}
         </div>
@@ -554,8 +554,8 @@ function BillDetail({ id, onClose, onChanged, onRevise }: { id: number; onClose:
         <tbody>
           {b.lines.map((l: any) => (
             <tr key={l.id} className="border-t border-slate-100">
-              <td className="px-2 py-1 font-mono">{l.receipt_no}</td><td className="px-2 py-1">{fmtDate(l.receipt_date)}</td>
-              <td className="px-2 py-1 font-mono">{l.challan_no}</td>
+              <td className="px-2 py-1 tabular-nums">{l.receipt_no}</td><td className="px-2 py-1">{fmtDate(l.receipt_date)}</td>
+              <td className="px-2 py-1 tabular-nums">{l.challan_no}</td>
               <td className="px-2 py-1">{l.stage_name}{l.operations && <span className="block text-[11px] text-slate-400">{l.operations}</span>}</td>
               <td className="px-2 py-1">{l.io_list ?? '—'}</td>
               <td className="px-2 py-1 text-right">{fmtNumber(l.good_qty)}</td><td className="px-2 py-1 text-right">{fmtNumber(l.mistake_qty)}</td>

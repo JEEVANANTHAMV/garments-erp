@@ -136,7 +136,7 @@ export default function ProcessExecutionPage() {
         <>
           <div className="card flex flex-wrap items-center justify-between gap-2 p-3">
             <div className="text-[12px]">
-              <span className="font-mono font-semibold text-brand-700">
+              <span className="tabular-nums font-semibold text-brand-700">
                 {selected?.[DOC_SOURCE[srcType].no]}
               </span>
               <span className="ml-2 text-slate-500">{DOC_SOURCE[srcType].extra?.(selected) ?? ''}</span>
@@ -388,7 +388,7 @@ function ReceiptModal({ open, onClose, srcType, srcId, warehouses, onSaved }: an
       icon={<PackagePlus size={16} />}
       footerStart={<>
         <span className="font-semibold text-slate-600">Process loss (derived): </span>
-        <span className="font-mono font-bold text-slate-900">{fmtDecimal(loss, 3)}</span>
+        <span className="tabular-nums font-bold text-slate-900">{fmtDecimal(loss, 3)}</span>
         <span className="ml-2 text-[10px] text-slate-500">input − output − rejected</span>
       </>}
       footer={<Footer saving={saving} onClose={onClose} onSave={save} label="Record" id="btn-save-receipt" />}>

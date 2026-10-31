@@ -92,7 +92,7 @@ export function PlanningReportsPage() {
                 {pva.rows.map((r: any) => (
                   <tr key={`${r.date}-${r.line_id}`} className="border-t border-slate-100">
                     <td className="px-3 py-1.5">{fmtDate(r.date)}</td>
-                    <td className="px-3 py-1.5 font-mono text-brand-700">{r.line_code}</td>
+                    <td className="px-3 py-1.5 tabular-nums text-brand-700">{r.line_code}</td>
                     <td className="px-3 py-1.5">{fmtNumber(r.planned)}</td>
                     <td className="px-3 py-1.5 font-medium text-emerald-700">{fmtNumber(r.good)}</td>
                     <td className="px-3 py-1.5 text-amber-700">{fmtNumber(r.rework)}</td>
@@ -127,7 +127,7 @@ export function PlanningReportsPage() {
             <tbody>
               {util.map((r) => (
                 <tr key={r.line_id} className="border-t border-slate-100">
-                  <td className="px-3 py-1.5 font-mono text-brand-700">{r.line_code}</td><td className="px-3 py-1.5">{r.supervisor_name || '—'}</td>
+                  <td className="px-3 py-1.5 tabular-nums text-brand-700">{r.line_code}</td><td className="px-3 py-1.5">{r.supervisor_name || '—'}</td>
                   <td className="px-3 py-1.5">{fmtNumber(r.capacity)}</td><td className="px-3 py-1.5">{fmtNumber(r.allocated)}</td>
                   <td className="px-3 py-1.5">{fmtNumber(r.planned)}</td><td className="px-3 py-1.5 font-medium text-emerald-700">{fmtNumber(r.actual)}</td>
                   <td className="px-3 py-1.5"><UtilBar value={r.allocation_util_pct} width="w-14" /></td>

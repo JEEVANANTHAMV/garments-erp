@@ -193,7 +193,7 @@ export default function YarnGRNsPage() {
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-slate-800">{g.po_no || '—'}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{g.internal_ir_no || '—'}</div>
+                      <div className="text-[10px] text-slate-500 tabular-nums">{g.internal_ir_no || '—'}</div>
                     </td>
                     <td className="py-3 px-3">
                       {g.gate_entry_no ? (
@@ -211,7 +211,7 @@ export default function YarnGRNsPage() {
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-mono text-[11px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <span className="tabular-nums text-[11px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
                         {g.style_code || 'GEN'}
                       </span>
                     </td>

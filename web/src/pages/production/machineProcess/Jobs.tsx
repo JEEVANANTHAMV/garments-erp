@@ -37,7 +37,7 @@ export function JobsTab({ kind, onNewProduction, onOpenProduction }: { kind: Kin
       </div>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No jobs" onRowClick={(r: any) => setOpen(r.id)}
         columns={[
-          { key: 'job_no', header: 'Job', render: (r: any) => <span className="font-mono font-semibold text-brand-700" id={`mp-job-${r.job_no}`}>{r.job_no}</span> },
+          { key: 'job_no', header: 'Job', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700" id={`mp-job-${r.job_no}`}>{r.job_no}</span> },
           { key: 'job_date', header: 'Date', render: (r: any) => fmtDate(r.job_date) },
           { key: 'io', header: 'IO / style', render: (r: any) => <span>{r.io_no ?? '—'}{r.style_code ? <span className="text-slate-500"> · {r.style_code}</span> : null}{r.color_name ? <span className="text-slate-400"> · {r.color_name}</span> : null}</span> },
           { key: 'buyer_name', header: 'Buyer' },
@@ -219,7 +219,7 @@ export function JobDetail({ kind, id, onClose, onEdit, onNewProduction, onOpenPr
           </Section>
           <Section title="Production entries">
             <MiniTable rows={j.productions ?? []} empty="No production entered" cols={[
-              { h: 'Entry', r: (x) => <button className="font-mono text-brand-700 hover:underline" onClick={() => onOpenProduction(x.id)}>{x.production_no}</button> },
+              { h: 'Entry', r: (x) => <button className="tabular-nums text-brand-700 hover:underline" onClick={() => onOpenProduction(x.id)}>{x.production_no}</button> },
               { h: 'Date', r: (x) => `${fmtDate(x.prod_date)} ${x.shift_code ?? ''}` }, { h: 'Machine', r: (x) => x.machine_code },
               { h: 'Time', r: (x) => `${String(x.start_at).slice(11)}–${String(x.end_at).slice(11)}` },
               { h: 'Input', right: true, r: (x) => qty(x.input_qty) }, { h: 'Good', right: true, r: (x) => qty(x.good_qty) }, { h: 'Reject', right: true, r: (x) => qty(x.reject_qty) },

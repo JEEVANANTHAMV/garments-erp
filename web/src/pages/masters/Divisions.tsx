@@ -14,7 +14,7 @@ export function DivisionsPage() {
     defaultSort={{ key: 'division_name', dir: 'asc' }}
     columns={[
       { key: 'division_code', header: 'Code', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.division_code}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.division_code}</span> },
       { key: 'division_name', header: 'Division', sortable: true },
       { key: 'billing_name', header: 'Billing name (on invoice)' },
       { key: 'process_type', header: 'Process', render: (r: any) => <Badge tone="violet">{humanize(r.process_type)}</Badge> },

@@ -111,7 +111,7 @@ export function PolybagEntryPage() {
                 <table className="w-full text-[12.5px]" id="bundle-pick">
                   <thead><tr><th className="th">Bundle</th><th className="th">Colour / size</th><th className="th text-right">Ready</th><th className="th text-right">Bagged</th><th className="th text-right">Can bag</th><th className="th text-right">Packed</th><th className="th" /></tr></thead>
                   <tbody>{bundles.data.map((b) => (
-                    <tr key={b.id}><td className="td font-mono">{b.bundle_no}</td><td className="td">{b.color_name} / {b.size_code}</td><td className="td text-right">{b.ready}{b.qc_pending ? <span className="ml-1 text-[11px] text-amber-700">QC {b.qc_pending}</span> : null}</td>
+                    <tr key={b.id}><td className="td tabular-nums">{b.bundle_no}</td><td className="td">{b.color_name} / {b.size_code}</td><td className="td text-right">{b.ready}{b.qc_pending ? <span className="ml-1 text-[11px] text-amber-700">QC {b.qc_pending}</span> : null}</td>
                       <td className="td text-right">{b.bagged_open}</td><td className="td text-right font-medium">{b.baggable}</td><td className="td text-right">{b.packed}</td>
                       <td className="td text-right">{b.baggable > 0 && can('PACKING.CREATE') && <Button size="sm" variant="secondary" disabled={busy} data-bag-bundle={b.id} title={pieces ? `Bag ${pieces} pcs` : `Bag all ${b.baggable} pcs in ${Math.ceil(b.baggable / ppp)} polybag(s)`} onClick={() => submit({ bundle_id: b.id, bag_all: true })}>Bag</Button>}</td></tr>
                   ))}</tbody>
@@ -126,7 +126,7 @@ export function PolybagEntryPage() {
                 <table className="w-full text-[12.5px]" id="polybag-entries">
                   <thead><tr><th className="th">Time</th><th className="th">Bundle</th><th className="th">Colour / size</th><th className="th text-right">Pcs</th><th className="th text-right">Bags</th><th className="th text-right">In cartons</th><th className="th">Operator</th><th className="th">Status</th><th className="th" /></tr></thead>
                   <tbody>{entries.data.map((b) => (
-                    <tr key={b.id} className={b.status === 'VOID' ? 'opacity-50' : ''}><td className="td">{fmtDateTime(b.created_at)}</td><td className="td font-mono">{b.bundle_no ?? <span className="font-sans text-slate-400">FG store</span>}</td><td className="td">{b.color_name} / {b.size_code}</td>
+                    <tr key={b.id} className={b.status === 'VOID' ? 'opacity-50' : ''}><td className="td">{fmtDateTime(b.created_at)}</td><td className="td tabular-nums">{b.bundle_no ?? <span className="font-sans text-slate-400">FG store</span>}</td><td className="td">{b.color_name} / {b.size_code}</td>
                       <td className="td text-right">{fmtNumber(b.pieces)}</td><td className="td text-right">{b.polybag_qty}</td><td className="td text-right">{b.cartoned_qty}</td><td className="td">{b.operator_name}</td><td className="td"><PkStatus value={b.status} /></td>
                       <td className="td text-right">{b.status === 'OPEN' && !n(b.cartoned_qty) && can('PACKING.UPDATE') && <button className="text-[12px] text-red-600 hover:underline" onClick={() => setVoiding(b)}>Void</button>}</td></tr>
                   ))}</tbody>

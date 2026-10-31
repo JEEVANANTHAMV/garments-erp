@@ -44,7 +44,7 @@ export function PackingOrdersPage() {
               <tbody>
                 {orders.data.map((o) => (
                   <tr key={o.id} className="row-hover cursor-pointer" onClick={() => nav(`/logistics/packing/orders/${o.id}`)}>
-                    <td className="td font-mono font-medium text-brand-700"><Link to={`/logistics/packing/orders/${o.id}`}>{o.pack_no}</Link></td>
+                    <td className="td tabular-nums font-medium text-brand-700"><Link to={`/logistics/packing/orders/${o.id}`}>{o.pack_no}</Link></td>
                     <td className="td">{fmtDate(o.pack_date)}</td>
                     <td className="td">{o.job_no}{o.buyer_po_no ? <div className="text-[11px] text-slate-400">PO {o.buyer_po_no}</div> : null}</td>
                     <td className="td">{o.buyer_name}</td>

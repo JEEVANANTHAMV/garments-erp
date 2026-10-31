@@ -197,7 +197,7 @@ function ColorMultiSelect({
                       />
                       <span>{c.label}</span>
                       {c.code && (
-                        <span className="text-[10px] text-slate-400 font-mono">({c.code})</span>
+                        <span className="text-[10px] text-slate-400 tabular-nums">({c.code})</span>
                       )}
                     </div>
 
@@ -254,11 +254,11 @@ export function StylesPage() {
               <ImageThumbnail url={r.image_url} alt={r.style_code} title={`${r.style_code} — ${r.style_name}`} size="md" />
             ) },
           { key: 'style_code', header: 'Style code', sortable: true,
-            render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.style_code}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.style_code}</span> },
           { key: 'style_name', header: 'Name', sortable: true,
             render: (r: any) => <span className="font-medium text-slate-800">{r.style_name}</span> },
           { key: 'version_no', header: 'Version', width: '75px',
-            render: (r: any) => <span className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">v{r.version_no || 1}</span> },
+            render: (r: any) => <span className="tabular-nums text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">v{r.version_no || 1}</span> },
           { key: 'product_name', header: 'Product' },
           { key: 'buyer_name', header: 'Buyer' },
           { key: 'season', header: 'Season' },
@@ -384,7 +384,7 @@ export function StyleDetailPage() {
             )}
             <span>{isNew ? 'New Style' : d?.style_code ?? 'Style'}</span>
             {!isNew && (
-              <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+              <span className="tabular-nums text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                 v{d?.version_no || 1}
               </span>
             )}
@@ -496,7 +496,7 @@ export function StyleDetailPage() {
                 <tbody>
                   {[...d.skus, ...(showRetired ? d.retired_skus ?? [] : [])].map((s: any) => (
                     <tr key={s.id} className={Number(s.is_active) ? 'row-hover' : 'opacity-60'} data-sku={s.sku_code}>
-                      <td className="td font-mono text-[12px] text-brand-700">{s.sku_code}</td>
+                      <td className="td tabular-nums text-[12px] text-brand-700">{s.sku_code}</td>
                       <td className="td">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="inline-block h-3.5 w-3.5 rounded border border-slate-200"
@@ -505,7 +505,7 @@ export function StyleDetailPage() {
                         </span>
                       </td>
                       <td className="td">{s.size_label}</td>
-                      <td className="td font-mono text-[11.5px] text-slate-500">{s.barcode ?? '—'}</td>
+                      <td className="td tabular-nums text-[11.5px] text-slate-500">{s.barcode ?? '—'}</td>
                       <td className="td">{Number(s.is_active) ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Retired</Badge>}
                         {Number(s.order_uses) > 0 && <span className="ml-1 text-[11px] text-slate-500">on {s.order_uses} order line(s)</span>}</td>
                     </tr>
@@ -535,11 +535,11 @@ export function StyleDetailPage() {
               <tbody>
                 {d.boms.map((b: any) => (
                   <tr key={b.id} className="row-hover cursor-pointer" onClick={() => nav(`/masters/boms/${b.id}`)}>
-                    <td className="td font-mono text-[12px] text-brand-700">{b.bom_no}</td>
+                    <td className="td tabular-nums text-[12px] text-brand-700">{b.bom_no}</td>
                     <td className="td">v{b.version}</td>
                     <td className="td">
                       {b.so_no ? (
-                        <span className="font-mono text-[11.5px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
+                        <span className="tabular-nums text-[11.5px] font-semibold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
                           {b.so_no}
                         </span>
                       ) : (

@@ -284,7 +284,7 @@ export default function CollarKnittingPage() {
               <tbody>
                 {rows.map((r: any) => (
                   <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                    <td className="td font-mono font-semibold text-brand-700">{r.program_no}</td>
+                    <td className="td tabular-nums font-semibold text-brand-700">{r.program_no}</td>
                     <td className="td text-slate-500">{fmtDate(r.program_date)}</td>
                     <td className="td">{r.style_code ?? '—'}</td>
                     <td className="td">{r.yarn_code ?? '—'}</td>

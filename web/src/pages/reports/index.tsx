@@ -178,9 +178,9 @@ export function AuditPage() {
               return <Badge tone={tone}>{r.action}</Badge>;
             } },
           { key: 'table_name', header: 'Table',
-            render: (r: any) => <span className="font-mono text-[11.5px] text-slate-600">{r.table_name}</span> },
+            render: (r: any) => <span className="tabular-nums text-[11.5px] text-slate-600">{r.table_name}</span> },
           { key: 'record_id', header: 'Record', align: 'right',
-            render: (r: any) => <span className="font-mono text-[12px] text-slate-500">#{r.record_id}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] text-slate-500">#{r.record_id}</span> },
           { key: 'changed_by_name', header: 'Changed by',
             render: (r: any) => <span className="font-medium text-slate-700">{r.changed_by_name || `User #${r.changed_by ?? '?'}`}</span> },
           { key: 'changed_at', header: 'Timestamp', sortable: true,
@@ -219,7 +219,7 @@ export function AuditPage() {
               </div>
               <div>
                 <span className="font-semibold text-slate-500">IP Address:</span>{' '}
-                <span className="font-mono text-slate-800">{inspectRow.ip_address || '—'}</span>
+                <span className="tabular-nums text-slate-800">{inspectRow.ip_address || '—'}</span>
               </div>
               <div>
                 <span className="font-semibold text-slate-500">Timestamp:</span>{' '}

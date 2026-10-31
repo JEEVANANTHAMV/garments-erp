@@ -83,7 +83,7 @@ function Machines({ kind }: { kind: Kind }) {
       actions={p.master && <Button size="sm" id="mp-machine-new" onClick={() => setEdit({})}><Plus size={13} className="mr-1 inline" />New machine</Button>}>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No machines yet" onRowClick={(r: any) => setEdit(r)}
         columns={[
-          { key: 'machine_code', header: 'Code', render: (r: any) => <span className="font-mono font-semibold text-brand-700">{r.machine_code}</span> },
+          { key: 'machine_code', header: 'Code', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.machine_code}</span> },
           { key: 'machine_name', header: 'Name' },
           { key: 'machine_type', header: 'Type', render: (r: any) => human(r.machine_type) },
           kind === 'EMBROIDERY'
@@ -201,7 +201,7 @@ function Designs({ kind }: { kind: Kind }) {
       </div>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No designs yet" onRowClick={(r: any) => setOpen(r)}
         columns={[
-          { key: 'design_code', header: 'Code', render: (r: any) => <span className="font-mono font-semibold text-brand-700">{r.design_code} <span className="text-slate-400">v{r.version_no}</span></span> },
+          { key: 'design_code', header: 'Code', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.design_code} <span className="text-slate-400">v{r.version_no}</span></span> },
           { key: 'design_name', header: 'Name' },
           ...(kind === 'EMBROIDERY' ? [{ key: 'total_stitches', header: 'Stitches', align: 'right' as const, render: (r: any) => qty(r.total_stitches, 0) }] : [{ key: 'print_type', header: 'Print type', render: (r: any) => human(r.print_type) }]),
           { key: 'no_of_colors', header: 'Colours', align: 'right' as const },
@@ -336,7 +336,7 @@ function Recipes({ kind }: { kind: Kind }) {
       </div>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No recipes yet" onRowClick={(r: any) => setOpen(r)}
         columns={[
-          { key: 'recipe_no', header: 'Recipe', render: (r: any) => <span className="font-mono font-semibold text-brand-700">{r.recipe_no} <span className="text-slate-400">v{r.version_no}</span></span> },
+          { key: 'recipe_no', header: 'Recipe', render: (r: any) => <span className="tabular-nums font-semibold text-brand-700">{r.recipe_no} <span className="text-slate-400">v{r.version_no}</span></span> },
           { key: 'recipe_name', header: 'Name' },
           { key: 'design_code', header: 'Design', render: (r: any) => r.design_code ? `${r.design_code} v${r.design_version}` : '—' },
           { key: 'base', header: 'Base', render: (r: any) => `${qty(r.base_qty)} ${r.base_uom}` },
@@ -472,7 +472,7 @@ function Reasons({ kind }: { kind: Kind }) {
       <DataTable data={list.data ?? []} loading={list.loading} onRowClick={(r: any) => p.master && setEdit(r)}
         columns={[
           { key: 'reason_type', header: 'Type', render: (r: any) => <Badge tone={r.reason_type === 'DOWNTIME' ? 'amber' : 'red'}>{r.reason_type === 'DOWNTIME' ? 'Downtime' : 'Reject / rework'}</Badge> },
-          { key: 'reason_code', header: 'Code', render: (r: any) => <span className="font-mono">{r.reason_code}</span> },
+          { key: 'reason_code', header: 'Code', render: (r: any) => <span className="tabular-nums">{r.reason_code}</span> },
           { key: 'reason_name', header: 'Reason' },
           { key: 'needs_approval', header: 'Needs approval', render: (r: any) => (r.needs_approval ? 'Yes' : '—') },
           { key: 'is_active', header: 'Status', render: (r: any) => r.is_active ? <Badge tone="green">Active</Badge> : <Badge tone="slate">Inactive</Badge> },

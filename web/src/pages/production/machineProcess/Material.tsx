@@ -34,7 +34,7 @@ export function MaterialTab({ kind }: { kind: Kind }) {
       </div>
       <DataTable data={list.data ?? []} loading={list.loading} emptyTitle="No material issued yet"
         columns={[
-          { key: 'txn_no', header: 'Doc no', render: (r: any) => <span className="font-mono">{r.txn_no}</span> },
+          { key: 'txn_no', header: 'Doc no', render: (r: any) => <span className="tabular-nums">{r.txn_no}</span> },
           { key: 'txn_date', header: 'Date', render: (r: any) => fmtDate(r.txn_date) },
           { key: 'txn_type', header: 'Type', render: (r: any) => <Badge tone={r.txn_type === 'ISSUE' ? 'blue' : 'violet'}>{human(r.txn_type)}</Badge> },
           { key: 'job_no', header: 'Job', render: (r: any) => <span>{r.job_no}{r.production_no ? <span className="text-slate-400"> · {r.production_no}</span> : null}</span> },
@@ -126,7 +126,7 @@ export function MaterialDialog({ kind, type, jobId, productionId, onClose, onDon
               return (
                 <tr key={l.trim_stock_id} className="border-t border-slate-100">
                   <td className="px-2 py-1">{l.trim_code} · {l.trim_name}{l.stock_job ? <span className="text-slate-400"> · job {l.stock_job}</span> : null}</td>
-                  <td className="px-2 py-1 font-mono">{l.lot_no}</td><td className="px-2 py-1">{l.warehouse_name}</td>
+                  <td className="px-2 py-1 tabular-nums">{l.lot_no}</td><td className="px-2 py-1">{l.warehouse_name}</td>
                   <td className="px-2 py-1 text-right">{qty(l.available_qty, 4)} {l.uom_code}</td>
                   <td className="px-2 py-1 text-right">{n2.need != null ? qty(n2.need, 4) : '—'}</td>
                   <td className="px-2 py-1 text-right">{qty(n2.net, 4)}</td>

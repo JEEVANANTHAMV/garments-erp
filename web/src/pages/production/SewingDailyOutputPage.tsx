@@ -405,7 +405,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
                     const bad = good(r) < 0;
                     return (
                       <tr key={r.bundle_id} className={`border-t border-slate-100 ${bad ? 'bg-red-50' : ''}`}>
-                        <td className="px-2 py-1 font-mono font-semibold">
+                        <td className="px-2 py-1 tabular-nums font-semibold">
                           {r.bundle_no}{!r.plan_detail_id && <Badge tone="amber" className="ml-1">not planned</Badge>}
                         </td>
                         <td className="px-2 py-1 text-slate-500">{r.lay_no || '—'}</td>
@@ -459,7 +459,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
             <tbody>
               {rows.filter((r) => r.rework_qty + r.reject_qty > 0).map((r) => (
                 <tr key={r.bundle_id} className="border-t border-slate-100">
-                  <td className="px-3 py-1.5 font-mono">{r.bundle_no}</td><td className="px-3 py-1.5">{r.io_no}</td><td className="px-3 py-1.5">{r.size}</td>
+                  <td className="px-3 py-1.5 tabular-nums">{r.bundle_no}</td><td className="px-3 py-1.5">{r.io_no}</td><td className="px-3 py-1.5">{r.size}</td>
                   <td className="px-3 py-1.5 text-right text-amber-700">{r.rework_qty}</td><td className="px-3 py-1.5 text-right text-red-700">{r.reject_qty}</td>
                   <td className="px-3 py-1.5">{defectName(r.defect_id) || '—'}</td><td className="px-3 py-1.5">{r.operator_name || '—'}</td>
                 </tr>
@@ -517,7 +517,7 @@ function DailyOutputPage({ proc }: { proc: OutProc }) {
                 extra={<Button size="sm" onClick={() => { setRows((x) => [...x, ...g.rows.map(fromPlanRow)]); }}>Add job</Button>} />,
               ...g.rows.map((p) => (
                 <tr key={p.id} className="border-t border-slate-100">
-                  <td className="px-2 py-1 font-mono font-semibold">{p.bundle_no}</td>
+                  <td className="px-2 py-1 tabular-nums font-semibold">{p.bundle_no}</td>
                   <td className="px-2 py-1">{p.colour}</td><td className="px-2 py-1 font-semibold">{p.size}</td>
                   <td className="px-2 py-1 text-right">{fmtNumber(p.remaining_qty)} PCS left</td>
                   <td className="px-2 py-1 text-right"><Button size="sm" variant="secondary" onClick={() => setRows((x) => [...x, fromPlanRow(p)])}>Add</Button></td>

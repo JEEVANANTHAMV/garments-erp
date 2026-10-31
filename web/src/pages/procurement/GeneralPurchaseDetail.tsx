@@ -887,7 +887,7 @@ export function GeneralPurchaseDetailPage() {
 
                 <div className="md:col-span-1">
                   <div className="text-xs font-semibold text-slate-500 mb-1.5">Line Total</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right font-mono font-bold text-slate-900 text-xs">
+                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right tabular-nums font-bold text-slate-900 text-xs">
                     {currSymbol}{fmtDecimal(line.amount, 2)}
                   </div>
                 </div>
@@ -1164,14 +1164,14 @@ export function GeneralPurchaseDetailPage() {
 
               <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
                 <div className="space-y-1.5">
-                  <div><span className="text-slate-500 font-medium">{isPoMode ? 'PO No:' : 'GRN No:'}</span> <span className="font-bold text-slate-900 font-mono text-sm">{isPoMode ? head.purchase_no : (head.grn_no || head.purchase_no)}</span></div>
+                  <div><span className="text-slate-500 font-medium">{isPoMode ? 'PO No:' : 'GRN No:'}</span> <span className="font-bold text-slate-900 tabular-nums text-sm">{isPoMode ? head.purchase_no : (head.grn_no || head.purchase_no)}</span></div>
                   <div><span className="text-slate-500 font-medium">Date:</span> <span className="font-semibold text-slate-800">{head.purchase_date}</span></div>
                   <div><span className="text-slate-500 font-medium">Purchase Type:</span> <span className="font-semibold text-slate-800">{head.purchase_type}</span></div>
                   <div><span className="text-slate-500 font-medium">Payment Terms:</span> <span className="font-semibold text-slate-800">{head.payment_terms || '-'}</span></div>
                 </div>
                 <div className="space-y-1.5 border-l border-slate-200 pl-4">
                   <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{String((suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.label || (suppliers.data as any[])?.find((s: any) => String(s.id) === String(head.supplier_id))?.party_name || '-')}</span></div>
-                  <div><span className="text-slate-500 font-medium">Supplier Bill / Invoice:</span> <span className="font-mono font-semibold text-slate-800">{head.supplier_inv_no || '-'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Supplier Bill / Invoice:</span> <span className="tabular-nums font-semibold text-slate-800">{head.supplier_inv_no || '-'}</span></div>
                   <div><span className="text-slate-500 font-medium">Currency:</span> <span className="font-bold text-brand-700">{currCode} ({currSymbol}) {isForeignCurrency ? `@ ₹${head.exchange_rate}` : ''}</span></div>
                   <div><span className="text-slate-500 font-medium">Status:</span> <span className="font-bold text-emerald-700">{head.approval_state}</span></div>
                 </div>

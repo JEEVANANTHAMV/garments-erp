@@ -938,7 +938,7 @@ export default function FabricPurchaseOrderDetailPage() {
           </div>
           <textarea
             rows={4}
-            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            className="input w-full tabular-nums text-xs leading-relaxed resize-y"
             value={head.billing_address}
             onChange={(e) => setHead({ ...head, billing_address: e.target.value })}
             placeholder="Company billing address with GSTIN..."
@@ -976,7 +976,7 @@ export default function FabricPurchaseOrderDetailPage() {
           </div>
           <textarea
             rows={3}
-            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            className="input w-full tabular-nums text-xs leading-relaxed resize-y"
             value={head.shipping_address}
             onChange={(e) => setHead({ ...head, shipping_address: e.target.value })}
             placeholder="Delivery address (Dyeing mill, garment unit, or warehouse)..."
@@ -1045,7 +1045,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 return (
                 <tr key={l._key} className="hover:bg-slate-50/50">
                   {/* # S NO */}
-                  <td className="py-2 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                  <td className="py-2 px-2 text-center text-slate-400 tabular-nums text-[11px]">{idx + 1}</td>
                   {/* I/O Num (Sales Order / Job) */}
                   <td className="py-2 px-2">
                     <select
@@ -1153,7 +1153,7 @@ export default function FabricPurchaseOrderDetailPage() {
                         value={l.pantone_spec}
                         onChange={(e) => updateLine(idx, { pantone_spec: e.target.value })}
                         placeholder="19-4052 TCX"
-                        className="input py-1 text-xs w-full font-mono text-purple-700 bg-purple-50/30"
+                        className="input py-1 text-xs w-full tabular-nums text-purple-700 bg-purple-50/30"
                       />
                     ) : (
                       <span className="text-slate-300 text-[11px] block text-center">—</span>
@@ -1176,7 +1176,7 @@ export default function FabricPurchaseOrderDetailPage() {
                       value={l.yarn_count_str}
                       onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
                       placeholder="30s"
-                      className="input py-1 text-xs w-full font-mono"
+                      className="input py-1 text-xs w-full tabular-nums"
                     />
                   </td>
                   {/* GSM */}
@@ -1200,7 +1200,7 @@ export default function FabricPurchaseOrderDetailPage() {
                       step="0.01"
                       value={l.qty}
                       onChange={(e) => updateLine(idx, { qty: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full text-right font-mono font-bold"
+                      className="input py-1 text-xs w-full text-right tabular-nums font-bold"
                     />
                   </td>
                   {/* UOM */}
@@ -1222,7 +1222,7 @@ export default function FabricPurchaseOrderDetailPage() {
                       step="0.01"
                       value={l.rate}
                       onChange={(e) => updateLine(idx, { rate: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full text-right font-mono font-bold text-brand-700"
+                      className="input py-1 text-xs w-full text-right tabular-nums font-bold text-brand-700"
                     />
                   </td>
                   {/* GST / IGST */}
@@ -1237,7 +1237,7 @@ export default function FabricPurchaseOrderDetailPage() {
                           className="input py-1 text-xs w-full text-center bg-purple-50/50 text-purple-700 font-semibold"
                         />
                       </td>
-                      <td className="py-2 px-2 text-right font-mono font-semibold text-purple-700">
+                      <td className="py-2 px-2 text-right tabular-nums font-semibold text-purple-700">
                         ₹{fmtDecimal(l.igst_amount)}
                       </td>
                     </>
@@ -1252,13 +1252,13 @@ export default function FabricPurchaseOrderDetailPage() {
                           className="input py-1 text-xs w-full text-center"
                         />
                       </td>
-                      <td className="py-2 px-2 text-right font-mono font-medium text-slate-700">
+                      <td className="py-2 px-2 text-right tabular-nums font-medium text-slate-700">
                         ₹{fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}
                       </td>
                     </>
                   )}
                   {/* Amount */}
-                  <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
+                  <td className="py-2 px-2 text-right tabular-nums font-bold text-slate-900">
                     ₹{fmtDecimal(l.net_amount)}
                   </td>
                   {/* Delete */}
@@ -1279,28 +1279,28 @@ export default function FabricPurchaseOrderDetailPage() {
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
                 <td colSpan={12} className="py-3 px-3 text-right text-slate-600">
-                  <span className="mr-4">Grey: <span className="font-mono text-amber-700">{fmtDecimal(totals.greyQty)}</span></span>
-                  <span className="mr-4">Dyed: <span className="font-mono text-purple-700">{fmtDecimal(totals.dyedQty)}</span></span>
+                  <span className="mr-4">Grey: <span className="tabular-nums text-amber-700">{fmtDecimal(totals.greyQty)}</span></span>
+                  <span className="mr-4">Dyed: <span className="tabular-nums text-purple-700">{fmtDecimal(totals.dyedQty)}</span></span>
                   Total Qty:
                 </td>
-                <td className="py-3 px-2 text-right font-mono">{fmtDecimal(totals.totalQty, 2)}</td>
-                <td className="py-3 px-2 text-right font-mono text-xs text-slate-500">Taxable:</td>
+                <td className="py-3 px-2 text-right tabular-nums">{fmtDecimal(totals.totalQty, 2)}</td>
+                <td className="py-3 px-2 text-right tabular-nums text-xs text-slate-500">Taxable:</td>
                 {head.is_interstate ? (
                   <>
                     <td className="py-3 px-2 text-center text-xs text-slate-500">IGST:</td>
-                    <td className="py-3 px-2 text-right font-mono text-purple-700">
+                    <td className="py-3 px-2 text-right tabular-nums text-purple-700">
                       ₹{fmtDecimal(totals.totalIgst, 2)}
                     </td>
                   </>
                 ) : (
                   <>
                     <td className="py-3 px-2 text-center text-xs text-slate-500">CGST+SGST:</td>
-                    <td className="py-3 px-2 text-right font-mono text-purple-700">
+                    <td className="py-3 px-2 text-right tabular-nums text-purple-700">
                       ₹{fmtDecimal(totals.totalCgst + totals.totalSgst, 2)}
                     </td>
                   </>
                 )}
-                <td className="py-3 px-2 text-right font-mono text-base font-black text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-base font-black text-slate-900">
                   ₹{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td></td>
@@ -1319,7 +1319,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 step="10"
                 value={head.freight_charges}
                 onChange={(e) => setHead((h) => ({ ...h, freight_charges: parseFloat(e.target.value) || 0 }))}
-                className="input py-1.5 text-xs text-right font-mono"
+                className="input py-1.5 text-xs text-right tabular-nums"
                 placeholder="0.00"
               />
             </div>
@@ -1331,7 +1331,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 step="10"
                 value={head.other_charges}
                 onChange={(e) => setHead((h) => ({ ...h, other_charges: parseFloat(e.target.value) || 0 }))}
-                className="input py-1.5 text-xs text-right font-mono"
+                className="input py-1.5 text-xs text-right tabular-nums"
                 placeholder="0.00"
               />
             </div>
@@ -1343,7 +1343,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 step="0.01"
                 value={head.round_off}
                 onChange={(e) => setHead((h) => ({ ...h, round_off: parseFloat(e.target.value) || 0 }))}
-                className="input py-1.5 text-xs text-right font-mono"
+                className="input py-1.5 text-xs text-right tabular-nums"
                 placeholder="0.00"
               />
             </div>
@@ -1360,7 +1360,7 @@ export default function FabricPurchaseOrderDetailPage() {
                   <span>TCS Applicable</span>
                 </label>
                 {head.tcs_applicable && (
-                  <span className="text-[11px] font-bold font-mono text-amber-800">
+                  <span className="text-[11px] font-bold tabular-nums text-amber-800">
                     + ₹{fmtDecimal(totals.tcsAmt)}
                   </span>
                 )}
@@ -1380,7 +1380,7 @@ export default function FabricPurchaseOrderDetailPage() {
                     step="0.01"
                     value={head.tcs_rate}
                     onChange={(e) => setHead((h) => ({ ...h, tcs_rate: parseFloat(e.target.value) || 0 }))}
-                    className="input py-0.5 px-1.5 text-[10px] text-right font-mono w-16"
+                    className="input py-0.5 px-1.5 text-[10px] text-right tabular-nums w-16"
                     placeholder="0.10"
                   />
                   <span className="text-slate-500">%</span>
@@ -1390,7 +1390,7 @@ export default function FabricPurchaseOrderDetailPage() {
 
             <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
               <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
-              <span className="text-xl font-black text-brand-900 font-mono">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
+              <span className="text-xl font-black text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
               {isForeignCurrency && (
                 <span className="text-xs font-bold text-amber-900 mt-0.5">
                   INR Converted: ₹{fmtDecimal(totals.grandTotal * Number(head.exchange_rate), 2)}
@@ -1432,10 +1432,10 @@ export default function FabricPurchaseOrderDetailPage() {
                 ) : (
                   fabricQuotes.map((q: any) => (
                     <tr key={q.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-mono font-bold text-brand-700">{q.quotation_no}</td>
+                      <td className="py-2.5 px-3 tabular-nums font-bold text-brand-700">{q.quotation_no}</td>
                       <td className="py-2.5 px-3">{q.quotation_date?.slice(0, 10)}</td>
                       <td className="py-2.5 px-3">{q.buyer_name || q.supplier_name || '—'}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold">₹{fmtDecimal(q.total_amount, 2)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums font-bold">₹{fmtDecimal(q.total_amount, 2)}</td>
                       <td className="py-2.5 px-3 text-center">
                         <button
                           type="button"

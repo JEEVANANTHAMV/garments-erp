@@ -57,7 +57,7 @@ export function QuotationVersionsButton({ quotationId, currentLines }: { quotati
               <tbody>
                 {(list.data?.versions ?? []).map((v) => (
                   <tr key={v.version} className={`border-t border-slate-100 ${view === v.version ? 'bg-brand-50' : ''}`}>
-                    <td className="px-2 py-1.5 font-mono font-bold">V{v.version}{v.current && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">current</span>}</td>
+                    <td className="px-2 py-1.5 tabular-nums font-bold">V{v.version}{v.current && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">current</span>}</td>
                     <td className="px-2 py-1.5">{v.current ? `${fmtDate(v.saved_at)}${v.saved_by ? ` · ${v.saved_by}` : ''}` : '—'}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(v.total_amount, 2)}</td>
                     <td className="px-2 py-1.5">{v.current ? '—' : `${fmtDate(v.replaced_at)}${v.replaced_by ? ` by ${v.replaced_by}` : ''}`}</td>

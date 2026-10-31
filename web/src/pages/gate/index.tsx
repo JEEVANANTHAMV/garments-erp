@@ -104,7 +104,7 @@ function DcScanBar({ mode, onLoad }: { mode: 'OUT' | 'IN'; onLoad: (values: Reco
       <div className="flex flex-wrap items-center gap-2">
         <ScanLine size={18} className="text-brand-600" />
         <span className="text-[13px] font-semibold text-slate-800">{mode === 'OUT' ? 'Scan DC barcode → gate pass' : 'Scan our DC barcode (job-work return) → gate entry'}</span>
-        <input ref={ref} id={`dc-scan-${mode}`} className="input w-72 py-1.5 font-mono text-sm" placeholder="Scan or type DC no and press Enter" value={code} autoFocus
+        <input ref={ref} id={`dc-scan-${mode}`} className="input w-72 py-1.5 tabular-nums text-sm" placeholder="Scan or type DC no and press Enter" value={code} autoFocus
           onChange={(e) => setCode(e.target.value)}
           onPaste={(e) => { const t = e.clipboardData.getData('text').trim(); if (t) { e.preventDefault(); setCode(t); void scan(t); } }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scan(); } }} />
         <button type="button" className="btn-secondary text-xs" disabled={busy} onClick={() => void scan()}>{busy ? 'Looking up…' : 'Load DC'}</button>
@@ -112,7 +112,7 @@ function DcScanBar({ mode, onLoad }: { mode: 'OUT' | 'IN'; onLoad: (values: Reco
       </div>
       {dc && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-          <span className="font-mono font-bold text-brand-700">{dc.dc_no}</span><span>{dc.dc_label}</span><span>{fmtDate(dc.dc_date)}</span>
+          <span className="tabular-nums font-bold text-brand-700">{dc.dc_no}</span><span>{dc.dc_label}</span><span>{fmtDate(dc.dc_date)}</span>
           <span className="font-semibold">{dc.party_name ?? '—'}</span><span>{fmtDecimal(dc.qty, 3)} {dc.uom_code}{dc.packages ? ` · ${dc.packages} pkgs` : ''}</span>
           {dc.jobs && <span>Jobs: {dc.jobs}</span>}<span>Status: {humanize(dc.status)}</span>
           {dc.gate_passes?.length > 0 && <span>Gate out: {dc.gate_passes.map((p: any) => `${p.pass_no} (${fmtDate(p.pass_date)} ${p.pass_time ?? ''})`).join(', ')}</span>}
@@ -147,7 +147,7 @@ export function GateInwardsPage() {
           header: 'Entry No',
           sortable: true,
           render: (r: any) => (
-            <span className="font-mono text-[12px] font-bold text-brand-700">{r.entry_no}</span>
+            <span className="tabular-nums text-[12px] font-bold text-brand-700">{r.entry_no}</span>
           ),
         },
         {
@@ -157,7 +157,7 @@ export function GateInwardsPage() {
           render: (r: any) => (
             <div className="text-xs">
               <span className="font-semibold text-slate-800">{fmtDate(r.entry_date)}</span>
-              {r.entry_time && <span className="ml-1 text-slate-500 font-mono">{r.entry_time}</span>}
+              {r.entry_time && <span className="ml-1 text-slate-500 tabular-nums">{r.entry_time}</span>}
             </div>
           ),
         },
@@ -181,7 +181,7 @@ export function GateInwardsPage() {
           header: 'Vehicle No',
           sortable: true,
           render: (r: any) => (
-            <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
+            <span className="tabular-nums text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
               {r.vehicle_no}
             </span>
           ),
@@ -189,7 +189,7 @@ export function GateInwardsPage() {
         {
           key: 'ref_no',
           header: 'Against our DC',
-          render: (r: any) => (r.ref_no ? <span className="font-mono text-xs font-semibold text-brand-700">{r.ref_no}</span> : <span className="text-slate-400">—</span>),
+          render: (r: any) => (r.ref_no ? <span className="tabular-nums text-xs font-semibold text-brand-700">{r.ref_no}</span> : <span className="text-slate-400">—</span>),
         },
         {
           key: 'dc_inv',
@@ -287,7 +287,7 @@ export function GateOutwardsPage() {
           header: 'Pass No',
           sortable: true,
           render: (r: any) => (
-            <span className="font-mono text-[12px] font-bold text-brand-700">{r.pass_no}</span>
+            <span className="tabular-nums text-[12px] font-bold text-brand-700">{r.pass_no}</span>
           ),
         },
         {
@@ -297,14 +297,14 @@ export function GateOutwardsPage() {
           render: (r: any) => (
             <div className="text-xs">
               <span className="font-semibold text-slate-800">{fmtDate(r.pass_date)}</span>
-              {r.pass_time && <span className="ml-1 text-slate-500 font-mono">{r.pass_time}</span>}
+              {r.pass_time && <span className="ml-1 text-slate-500 tabular-nums">{r.pass_time}</span>}
             </div>
           ),
         },
         {
           key: 'ref_no',
           header: 'DC',
-          render: (r: any) => (r.ref_no ? <span className="font-mono text-xs font-semibold text-brand-700">{r.ref_no}</span> : <span className="text-slate-400">—</span>),
+          render: (r: any) => (r.ref_no ? <span className="tabular-nums text-xs font-semibold text-brand-700">{r.ref_no}</span> : <span className="text-slate-400">—</span>),
         },
         {
           key: 'pass_type',
@@ -328,7 +328,7 @@ export function GateOutwardsPage() {
           header: 'Vehicle No',
           sortable: true,
           render: (r: any) => (
-            <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
+            <span className="tabular-nums text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
               {r.vehicle_no}
             </span>
           ),

@@ -88,7 +88,7 @@ export function AttachmentList({ rows, onRemove }: { rows: any[]; onRemove?: (a:
           <td className="px-2 py-1.5">{a.inward_no ?? (a.bill_id ? 'Bill' : '—')}</td>
           <td className="px-2 py-1.5 text-right tabular-nums">{fmtDecimal(Number(a.byte_size) / 1024, 0)} KB</td>
           <td className="px-2 py-1.5">{fmtDate(a.uploaded_at)} · {a.uploaded_by_name ?? ''}</td>
-          <td className="px-2 py-1.5 font-mono text-[10.5px] text-slate-500">{String(a.sha256).slice(0, 12)}…</td>
+          <td className="px-2 py-1.5 tabular-nums text-[10.5px] text-slate-500">{String(a.sha256).slice(0, 12)}…</td>
           <td className="whitespace-nowrap px-2 py-1.5 text-right">
             {!a.is_removed && <button className="mr-2 text-brand-700 hover:underline" onClick={() => downloadAttachment(a.id, a.original_name).catch((e) => toast(errMsg(e), 'error'))}><Download size={12} className="inline" /> Download</button>}
             {!a.is_removed && onRemove && <button className="text-red-600 hover:underline" onClick={() => onRemove(a)}>Remove</button>}
@@ -228,7 +228,7 @@ export function LinkDialog({ bill, onClose }: { bill: any; onClose: () => void }
               <tr key={r.id} data-cand={r.id} onClick={() => { setSel(r); setAmt(r.remaining_amount ?? ''); setQty(r.remaining_qty ?? ''); }}
                 className={`cursor-pointer border-t border-slate-100 ${sel?.id === r.id ? 'bg-brand-50' : 'hover:bg-slate-50'}`}>
                 <td className="px-2 py-1.5"><input type="radio" readOnly checked={sel?.id === r.id} /></td>
-                <td className="px-2 py-1.5 font-mono">{r.no}</td><td className="px-2 py-1.5">{r.ref ?? '—'}{r.doc_type ? ` · ${labelOf(DOC_TYPE_OPTIONS, r.doc_type)}` : ''}</td>
+                <td className="px-2 py-1.5 tabular-nums">{r.no}</td><td className="px-2 py-1.5">{r.ref ?? '—'}{r.doc_type ? ` · ${labelOf(DOC_TYPE_OPTIONS, r.doc_type)}` : ''}</td>
                 <td className="px-2 py-1.5">{fmtDate(r.dt)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{r.qty === null ? '—' : fmtDecimal(r.qty, 3)}</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{r.amount === null ? '—' : fmtDecimal(r.amount, 2)}</td>

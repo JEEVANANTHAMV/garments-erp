@@ -45,7 +45,7 @@ export function CuttingPlansPage() {
             { key: 'plan_no', header: 'Plan No', sortable: true,
               render: (r: any) => (
                 <button onClick={() => nav(`/production/cutting-plans/${r.id}`)}
-                  className="font-mono text-xs font-semibold text-brand-700 hover:underline">
+                  className="tabular-nums text-xs font-semibold text-brand-700 hover:underline">
                   {r.plan_no}
                 </button>
               ) },
@@ -347,8 +347,8 @@ export function CuttingPlanDetailPage() {
             options={[{ value: '', label: '— Select style —' }, ...((program?.styles?.length ? program.styles.map((s: any) => ({ value: s.style_id, label: `${s.style_code} · ${s.style_name}` }))
               : styles.map((s: any) => ({ value: s.id, label: s.label || s.code }))))]} />
           <div><p className="label">Buyer</p><p className="input bg-slate-50" id="cp-buyer">{program?.job?.buyer_name || '—'}</p></div>
-          <div><p className="label">Buyer PO</p><p className="input bg-slate-50 font-mono" id="cp-buyer-po">{header.buyer_po_no || program?.job?.buyer_po_no || '—'}</p></div>
-          <div><p className="label">I/O no</p><p className="input bg-slate-50 font-mono" id="cp-io">{header.io_no || '—'}</p></div>
+          <div><p className="label">Buyer PO</p><p className="input bg-slate-50 tabular-nums" id="cp-buyer-po">{header.buyer_po_no || program?.job?.buyer_po_no || '—'}</p></div>
+          <div><p className="label">I/O no</p><p className="input bg-slate-50 tabular-nums" id="cp-io">{header.io_no || '—'}</p></div>
         </div>
         {progLoading && <p className="px-4 pb-3 text-xs text-slate-500">Loading the cutting program…</p>}
         {program?.needs_style && <p className="px-4 pb-3 text-xs font-semibold text-amber-700">This job has more than one style — pick the style.</p>}
@@ -393,7 +393,7 @@ export function CuttingPlanDetailPage() {
                         {sizeOrder.map((sz) => <td key={sz} className={`p-1.5 text-right tabular-nums ${k === 'todo' ? 'font-semibold text-indigo-700' : ''}`}>{fmtNumber(f(cell(sz)))}</td>)}
                         <td className={`p-1.5 text-right font-semibold tabular-nums ${k === 'todo' ? 'text-indigo-700' : ''}`}>{fmtNumber((c.sizes || []).reduce((a: number, x: any) => a + f(x), 0))}</td>
                         {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">{(c.marker_plies || []).filter((m: any) => m.plies != null).map((m: any) => <div key={m.marker_ref}>{m.marker_ref}: <b>{m.plies}</b></div>)}{!(c.marker_plies || []).some((m: any) => m.plies != null) && <span className="text-slate-400">—</span>}</td>}
-                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">{(c.plans || []).map((p: any) => <div key={p.id}><button className="font-mono text-brand-700 hover:underline" onClick={() => nav(`/production/cutting-plans/${p.id}`)}>{p.plan_no}</button> <span className="text-slate-400">{p.status}</span></div>)}{!(c.plans || []).length && <span className="text-slate-400">none</span>}</td>}
+                        {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">{(c.plans || []).map((p: any) => <div key={p.id}><button className="tabular-nums text-brand-700 hover:underline" onClick={() => nav(`/production/cutting-plans/${p.id}`)}>{p.plan_no}</button> <span className="text-slate-400">{p.status}</span></div>)}{!(c.plans || []).length && <span className="text-slate-400">none</span>}</td>}
                         {ri === 0 && <td rowSpan={rows.length} className="p-2 align-top">
                           {isNew || !sizesLocked
                             ? <Button size="sm" variant={active ? 'primary' : 'outline'} id={`cp-colour-${ci}`} disabled={readOnly} onClick={() => applyColour(c)}>{active ? 'Selected ✓' : 'Use this colour'}</Button>

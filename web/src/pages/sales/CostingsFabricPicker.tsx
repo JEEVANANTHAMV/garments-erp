@@ -80,7 +80,7 @@ export function FabricPicker({
               onMouseEnter={() => setHi(i)}
               className={`cursor-pointer px-2.5 py-1.5 ${i === hi ? 'bg-brand-50 text-brand-900' : 'text-slate-700'}`}
             >
-              {o.code && <span className="font-mono text-[11px] text-slate-400 mr-1.5">{String(o.code)}</span>}
+              {o.code && <span className="tabular-nums text-[11px] text-slate-400 mr-1.5">{String(o.code)}</span>}
               <span className="font-semibold">{o.label}</span>
             </li>
           ))}

@@ -164,7 +164,7 @@ function Dashboard({ openRegister }: { openRegister: (f: Record<string, string>)
 
 /* ================================================================ register */
 const REG_COLS: (Column<any> & { csv?: (r: any) => unknown })[] = [
-  { key: 'sample_no', header: 'Sample no', sortable: true, render: (r) => <Link className="font-mono text-[12px] font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.id}`}>{r.sample_no}</Link> },
+  { key: 'sample_no', header: 'Sample no', sortable: true, render: (r) => <Link className="tabular-nums text-[12px] font-semibold text-brand-700 hover:underline" to={`/sales/samples/${r.id}`}>{r.sample_no}</Link> },
   { key: 'buyer_name', header: 'Buyer / style', sortable: true, render: (r) => <div><p className="font-medium">{r.buyer_name}</p><p className="text-[11px] text-slate-500">{r.style_code} · {r.type_name ?? r.sample_type}{r.revision_no ? ` · rev ${r.revision_no}` : ''}</p></div> },
   { key: 'priority', header: 'Priority', render: (r) => r.priority === 'NORMAL' ? <span className="text-slate-500">Normal</span> : <Badge tone={r.priority === 'CRITICAL' ? 'red' : 'amber'}>{r.priority === 'CRITICAL' ? 'Critical' : 'High'}</Badge> },
   { key: 'target_date', header: 'Requested / target', sortable: true, render: (r) => <div className="text-[12px]"><p>{fmtDate(r.request_date)}</p><p className={r.overdue ? 'font-semibold text-red-600' : 'text-slate-500'}>→ {fmtDate(r.target_date)}{r.completed_date ? ` · done ${fmtDate(r.completed_date)}` : ''}</p></div> },
@@ -288,8 +288,8 @@ function Allocations() {
             {!list.isLoading && !rows.length && <tr><td className="td py-8 text-center text-slate-400" colSpan={8}>Nothing here</td></tr>}
             {rows.map((b) => (
               <tr key={b.id} className="row-hover align-top">
-                <td className="td font-mono text-[12px] font-semibold">{b.batch_no}<p className="font-sans text-[11px] font-normal text-slate-400">{fmtDateTime(b.created_at)}</p></td>
-                <td className="td"><Link className="font-mono text-[12px] text-brand-700 hover:underline" to={`/sales/samples/${b.sample_id}?tab=allocation`}>{b.sample_no}</Link><p className="text-[11px] text-slate-500">{b.buyer_name} · {b.style_code}</p></td>
+                <td className="td tabular-nums text-[12px] font-semibold">{b.batch_no}<p className="font-sans text-[11px] font-normal text-slate-400">{fmtDateTime(b.created_at)}</p></td>
+                <td className="td"><Link className="tabular-nums text-[12px] text-brand-700 hover:underline" to={`/sales/samples/${b.sample_id}?tab=allocation`}>{b.sample_no}</Link><p className="text-[11px] text-slate-500">{b.buyer_name} · {b.style_code}</p></td>
                 <td className="td text-[12px]">{b.lines.map((l: any) => (
                   <p key={l.id} className={l.status === 'REVERSED' ? 'text-slate-400 line-through' : ''}>
                     <Link to={`/sales/orders/${l.so_id}`} className="hover:underline">{l.so_no}</Link> · {inr(l.allocated_amount)}{l.is_override ? <Badge tone="amber" className="ml-1">override</Badge> : null}
@@ -362,7 +362,7 @@ function Reports() {
               <tr key={r.id} className="row-hover">
                 {def.cols.map((c) => (
                   <td key={c.key} className={`td text-[12px] ${c.money ? 'text-right tabular-nums' : ''}`}>
-                    {c.link ? <Link className="font-mono text-brand-700 hover:underline" to={`/sales/samples/${r.id}`}>{r[c.key]}</Link>
+                    {c.link ? <Link className="tabular-nums text-brand-700 hover:underline" to={`/sales/samples/${r.id}`}>{r[c.key]}</Link>
                       : c.key === 'status' ? <SampleStatus value={r.status} /> : c.money ? inr(r[c.key], r[c.key] === undefined ? '—' : 'N/A')
                         : /_date$/.test(c.key) ? fmtDate(r[c.key]) : r[c.key] ?? '—'}
                   </td>

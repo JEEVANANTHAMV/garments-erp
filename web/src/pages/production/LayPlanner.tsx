@@ -174,7 +174,7 @@ export function LayPlannerTab({ initialPlanId, onExecute, onChanged, reloadSigna
                         <td className="p-2">{v ? <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${v.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{v.status}</span> : <span className="text-amber-700">not imported</span>}
                           {v?.approved_by_name && <span className="block text-[10px] text-slate-400">{v.approved_by_name}</span>}</td>
                         <td className="p-2">{m.fabric_type || '—'}{m.fabric_match === false && <span className="block text-[10px] text-red-600">other fabric</span>}{!m.has_colour && <span className="block text-[10px] text-red-600">colour not on marker</span>}</td>
-                        <td className="p-2 font-mono">{ratioText(m.sizes, m.ratios)}</td>
+                        <td className="p-2 tabular-nums">{ratioText(m.sizes, m.ratios)}</td>
                         <td className="p-2 text-right"><Qty v={m.ppm} uom="PCS" /></td>
                         <td className="p-2 text-right"><Qty v={v?.length_m ?? m.length_m} uom="M" dp={3} /></td>
                         <td className="p-2 text-right"><Qty v={v?.width_in ?? m.width_in} uom="IN" dp={1} /></td>
@@ -318,7 +318,7 @@ export function LayGrid({ lays, onExecute, onDone }: { lays: any[]; onExecute: (
           {lays.length === 0 && <tr><td colSpan={11} className="p-3 text-center text-slate-400">No lays yet.</td></tr>}
           {lays.map((l) => (
             <tr key={l.id} className={`border-b ${l.status === 'CANCELLED' ? 'text-slate-400 line-through' : ''}`} id={`lay-row-${l.lay_no}`}>
-              <td className="p-2 font-mono font-semibold">{l.lay_no}{l.lay_seq ? <span className="ml-1 text-slate-400">#{l.lay_seq}</span> : null}</td>
+              <td className="p-2 tabular-nums font-semibold">{l.lay_no}{l.lay_seq ? <span className="ml-1 text-slate-400">#{l.lay_seq}</span> : null}</td>
               <td className="p-2">{l.marker_no ? `${l.marker_no} v${l.marker_version}` : (l.marker_ref || '—')}</td>
               <td className="p-2 text-right">{l.ply_count}{l.actual_ply && n(l.actual_ply) !== n(l.ply_count) ? <span className="text-amber-700"> → {l.actual_ply}</span> : null}</td>
               <td className="p-2 text-right"><Qty v={l.expected_pieces} uom="PCS" />{n(l.actual_cut_qty) > 0 && <div className="text-emerald-700"><Qty v={l.actual_cut_qty} uom="cut" /></div>}</td>
@@ -326,7 +326,7 @@ export function LayGrid({ lays, onExecute, onDone }: { lays: any[]; onExecute: (
               <td className="p-2 text-right"><Qty v={l.planned_kg} uom="KG" dp={2} />{n(l.actual_kg) > 0 && <div className="text-emerald-700"><Qty v={l.actual_kg} uom="act" dp={2} /></div>}</td>
               <td className="p-2">{n(l.alloc_rolls) > 0 ? <>{l.alloc_rolls} · <Qty v={l.alloc_kg} uom="KG" dp={2} /></> : '—'}</td>
               <td className="p-2">{l.shade_lots || '—'}</td>
-              <td className="p-2 font-mono">{l.issue_no || '—'}</td>
+              <td className="p-2 tabular-nums">{l.issue_no || '—'}</td>
               <td className="p-2"><FlowChip status={l.status} /></td>
               <td className="p-2 text-right"><LayActions lay={l} onExecute={onExecute} onDone={onDone} /></td>
             </tr>
@@ -446,7 +446,7 @@ function RollAllocationModal({ lay, onClose, onSaved }: { lay: any; onClose: () 
               const bal = r.available_kg - n(v);
               return (
                 <tr key={r.id} className={`border-t ${n(v) > 0 ? 'bg-emerald-50/50' : ''}`}>
-                  <td className="p-1.5 font-mono font-semibold">{r.roll_no}</td><td className="p-1.5">{r.shade || '—'} / {r.lot_no || '—'}</td>
+                  <td className="p-1.5 tabular-nums font-semibold">{r.roll_no}</td><td className="p-1.5">{r.shade || '—'} / {r.lot_no || '—'}</td>
                   <td className="p-1.5">{r.grn_no || '—'} <span className="text-slate-400">{r.grn_date ? fmtDate(r.grn_date) : ''}</span></td>
                   <td className="p-1.5 text-right">{r.gsm ?? '—'}</td><td className="p-1.5 text-right">{r.width_in ? `${r.width_in}"` : '—'}</td>
                   <td className="p-1.5 text-right"><Qty v={r.weight_kg} uom="KG" dp={2} /></td><td className="p-1.5 text-right font-semibold"><Qty v={r.available_kg} uom="KG" dp={3} /></td>
@@ -462,7 +462,7 @@ function RollAllocationModal({ lay, onClose, onSaved }: { lay: any; onClose: () 
         {showAll && (
           <table className="w-full border text-slate-500" id="alloc-ineligible">
             <thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Job</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5 text-right">Free KG</th><th className="p-1.5">Why not</th></tr></thead>
-            <tbody>{ineligible.map((r) => <tr key={r.id} className="border-t"><td className="p-1.5 font-mono">{r.roll_no}</td><td className="p-1.5">{r.roll_job || 'general'}</td><td className="p-1.5">{r.shade || '—'} / {r.lot_no || '—'}</td>
+            <tbody>{ineligible.map((r) => <tr key={r.id} className="border-t"><td className="p-1.5 tabular-nums">{r.roll_no}</td><td className="p-1.5">{r.roll_job || 'general'}</td><td className="p-1.5">{r.shade || '—'} / {r.lot_no || '—'}</td>
               <td className="p-1.5 text-right"><Qty v={r.available_kg} uom="KG" dp={2} /></td><td className="p-1.5 text-red-700">{r.reasons.join('; ')}</td></tr>)}</tbody>
           </table>
         )}
@@ -497,7 +497,7 @@ function IssueModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void; 
         </FormSection>
         <h3 className="border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Reserved rolls</h3>
         <table className="w-full border"><thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Roll</th><th className="p-1.5">Shade / Lot</th><th className="p-1.5">Store</th><th className="p-1.5 text-right">Issue KG</th><th className="p-1.5 text-right">Issue M</th><th className="p-1.5 text-right">Stays on roll</th></tr></thead>
-          <tbody>{allocs.map((a) => <tr key={a.id} className="border-t"><td className="p-1.5 font-mono">{a.roll_no}</td><td className="p-1.5">{a.shade || '—'} / {a.lot_no || '—'}</td><td className="p-1.5">{a.warehouse_name}{a.location_bin ? ` · ${a.location_bin}` : ''}</td>
+          <tbody>{allocs.map((a) => <tr key={a.id} className="border-t"><td className="p-1.5 tabular-nums">{a.roll_no}</td><td className="p-1.5">{a.shade || '—'} / {a.lot_no || '—'}</td><td className="p-1.5">{a.warehouse_name}{a.location_bin ? ` · ${a.location_bin}` : ''}</td>
             <td className="p-1.5 text-right font-semibold"><Qty v={a.alloc_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={a.alloc_m} uom="M" dp={1} /></td><td className="p-1.5 text-right"><Qty v={a.roll_balance_kg} uom="KG" dp={3} /></td></tr>)}</tbody>
           <tfoot><tr className="font-semibold"><td className="p-1.5" colSpan={3}>Total</td><td className="p-1.5 text-right"><Qty v={allocs.reduce((x, a) => x + n(a.alloc_kg), 0)} uom="KG" dp={3} /></td><td colSpan={2} /></tr></tfoot></table>
         <p className="text-slate-500">The reserved KG goes out on a cutting DC. A partly used roll keeps its balance in store; leftovers at cutting come back with a fabric return.</p>
@@ -586,7 +586,7 @@ function FlowSpreadingModal({ lay, onClose, onSaved }: { lay: any; onClose: () =
               const set = (k: string, val: string) => setRows({ ...rows, [x.id]: { ...v, [k]: val } });
               return (
                 <tr key={x.id} className="border-t">
-                  <td className="p-1.5 font-mono font-semibold">{x.roll_no} <span className="font-normal text-slate-400">{x.shade || ''} {x.lot_no || ''}</span></td>
+                  <td className="p-1.5 tabular-nums font-semibold">{x.roll_no} <span className="font-normal text-slate-400">{x.shade || ''} {x.lot_no || ''}</span></td>
                   <td className="p-1.5 text-right"><Qty v={x.planned_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={x.planned_m} uom="M" dp={1} /></td>
                   <td className="p-1"><UomInput uom="PLY" value={v.plies ?? ''} step="1" min={0} onChange={(val) => set('plies', val)} /></td>
                   <td className="p-1"><UomInput uom="KG" value={v.actual_kg ?? ''} min={0} onChange={(val) => set('actual_kg', val)} /></td>
@@ -640,7 +640,7 @@ function LaySheetModal({ lay, onClose }: { lay: any; onClose: () => void }) {
           <table className="mt-2 w-full border"><thead><tr>{Object.keys(out).map((k) => <th key={k} className="border p-1">{k}</th>)}<th className="border p-1">Total</th></tr></thead>
             <tbody><tr>{Object.values(out).map((v: any, i) => <td key={i} className="border p-1 text-right">{v}</td>)}<td className="border p-1 text-right font-bold">{Object.values(out).reduce((a: number, v: any) => a + n(v), 0)}</td></tr></tbody></table>
           <table className="mt-2 w-full border"><thead><tr><th className="border p-1">#</th><th className="border p-1">Roll</th><th className="border p-1">Shade / Lot</th><th className="border p-1">GRN</th><th className="border p-1 text-right">KG</th><th className="border p-1 text-right">M</th><th className="border p-1">Plies (actual)</th><th className="border p-1">End / splice loss</th></tr></thead>
-            <tbody>{g.allocations.filter((a: any) => a.status !== 'RELEASED').map((a: any, i: number) => <tr key={a.id}><td className="border p-1">{i + 1}</td><td className="border p-1 font-mono">{a.roll_no}</td><td className="border p-1">{a.shade || '—'} / {a.lot_no || '—'}</td><td className="border p-1">{a.grn_no || '—'}</td>
+            <tbody>{g.allocations.filter((a: any) => a.status !== 'RELEASED').map((a: any, i: number) => <tr key={a.id}><td className="border p-1">{i + 1}</td><td className="border p-1 tabular-nums">{a.roll_no}</td><td className="border p-1">{a.shade || '—'} / {a.lot_no || '—'}</td><td className="border p-1">{a.grn_no || '—'}</td>
               <td className="border p-1 text-right">{n(a.alloc_kg).toFixed(3)}</td><td className="border p-1 text-right">{a.alloc_m ?? ''}</td><td className="border p-1"></td><td className="border p-1"></td></tr>)}</tbody></table>
           <div className="mt-10 flex justify-between"><span>Spread by ____________</span><span>Cut by ____________</span><span>Supervisor ____________</span></div>
         </div>
@@ -662,11 +662,11 @@ function GenealogyModal({ lay, onClose }: { lay: any; onClose: () => void }) {
           <Step title="Cutting plan">{g.cutting_plan.plan_no} · {g.cutting_plan.style_code} · {g.cutting_plan.color_name || '—'} · {g.cutting_plan.fabric_name || '—'} · order {g.cutting_plan.order_qty} · cut {g.cutting_plan.actual_cut_qty}</Step>
           <Step title="CAD marker version">{g.marker ? <>{g.marker.marker_no} v{g.marker.version} · {g.marker.status}{g.marker.is_locked ? ' · locked' : ''} · {ratioText(g.marker.sizes, g.marker.ratios)}{g.cad ? ` · CAD ${g.cad.req_no}` : ''}</> : '—'}</Step>
           <Step title="Lay">{g.lay.lay_no} · {flowLabel(g.lay.status)} · {g.lay.ply_count} ply planned{g.lay.actual_ply ? ` · ${g.lay.actual_ply} actual` : ''} · {g.lay.expected_pieces} PCS</Step>
-          <Step title="Fabric rolls (reserved / issued)">{g.allocations.length ? g.allocations.map((a: any) => <div key={a.id}><span className="font-mono">{a.roll_no}</span> · {a.shade || '—'}/{a.lot_no || '—'} · {n(a.alloc_kg).toFixed(3)} KG · {a.status} · GRN {a.grn_no || '—'}</div>) : '—'}</Step>
+          <Step title="Fabric rolls (reserved / issued)">{g.allocations.length ? g.allocations.map((a: any) => <div key={a.id}><span className="tabular-nums">{a.roll_no}</span> · {a.shade || '—'}/{a.lot_no || '—'} · {n(a.alloc_kg).toFixed(3)} KG · {a.status} · GRN {a.grn_no || '—'}</div>) : '—'}</Step>
           <Step title="Cutting DC">{g.fabric_issue ? `${g.fabric_issue.issue_no} · ${g.fabric_issue.status}${g.fabric_issue.received_at ? ` · received ${fmtDateTime(g.fabric_issue.received_at)}` : ''}` : '—'}</Step>
           <Step title="Spreading">{g.spreading.length ? g.spreading.map((s: any) => <div key={s.id}>{s.spreading_no} · {s.status} · {s.ply_count} ply · {s.actual_kg ?? '—'} KG · end {s.end_loss_m ?? 0} m · splice {s.splice_loss_m ?? 0} m</div>) : '—'}</Step>
           <Step title="Cutting">{g.cutting.length ? g.cutting.map((c: any) => <div key={c.id}>{c.cut_no} · {c.total_pieces} PCS · {c.fabric_used_kg} KG</div>) : '—'}{g.outputs.length > 0 && <div className="mt-1">{g.outputs.map((o: any) => `${o.size_code}: ${o.good_qty}${o.reject_qty ? ` (+${o.reject_qty} rej)` : ''}`).join(' · ')}</div>}</Step>
-          <Step title="Bundles → sewing">{g.bundles.length ? <>{g.totals.bundles} bundles · {g.totals.bundle_qty} PCS · {g.totals.in_sewing_or_beyond} moved on the floor<div className="mt-1 flex flex-wrap gap-1">{g.bundles.slice(0, 40).map((b: any) => <span key={b.id} className="rounded bg-slate-100 px-1 font-mono">{b.bundle_no}</span>)}</div></> : '—'}</Step>
+          <Step title="Bundles → sewing">{g.bundles.length ? <>{g.totals.bundles} bundles · {g.totals.bundle_qty} PCS · {g.totals.in_sewing_or_beyond} moved on the floor<div className="mt-1 flex flex-wrap gap-1">{g.bundles.slice(0, 40).map((b: any) => <span key={b.id} className="rounded bg-slate-100 px-1 tabular-nums">{b.bundle_no}</span>)}</div></> : '—'}</Step>
         </div>
       )}
     </Modal>
@@ -689,7 +689,7 @@ export function PlannedVsActual({ planId }: { planId: string }) {
           <thead className="border-b bg-slate-50 text-left text-slate-600"><tr><th className="p-2">Lay</th><th className="p-2">Status</th><th className="p-2">Garment qty</th><th className="p-2">Marker length</th><th className="p-2">Ply</th>
             <th className="p-2">Fabric M</th><th className="p-2">Fabric KG</th><th className="p-2">Waste KG</th><th className="p-2">Efficiency %</th><th className="p-2">Variance reason</th></tr></thead>
           <tbody>{d.lays.map((l: any) => (
-            <tr key={l.lay_id} className="border-b"><td className="p-2 font-mono">{l.lay_no}</td><td className="p-2"><FlowChip status={l.status} /></td>
+            <tr key={l.lay_id} className="border-b"><td className="p-2 tabular-nums">{l.lay_no}</td><td className="p-2"><FlowChip status={l.status} /></td>
               <td className="p-2">{pa(l.garment_qty, 0, 'PCS')}</td><td className="p-2">{pa(l.marker_length_m, 3, 'm')}</td><td className="p-2">{pa(l.ply)}</td>
               <td className="p-2">{pa(l.fabric_m, 2, 'm')}</td><td className="p-2">{pa(l.fabric_kg, 3, 'KG')}</td>
               <td className="p-2">{pa(l.waste_kg, 3, 'KG')}{l.waste_kg.recorded_losses ? <div className="text-[10px] text-slate-500">recorded loss {l.waste_kg.recorded_losses} KG</div> : null}</td>
@@ -740,14 +740,14 @@ export function CuttingDashboard() {
           <div className="space-y-1 p-4 text-xs">{d.lay_status.map((s: any) => <div key={s.status} className="flex justify-between"><FlowChip status={s.status} /><span>{s.count} lay(s) · {fmtNumber(s.pcs)} PCS</span></div>)}</div>
         </Card>
         <Card title="Pending lays">
-          <div className="max-h-64 space-y-1 overflow-y-auto p-4 text-xs">{d.pending_lays.map((l: any) => <div key={l.id} className="flex justify-between gap-2"><span className="font-mono">{l.lay_no}</span><span className="truncate">{l.plan_no} · {l.io_no}</span><FlowChip status={l.status} /></div>)}
+          <div className="max-h-64 space-y-1 overflow-y-auto p-4 text-xs">{d.pending_lays.map((l: any) => <div key={l.id} className="flex justify-between gap-2"><span className="tabular-nums">{l.lay_no}</span><span className="truncate">{l.plan_no} · {l.io_no}</span><FlowChip status={l.status} /></div>)}
             {!d.pending_lays.length && <p className="text-slate-400">None.</p>}</div>
         </Card>
       </div>
       <Card title="Size-wise cut balance (open cut orders)">
         <div className="max-h-80 overflow-auto">
           <table className="w-full text-xs"><thead className="sticky top-0 border-b bg-slate-50 text-left"><tr><th className="p-1.5">Cut order</th><th className="p-1.5">Job</th><th className="p-1.5">Style</th><th className="p-1.5">Colour</th><th className="p-1.5">Size</th><th className="p-1.5 text-right">Target</th><th className="p-1.5 text-right">Cut</th><th className="p-1.5 text-right">Balance</th></tr></thead>
-            <tbody>{d.size_balance.map((x: any, i: number) => <tr key={i} className="border-b"><td className="p-1.5 font-mono">{x.plan_no}</td><td className="p-1.5">{x.io_no}</td><td className="p-1.5">{x.style_code}</td><td className="p-1.5">{x.color_name || '—'}</td><td className="p-1.5 font-semibold">{x.size_code}</td>
+            <tbody>{d.size_balance.map((x: any, i: number) => <tr key={i} className="border-b"><td className="p-1.5 tabular-nums">{x.plan_no}</td><td className="p-1.5">{x.io_no}</td><td className="p-1.5">{x.style_code}</td><td className="p-1.5">{x.color_name || '—'}</td><td className="p-1.5 font-semibold">{x.size_code}</td>
               <td className="p-1.5 text-right">{fmtNumber(x.target)}</td><td className="p-1.5 text-right">{fmtNumber(x.cut)}</td><td className={`p-1.5 text-right font-semibold ${x.balance < 0 ? 'text-red-600' : 'text-indigo-700'}`}>{fmtNumber(x.balance)}</td></tr>)}</tbody></table>
         </div>
       </Card>
@@ -852,7 +852,7 @@ export function MarkerImportCard({ onImported }: { onImported: () => void }) {
         <div className="px-4 pb-4">
           <table className="w-full border text-xs" id="mi-result">
             <thead className="bg-slate-50 text-left"><tr><th className="p-1.5">Row</th><th className="p-1.5">Marker</th><th className="p-1.5">Result</th><th className="p-1.5">Detail</th></tr></thead>
-            <tbody>{result.rows.map((x: any) => <tr key={x.row} className="border-t"><td className="p-1.5">{x.row}</td><td className="p-1.5 font-mono">{x.marker_no}</td>
+            <tbody>{result.rows.map((x: any) => <tr key={x.row} className="border-t"><td className="p-1.5">{x.row}</td><td className="p-1.5 tabular-nums">{x.marker_no}</td>
               <td className="p-1.5"><Badge color={x.status === 'ERROR' ? 'red' : x.status === 'DUPLICATE' ? 'amber' : 'emerald'}>{x.status}</Badge></td>
               <td className="p-1.5">{x.errors?.join('; ') || x.message || (x.version ? `v${x.version}` : '') || (x.kg_per_ply ? `${x.kg_per_ply} KG/ply` : '')}</td></tr>)}</tbody>
           </table>

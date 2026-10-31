@@ -162,7 +162,7 @@ export function ScanInput({ onScan, placeholder = 'Scan barcode / type code and 
       {label && <label className="label">{label}</label>}
       <div className="relative">
         <ScanLine size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input className="input pl-9 font-mono" value={v} placeholder={placeholder}
+        <input className="input pl-9 tabular-nums" value={v} placeholder={placeholder}
           onChange={(e) => setV(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {

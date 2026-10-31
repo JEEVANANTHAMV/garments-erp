@@ -227,10 +227,10 @@ export default function TrimGRNsPage() {
                           {s.trim_type || s.trim_code}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-mono font-semibold text-indigo-700">{s.internal_lot_no}</td>
+                      <td className="py-3 px-4 tabular-nums font-semibold text-indigo-700">{s.internal_lot_no}</td>
                       <td className="py-3 px-4 text-slate-600">{s.color_name || '-'} / {s.trim_size || '-'}</td>
                       <td className="py-3 px-4">{s.warehouse_name}</td>
-                      <td className="py-3 px-4 font-mono text-slate-500">{s.bin_location || '-'}</td>
+                      <td className="py-3 px-4 tabular-nums text-slate-500">{s.bin_location || '-'}</td>
                       <td className="py-3 px-4 text-right font-bold text-slate-900">{fmtDecimal(s.stock_qty)}</td>
                       <td className="py-3 px-4 text-right font-bold text-emerald-700">{fmtDecimal(s.available_qty)}</td>
                       <td className="py-3 px-4 font-medium text-slate-500">{s.uom_code || 'PCS'}</td>

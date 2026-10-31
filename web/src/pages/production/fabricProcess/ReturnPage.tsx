@@ -32,8 +32,8 @@ function ReturnList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
             <tbody>
               {(list.data ?? []).map((r) => (
                 <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
-                  <td className="px-3 py-2 font-mono font-semibold text-brand-700">{r.return_no}</td><td className="px-3 py-2">{fmtDate(r.return_date)}</td>
-                  <td className="px-3 py-2 font-mono">{r.inward_no || '—'}</td><td className="px-3 py-2 font-mono">{r.fpo_no || '—'}</td><td className="px-3 py-2">{r.vendor_name || '—'}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.return_no}</td><td className="px-3 py-2">{fmtDate(r.return_date)}</td>
+                  <td className="px-3 py-2 tabular-nums">{r.inward_no || '—'}</td><td className="px-3 py-2 tabular-nums">{r.fpo_no || '—'}</td><td className="px-3 py-2">{r.vendor_name || '—'}</td>
                   <td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2">{String(r.return_type).replace('_', ' ').toLowerCase()}</td><td className="px-3 py-2">{r.reason}</td>
                   <td className="px-3 py-2 text-right">{kg(r.total_kg)}</td><td className="px-3 py-2 text-right">{kg(r.reprocessed_kg)}</td><td className="px-3 py-2">{r.warehouse_name}</td>
                   <td className="px-3 py-2"><FpStatus value={r.status} /></td>
@@ -102,7 +102,7 @@ function ReturnEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: num
               return (
                 <tr key={l.id} className={`border-t border-slate-100 ${s ? 'bg-red-50/60' : ''}`}>
                   <td className="px-2 py-1"><input type="checkbox" checked={!!s} onChange={() => setSel((x) => { const c = { ...x }; if (s) delete c[l.fabric_roll_id]; else c[l.fabric_roll_id] = { qty: n(l.stock_balance_kg), reason: '' }; return c; })} /></td>
-                  <td className="px-2 py-1 font-semibold">{l.io_no}</td><td className="px-2 py-1 font-mono">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
+                  <td className="px-2 py-1 font-semibold">{l.io_no}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
                   <td className="px-2 py-1 text-right">{kg(l.stock_balance_kg)}</td>
                   <td className="px-2 py-1 text-right">{s ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={s.qty} onChange={(e) => setSel((x) => ({ ...x, [l.fabric_roll_id]: { ...s, qty: e.target.value === '' ? '' : Number(e.target.value) } }))} /> : '—'}</td>
                   <td className="px-2 py-1">{s ? <input className="input w-48 py-0.5 text-xs" value={s.reason} placeholder="e.g. Shade variation" onChange={(e) => setSel((x) => ({ ...x, [l.fabric_roll_id]: { ...s, reason: e.target.value } }))} /> : ''}</td>
@@ -136,7 +136,7 @@ function ReturnView({ id, onBack }: { id: number; onBack: () => void }) {
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Roll', 'Colour', 'Return KG', 'Reprocessed KG', 'Open KG', 'Defect reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{r.lines.map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || '—'}</td><td className="px-2 py-1 font-mono">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
+            <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{l.roll_no}</td><td className="px-2 py-1">{l.color_name || '—'}</td>
               <td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{kg(l.reprocessed_kg)}</td><td className="px-2 py-1 text-right">{kg(n(l.qty_kg) - n(l.reprocessed_kg))}</td><td className="px-2 py-1">{l.defect_reason || '—'}</td></tr>
           ))}</tbody>
           <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={3} className="px-2 py-2 text-right">Total</td><td className="px-2 py-2 text-right">{kg(r.total_kg)}</td><td className="px-2 py-2 text-right">{kg(r.reprocessed_kg)}</td><td className="px-2 py-2 text-right">{kg(open)}</td><td /></tr></tfoot>

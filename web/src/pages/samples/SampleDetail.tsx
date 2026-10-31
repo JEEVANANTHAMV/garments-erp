@@ -167,7 +167,7 @@ function SampleView({ id }: { id: number }) {
   return (
     <div>
       <PageHeader breadcrumb={['Orders', 'Samples']}
-        title={<span className="flex flex-wrap items-center gap-2"><span className="font-mono">{s.sample_no}</span><SampleStatus value={s.status} />
+        title={<span className="flex flex-wrap items-center gap-2"><span className="tabular-nums">{s.sample_no}</span><SampleStatus value={s.status} />
           {s.revision_no > 0 && <Badge tone="violet">Revision {s.revision_no}</Badge>}
           {s.priority !== 'NORMAL' && <Badge tone={s.priority === 'CRITICAL' ? 'red' : 'amber'}>{s.priority === 'CRITICAL' ? 'Critical' : 'High'}</Badge>}</span>}
         subtitle={`${s.type_name ?? s.sample_type} · ${s.buyer_name ?? '—'} · ${s.style_code} ${s.style_name ?? ''} · ${fmtNumber(s.qty)} ${s.uom_code ?? 'pcs'} · workflow v${s.workflow_version ?? '—'}`}

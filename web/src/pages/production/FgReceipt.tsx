@@ -72,7 +72,7 @@ export function FgReceiptsPage() {
           loading={loading}
           onRowClick={open}
           columns={[
-            { key: 'receipt_no', header: 'Receipt No', sortable: true, render: (r: any) => <span className="font-mono text-xs font-semibold text-brand-700">{r.receipt_no}</span> },
+            { key: 'receipt_no', header: 'Receipt No', sortable: true, render: (r: any) => <span className="tabular-nums text-xs font-semibold text-brand-700">{r.receipt_no}</span> },
             { key: 'receipt_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.receipt_date) },
             { key: 'io_no', header: 'I/O No', render: (r: any) => r.io_no ? <Badge color="indigo">{r.io_no}</Badge> : <span className="text-slate-300">—</span> },
             { key: 'style_code', header: 'Style', render: (r: any) => <span className="font-medium">{r.style_code}</span> },

@@ -47,10 +47,10 @@ export function FabricIssuePage() {
           loading={loading}
           columns={[
             { key: 'issue_no', header: 'DC No', sortable: true, render: (r: any) => (
-              <button className="font-mono text-xs font-semibold text-brand-700 hover:underline" onClick={() => openDetail(r.id)}>{r.issue_no}</button>) },
+              <button className="tabular-nums text-xs font-semibold text-brand-700 hover:underline" onClick={() => openDetail(r.id)}>{r.issue_no}</button>) },
             { key: 'issue_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.issue_date) },
             { key: 'plan_no', header: 'Cut Order', render: (r: any) => (
-              <div><span className="font-mono text-xs">{r.plan_no}</span> <StatusChip status={r.plan_status} /></div>) },
+              <div><span className="tabular-nums text-xs">{r.plan_no}</span> <StatusChip status={r.plan_status} /></div>) },
             { key: 'io_no', header: 'I/O No', render: (r: any) => <Badge variant="outline">{r.io_no}</Badge> },
             { key: 'style_code', header: 'Style' },
             { key: 'fabric_name', header: 'Fabric' },
@@ -157,7 +157,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
         </FormSection>
         {plan && (
           <div className="flex flex-wrap gap-4 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-900">
-            <span>I/O <b className="font-mono">{plan.io_no}</b></span>
+            <span>I/O <b className="tabular-nums">{plan.io_no}</b></span>
             <span>Style <b>{plan.style_code}</b></span>
             <span>Fabric <b>{plan.fabric_name || 'any'}</b></span>
             <span>Order <b>{fmtNumber(plan.order_qty)} PCS</b></span>
@@ -193,7 +193,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
                 const bad = Number(l.issue_kg) > Number(l.roll.available_kg) + 0.0005 || !(Number(l.issue_kg) > 0);
                 return (
                   <tr key={l.fabric_roll_id} className="border-b">
-                    <td className="p-2 font-mono font-semibold">{l.roll.roll_no}</td>
+                    <td className="p-2 tabular-nums font-semibold">{l.roll.roll_no}</td>
                     <td className="p-2">{l.roll.lot_no}</td><td className="p-2">{l.roll.shade}</td>
                     <td className="p-2">{l.roll.gsm}</td><td className="p-2">{l.roll.dia}</td><td className="p-2">{l.roll.grn_no}</td>
                     <td className="p-2 text-right"><Qty v={l.roll.weight_kg} uom="KG" dp={3} /></td>
@@ -251,7 +251,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
       </>}>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-5">
-          <div><p className="text-slate-400">Cut Order</p><p className="font-mono font-semibold">{dc.plan_no}</p><StatusChip status={dc.plan_status} /></div>
+          <div><p className="text-slate-400">Cut Order</p><p className="tabular-nums font-semibold">{dc.plan_no}</p><StatusChip status={dc.plan_status} /></div>
           <div><p className="text-slate-400">I/O · Style</p><p className="font-semibold">{dc.io_no} · {dc.style_code}</p></div>
           <div><p className="text-slate-400">Fabric</p><p className="font-semibold">{dc.fabric_name}</p></div>
           <div><p className="text-slate-400">From → To</p><p className="font-semibold">{dc.from_location || '—'} → {dc.to_location || '—'}</p></div>
@@ -270,7 +270,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
             <tbody>
               {dc.rolls.map((r: any) => (
                 <tr key={r.id} className="border-b">
-                  <td className="p-2 font-mono font-semibold">{r.roll_no}{r.is_legacy ? <span className="ml-1 text-[10px] text-amber-600">(free-text)</span> : null}</td>
+                  <td className="p-2 tabular-nums font-semibold">{r.roll_no}{r.is_legacy ? <span className="ml-1 text-[10px] text-amber-600">(free-text)</span> : null}</td>
                   <td className="p-2">{r.lot_no} / {r.shade}
                     <span className={`ml-1 rounded px-1 py-0.5 text-[10px] font-bold ${!r.process_state || r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>
                       {stateLabel(r.process_state || 'GREY')}{r.color_name ? ` · ${r.color_name}` : ''}
@@ -304,7 +304,7 @@ function DcDetailModal({ dc, onClose, onChanged }: { dc: any; onClose: () => voi
             <h3 className="mb-2 border-b border-slate-100 pb-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-slate-500">Returns</h3>
             <ul className="space-y-0.5 text-xs text-slate-600">
               {dc.returns.map((r: any) => (
-                <li key={r.id}><span className="font-mono">{r.return_no}</span> · {fmtDate(r.return_date)} · <Qty v={r.return_kg} uom="KG" dp={3} /> · {r.reason || '—'} · {r.created_by_name}</li>
+                <li key={r.id}><span className="tabular-nums">{r.return_no}</span> · {fmtDate(r.return_date)} · <Qty v={r.return_kg} uom="KG" dp={3} /> · {r.reason || '—'} · {r.created_by_name}</li>
               ))}
             </ul>
           </div>

@@ -64,7 +64,7 @@ function TypesTab() {
         {(q.data ?? []).map((t) => (
           <div key={t.id} className={`card overflow-hidden ${yes(t.is_active) ? '' : 'opacity-60'}`}>
             <div className="flex flex-wrap items-center gap-2 border-b border-surface-border px-4 py-2.5 text-xs">
-              <span className="font-mono font-bold text-brand-700">{t.code}</span><span className="text-[13px] font-semibold">{t.name}</span>
+              <span className="tabular-nums font-bold text-brand-700">{t.code}</span><span className="text-[13px] font-semibold">{t.name}</span>
               <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10.5px] font-bold text-purple-800">→ {t.output_state}</span>
               {yes(t.requires_qc) && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10.5px] font-bold text-orange-800">QC required before posting</span>}
               {yes(t.is_reprocess) && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-bold text-slate-700">Reprocess</span>}
@@ -152,7 +152,7 @@ function ReasonsTab() {
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>{['Code', 'Reason', 'Used for', 'Default billing', 'Active', ''].map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr></thead>
           <tbody>{(q.data ?? []).map((x) => (
-            <tr key={x.id} className="border-t border-slate-100"><td className="px-3 py-1.5 font-mono">{x.code}</td><td className="px-3 py-1.5 font-semibold">{x.reason}</td><td className="px-3 py-1.5">{x.kind}</td>
+            <tr key={x.id} className="border-t border-slate-100"><td className="px-3 py-1.5 tabular-nums">{x.code}</td><td className="px-3 py-1.5 font-semibold">{x.reason}</td><td className="px-3 py-1.5">{x.kind}</td>
               <td className="px-3 py-1.5">{x.default_billing || '—'}</td><td className="px-3 py-1.5">{yes(x.is_active) ? 'Yes' : 'No'}</td>
               <td className="px-3 py-1.5 text-right">{master && <button className="p-1 text-slate-400 hover:text-brand-700" onClick={() => setR({ ...x, default_billing: x.default_billing ?? '', is_active: yes(x.is_active) })}><Pencil size={13} /></button>}</td></tr>
           ))}</tbody>

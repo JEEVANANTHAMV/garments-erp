@@ -180,7 +180,7 @@ export default function ProcessRoutePage() {
             <tbody>
               {routes.map((r: any) => (
                 <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="td font-mono font-semibold text-brand-700">{r.route_code}</td>
+                  <td className="td tabular-nums font-semibold text-brand-700">{r.route_code}</td>
                   <td className="td font-medium">{r.route_name}</td>
                   <td className="td">
                     <div className="flex flex-wrap gap-1">

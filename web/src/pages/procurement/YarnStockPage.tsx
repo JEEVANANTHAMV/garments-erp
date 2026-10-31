@@ -411,10 +411,10 @@ export default function YarnStockPage() {
                   <tr key={b.id} className="hover:bg-slate-50/70 transition">
                     <td className="py-3 px-4">
                       <div className="font-semibold text-violet-800">{b.yarn_name || 'Yarn Item'}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{b.yarn_code || ''}</div>
+                      <div className="text-[10px] text-slate-400 tabular-nums">{b.yarn_code || ''}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <div className="font-mono font-bold text-slate-800 text-[11px]">{b.lot_no || '—'}</div>
+                      <div className="tabular-nums font-bold text-slate-800 text-[11px]">{b.lot_no || '—'}</div>
                       {(b.shade || b.color_name) && (
                         <div className="text-[10px] text-slate-500 mt-0.5">
                           {[b.shade, b.color_name].filter(Boolean).join(' · ')}
@@ -427,7 +427,7 @@ export default function YarnStockPage() {
                     </td>
                     <td className="py-3 px-3 text-[11px]">
                       {b.internal_ir_no ? (
-                        <button onClick={() => setIoFilter(b.internal_ir_no!)} className="font-mono font-semibold text-indigo-700 hover:underline" title="Filter by this IO">
+                        <button onClick={() => setIoFilter(b.internal_ir_no!)} className="tabular-nums font-semibold text-indigo-700 hover:underline" title="Filter by this IO">
                           {b.internal_ir_no}
                         </button>
                       ) : (
@@ -451,7 +451,7 @@ export default function YarnStockPage() {
                     </td>
                     <td className="py-3 px-3">
                       <div className="text-slate-800 font-medium">{b.warehouse_name || '—'}</div>
-                      <span className={`font-mono text-[10px] px-1 py-0.5 rounded ${b.location_bin ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
+                      <span className={`tabular-nums text-[10px] px-1 py-0.5 rounded ${b.location_bin ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>
                         Bin: {b.location_bin || 'Unassigned'}
                       </span>
                     </td>

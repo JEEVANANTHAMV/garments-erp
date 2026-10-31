@@ -39,7 +39,7 @@ export function BenefitSchemesPage() {
           <tbody>{list.isLoading && <tr><td colSpan={9}><LoadingBlock rows={4} /></td></tr>}
             {!list.isLoading && !list.data?.length && <tr><td colSpan={9}><EmptyState title="No schemes" /></td></tr>}
             {list.data?.map((s) => <tr key={s.id} className="row-hover align-top" data-scheme={s.code}>
-              <td className="td font-mono text-[12px]">{s.code}</td>
+              <td className="td tabular-nums text-[12px]">{s.code}</td>
               <td className="td text-[12.5px]"><button className="text-left font-semibold text-brand-700 hover:underline" onClick={() => setEdit({ ...s, effective_from: s.effective_from ?? '', effective_to: s.effective_to ?? '', short_name: s.short_name ?? '', description: s.description ?? '', is_suggested: !!s.is_suggested, allow_multiple: !!s.allow_multiple, is_active: !!s.is_active, reason: '' })}>{s.display_name}</button>
                 {s.sb_field && <p className="text-[10.5px] text-slate-400">shipping bill field</p>}</td>
               <td className="td text-[12px]">{s.mode_label}<p className="text-[10.5px] text-slate-400">{s.allowed_events.length} events · {s.custom_fields.length} fields</p></td>
@@ -211,7 +211,7 @@ function HistoryModal({ id, onClose }: { id: number; onClose: () => void }) {
       {q.isLoading ? <LoadingBlock rows={3} /> : q.error ? <ErrorState error={q.error} /> : (
         <table className="w-full" id="sch-history"><thead><tr><th className="th">Version</th><th className="th">Change</th><th className="th">What changed (old → new)</th><th className="th">Reason</th><th className="th">By · when</th></tr></thead>
           <tbody>{q.data.history.map((h: any) => <tr key={h.id} className="align-top"><td className="td">v{h.config_version}</td><td className="td text-[12px]">{h.change_type.toLowerCase().replace('_', ' ')}</td>
-            <td className="td max-w-[360px] font-mono text-[10.5px] text-slate-600">{diff(h.old_snapshot, h.snapshot).map((k) => <p key={k}>{k}: {JSON.stringify(h.old_snapshot[k]).slice(0, 60)} → {JSON.stringify(h.snapshot[k]).slice(0, 60)}</p>)}</td>
+            <td className="td max-w-[360px] tabular-nums text-[10.5px] text-slate-600">{diff(h.old_snapshot, h.snapshot).map((k) => <p key={k}>{k}: {JSON.stringify(h.old_snapshot[k]).slice(0, 60)} → {JSON.stringify(h.snapshot[k]).slice(0, 60)}</p>)}</td>
             <td className="td text-[12px]">{h.reason ?? ''}</td><td className="td text-[12px]">{h.changed_by_name ?? 'system'}<p className="text-slate-400">{fmtDateTime(h.changed_at)}</p></td></tr>)}</tbody></table>
       )}
     </Modal>

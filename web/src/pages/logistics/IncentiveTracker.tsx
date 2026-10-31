@@ -174,7 +174,7 @@ function Register({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }
                 <Fragment key={r.id}>
                   <tr className="row-hover align-top" data-claim={r.id} data-scheme={r.scheme_code} data-sb={r.sb_no}>
                     <td className="td"><button className="text-slate-400 hover:text-slate-700" title="Show every event" data-expand={r.id} onClick={() => setExp((e) => ({ ...e, [r.id]: !e[r.id] }))}>{exp[r.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button></td>
-                    <td className="td whitespace-nowrap text-[12px]">{r.shipping_bill_id ? <Link className="font-mono font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link> : <span className="text-slate-400">no SB</span>}
+                    <td className="td whitespace-nowrap text-[12px]">{r.shipping_bill_id ? <Link className="tabular-nums font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link> : <span className="text-slate-400">no SB</span>}
                       <p className="text-slate-500">{fmtDate(r.sb_date ?? r.claim_date)}</p></td>
                     <td className="td text-[12px]">{r.invoice_no ?? '—'}<p className="text-slate-500">{r.so_no ?? ''} · {r.buyer_name ?? ''}</p></td>
                     <td className="td text-[12px]"><button className="text-left font-semibold text-brand-700 hover:underline" data-open={r.id} onClick={() => onOpen(r.id)}>{r.scheme_name}</button><p className="text-[10.5px] text-slate-400">{r.mode_label}</p></td>
@@ -238,7 +238,7 @@ function Bills({ onOpen }: { onOpen: (id: number) => void }) {
               {!t.isLoading && !rows.length && <tr><td colSpan={types.length + 4} className="td py-10 text-center text-slate-400">{status === 'OPEN' ? 'Nothing pending — every benefit is settled' : 'No shipping bills with benefits'}</td></tr>}
               {rows.map((r) => (
                 <tr key={r.shipping_bill_id} className="row-hover align-top" data-sb={r.sb_no}>
-                  <td className="td whitespace-nowrap text-[12px]"><Link className="font-mono font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link>
+                  <td className="td whitespace-nowrap text-[12px]"><Link className="tabular-nums font-semibold text-brand-700 hover:underline" to={`/export/shipping-bills/${r.shipping_bill_id}`}>{r.sb_no}</Link>
                     <p className="text-slate-500">{fmtDate(r.sb_date)}{r.pending_days != null && <span className={clsx('ml-1', r.pending_days > 90 ? 'font-semibold text-red-600' : 'text-slate-400')}>· {r.pending_days} d</span>}</p></td>
                   <td className="td text-[12px]">{r.invoice_no ?? '—'}<p className="text-slate-500">{r.so_no ?? ''} · {r.buyer_name ?? ''}</p></td>
                   {types.map((x) => {
@@ -292,7 +292,7 @@ function Receipts({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }
                 {q.data?.data.map((r) => <tr key={r.id} className="row-hover cursor-pointer" onClick={() => onOpen(r.claim_id)}><td className="td text-[12px] font-semibold">{fmtDate(r.event_date)}</td><td className="td text-[12px]">{r.scheme_name}</td>
                   <td className="td text-[12px]">{r.label}</td><td className="td text-[12px]">{r.sb_no ?? '—'}<p className="text-slate-500">{r.invoice_no ?? ''}</p></td>
                   <td className={clsx('td text-right tabular-nums', r.signed_amount < 0 && 'text-red-600')}>{fmtDecimal(r.signed_amount, 2)}</td>
-                  <td className="td text-[12px]">{r.bank_label ?? ''}<p className="font-mono text-[11px]">{r.bank_reference ?? r.scrip_number ?? ''}</p></td><td className="td text-[11px] text-slate-500">{fmtDate(r.posted_at)} · {r.posted_by_name ?? ''}</td></tr>)}</tbody>
+                  <td className="td text-[12px]">{r.bank_label ?? ''}<p className="tabular-nums text-[11px]">{r.bank_reference ?? r.scrip_number ?? ''}</p></td><td className="td text-[11px] text-slate-500">{fmtDate(r.posted_at)} · {r.posted_by_name ?? ''}</td></tr>)}</tbody>
               {q.data && q.data.data.length > 0 && <tfoot><tr className="border-t-2 border-slate-200 font-semibold"><td className="td" colSpan={4}>Total</td><td className="td text-right tabular-nums">{fmtDecimal(q.data.total, 2)}</td><td colSpan={2} /></tr></tfoot>}</table>
           </div>
           <div className="card overflow-x-auto"><p className="border-b border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-slate-700">Daily totals</p>
@@ -320,7 +320,7 @@ function Ageing({ onFilter }: { onFilter: (f: Record<string, unknown>) => void }
           <div className="card overflow-x-auto"><AgeingTable data={q.data} onFilter={(f) => onFilter({ ...f, as_of: asOf })} /></div>
           <div className="card overflow-x-auto">
             <table className="w-full" id="eb-ageing-rows"><thead><tr><th className="th">SB</th><th className="th">Benefit</th><th className="th">Aged from</th><th className="th text-right">Days</th><th className="th">Bucket</th><th className="th text-right">Pending ₹</th><th className="th">Status</th></tr></thead>
-              <tbody>{q.data.rows.slice(0, 300).map((r: any) => <tr key={r.id}><td className="td text-[12px] font-mono">{r.sb_no ?? '—'}</td><td className="td text-[12px]">{r.scheme_name}</td>
+              <tbody>{q.data.rows.slice(0, 300).map((r: any) => <tr key={r.id}><td className="td text-[12px] tabular-nums">{r.sb_no ?? '—'}</td><td className="td text-[12px]">{r.scheme_name}</td>
                 <td className="td text-[12px]">{fmtDate(r.ageing_date)} <span className="text-slate-400">({r.ageing_label})</span></td><td className="td text-right tabular-nums">{r.days_pending}</td><td className="td text-[12px]">{r.bucket}</td>
                 <td className="td text-right tabular-nums">{fmtDecimal(r.pending_amount, 2)}</td><td className="td"><StatusPill status={r.status} label={r.status_label} tone={r.status_tone} /></td></tr>)}</tbody></table>
           </div>
@@ -348,7 +348,7 @@ function Followups({ onOpen }: { onOpen: (id: number) => void }) {
           <table className="w-full" id="eb-followups"><thead><tr><th className="th">Benefit · SB</th><th className="th">Reason</th><th className="th">Next action</th><th className="th">Owner</th><th className="th">Due</th><th className="th text-right">Days open</th><th className="th text-right">Pending ₹</th><th className="th" /></tr></thead>
             <tbody>{q.isLoading && <tr><td colSpan={8}><LoadingBlock rows={3} /></td></tr>}
               {!q.isLoading && !q.data?.length && <tr><td colSpan={8} className="td py-8 text-center text-slate-400">No follow-ups</td></tr>}
-              {q.data?.map((f) => <tr key={f.id} className="row-hover"><td className="td text-[12px]"><button className="font-semibold text-brand-700 hover:underline" onClick={() => onOpen(f.claim_id)}>{f.scheme_name}</button><p className="font-mono text-slate-500">{f.sb_no ?? ''}</p></td>
+              {q.data?.map((f) => <tr key={f.id} className="row-hover"><td className="td text-[12px]"><button className="font-semibold text-brand-700 hover:underline" onClick={() => onOpen(f.claim_id)}>{f.scheme_name}</button><p className="tabular-nums text-slate-500">{f.sb_no ?? ''}</p></td>
                 <td className="td text-[12px]">{f.reason_code.toLowerCase().replace('_', ' ')}<p><StatusPill status={f.status} label={f.status_label} tone={f.status_tone} /></p></td><td className="td text-[12px]">{f.action_note}</td><td className="td text-[12px]">{f.owner_name ?? '—'}</td>
                 <td className={clsx('td text-[12px]', f.overdue && 'font-semibold text-red-600')}>{fmtDate(f.due_date)}</td><td className="td text-right tabular-nums">{f.days_outstanding}</td><td className="td text-right tabular-nums">{fmtDecimal(f.pending_amount, 2)}</td>
                 <td className="td">{f.status === 'OPEN' && <Button size="sm" variant="secondary" onClick={async () => { try { await http.post(`/export-benefits/followups/${f.id}/done`, {}); toast('Done'); void qc.invalidateQueries({ queryKey: ['export-benefits'] }); } catch (e) { toast(errMsg(e), 'error'); } }}>Done</Button>}</td></tr>)}</tbody></table>
@@ -395,7 +395,7 @@ function Recon({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }) {
             <tbody>{lines.isLoading && <tr><td colSpan={8}><LoadingBlock rows={3} /></td></tr>}
               {!lines.isLoading && !lines.data?.data.length && <tr><td colSpan={8} className="td py-8 text-center text-slate-400">No bank lines — import a statement (CSV / Excel with Date, Credit, Reference / Narration columns)</td></tr>}
               {lines.data?.data.map((l) => <tr key={l.id} className="align-top" data-line={l.id}><td className="td text-[12px]">{fmtDate(l.txn_date)}</td><td className="td text-[12px]">{l.bank_label ?? '—'}</td>
-                <td className="td text-[12px]"><span className="font-mono">{l.reference ?? '—'}</span><p className="max-w-[340px] truncate text-slate-500" title={l.narration ?? ''}>{l.narration ?? ''}</p></td>
+                <td className="td text-[12px]"><span className="tabular-nums">{l.reference ?? '—'}</span><p className="max-w-[340px] truncate text-slate-500" title={l.narration ?? ''}>{l.narration ?? ''}</p></td>
                 <td className="td text-right tabular-nums">{fmtDecimal(l.amount, 2)}</td><td className="td text-right tabular-nums">{fmtDecimal(l.unallocated, 2)}</td>
                 <td className="td text-[12px]">{l.matches.map((m: any) => <p key={m.id}><button className="text-brand-700 hover:underline" onClick={() => onOpen(m.claim_id)}>{m.scheme_name} {m.sb_no ?? ''}</button> {inr(m.matched_amount)}
                   <span className="text-slate-400"> {m.match_type.toLowerCase()}</span>{canRecon && <button className="ml-1 text-[11px] text-red-600 hover:underline" data-undo={m.id} onClick={() => { const reason = window.prompt('Reason to undo this match'); if (reason) void act(() => http.post(`/export-benefits/reconciliation/matches/${m.id}/undo`, { reason }), () => 'Match undone'); }}>undo</button>}</p>)}
@@ -409,7 +409,7 @@ function Recon({ meta, onOpen }: { meta: Meta; onOpen: (id: number) => void }) {
       {rep.data?.scrips?.length > 0 && (
         <div className="card overflow-x-auto"><p className="border-b border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-slate-700">Scrip register — compare with the ICEGATE e-scrip ledger</p>
           <table className="w-full" id="eb-scrips"><thead><tr><th className="th">Scrip no</th><th className="th">Scheme</th><th className="th text-right">Issued / in</th><th className="th text-right">Utilised</th><th className="th text-right">Sold / out</th><th className="th text-right">Expired</th><th className="th text-right">Balance</th><th className="th">Last event</th></tr></thead>
-            <tbody>{rep.data.scrips.map((x: any) => <tr key={`${x.scrip_number}-${x.scheme_name}`}><td className="td font-mono text-[12px]">{x.scrip_number}</td><td className="td text-[12px]">{x.scheme_name}</td><td className="td text-right tabular-nums">{fmtDecimal(x.issued, 2)}</td>
+            <tbody>{rep.data.scrips.map((x: any) => <tr key={`${x.scrip_number}-${x.scheme_name}`}><td className="td tabular-nums text-[12px]">{x.scrip_number}</td><td className="td text-[12px]">{x.scheme_name}</td><td className="td text-right tabular-nums">{fmtDecimal(x.issued, 2)}</td>
               <td className="td text-right tabular-nums">{fmtDecimal(x.utilised, 2)}</td><td className="td text-right tabular-nums">{fmtDecimal(x.sold, 2)}</td><td className="td text-right tabular-nums">{fmtDecimal(x.expired, 2)}</td>
               <td className={clsx('td text-right tabular-nums font-semibold', x.balance < 0 && 'text-red-600')}>{fmtDecimal(x.balance, 2)}</td><td className="td text-[12px]">{fmtDate(x.last_date)}</td></tr>)}</tbody></table></div>
       )}
@@ -437,8 +437,8 @@ function MatchModal({ line, onClose, onDone }: { line: any; onClose: () => void;
       {c.isLoading ? <LoadingBlock rows={3} /> : c.error ? <ErrorState error={c.error} /> : !c.data?.length ? <EmptyState title="No unmatched receipts" message="Record the receipt on its benefit first (actual date, amount, UTR), then match." /> : (
         <table className="w-full" id="eb-candidates"><thead><tr><th className="th" /><th className="th">Date</th><th className="th">Benefit · SB</th><th className="th">UTR</th><th className="th text-right">Unmatched ₹</th></tr></thead>
           <tbody>{c.data.map((e) => <tr key={e.id} className={clsx('row-hover cursor-pointer', pick?.id === e.id && 'bg-brand-50')} data-candidate={e.id} onClick={() => { setPick(e); setAmount(String(Math.min(e.unmatched, line.unallocated))); }}>
-            <td className="td"><input type="radio" readOnly checked={pick?.id === e.id} /></td><td className="td text-[12px]">{fmtDate(e.event_date)}</td><td className="td text-[12px]">{e.scheme_name} <span className="font-mono">{e.sb_no ?? ''}</span><p className="text-slate-500">{e.label} · {e.bank_label ?? ''}</p></td>
-            <td className="td font-mono text-[12px]">{e.bank_reference ?? '—'}</td><td className="td text-right tabular-nums">{fmtDecimal(e.unmatched, 2)}</td></tr>)}</tbody></table>
+            <td className="td"><input type="radio" readOnly checked={pick?.id === e.id} /></td><td className="td text-[12px]">{fmtDate(e.event_date)}</td><td className="td text-[12px]">{e.scheme_name} <span className="tabular-nums">{e.sb_no ?? ''}</span><p className="text-slate-500">{e.label} · {e.bank_label ?? ''}</p></td>
+            <td className="td tabular-nums text-[12px]">{e.bank_reference ?? '—'}</td><td className="td text-right tabular-nums">{fmtDecimal(e.unmatched, 2)}</td></tr>)}</tbody></table>
       )}
       {pick && <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <Input label="Amount to allocate" type="number" step="any" id="eb-match-amount" value={amount} onChange={(e) => setAmount(e.target.value)} hint={`Line unallocated ${inr(line.unallocated)}`} />

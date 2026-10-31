@@ -77,7 +77,7 @@ export function JobHeaderRow({ group, colSpan, qty, extra, checked, onCheck, ope
             </button>
           )}
           {onCheck && <input type="checkbox" checked={!!checked} onChange={onCheck} />}
-          <span>Job / IO: <b className="font-mono text-brand-800">{group.io_no}</b></span>
+          <span>Job / IO: <b className="tabular-nums text-brand-800">{group.io_no}</b></span>
           <span>Style: <b>{group.style_no}</b>{group.style_description ? <span className="text-slate-500"> · {group.style_description}</span> : null}</span>
           {group.buyer && <span>Buyer: <b>{group.buyer}</b></span>}
           {group.po_no && <span>PO: <b>{group.po_no}</b></span>}
@@ -382,7 +382,7 @@ export function DocumentsModal({ open, onClose, url, title, noKey, dateKey, onPi
         <tbody>
           {shown.map((r) => (
             <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
-              <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">{r[noKey]}</td>
+              <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{r[noKey]}</td>
               <td className="px-2 py-1.5">{fmtDate(r[dateKey])}</td>
               <td className="px-2 py-1.5">{r.shift_name || '—'}</td>
               {columns?.map((c) => <td key={c.key} className="px-2 py-1.5 text-right">{c.render ? c.render(r) : fmtNumber(r[c.key])}</td>)}
@@ -400,7 +400,7 @@ export function DocumentsModal({ open, onClose, url, title, noKey, dateKey, onPi
 
 export function DocStatus({ no, status }: { no?: string | null; status?: string | null }) {
   if (!no) return <Badge tone="blue">New document</Badge>;
-  return <span className="flex items-center gap-2 text-xs"><span className="font-mono font-semibold text-brand-700">{no}</span><StatusBadge value={status} /></span>;
+  return <span className="flex items-center gap-2 text-xs"><span className="tabular-nums font-semibold text-brand-700">{no}</span><StatusBadge value={status} /></span>;
 }
 
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));

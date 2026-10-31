@@ -178,7 +178,7 @@ export function GeneralPurchasesPage() {
               <button
                 type="button"
                 onClick={() => nav(isPoMode ? `/procurement/general-orders/${r.id}` : `/procurement/general-purchases/${r.id}`)}
-                className="font-mono text-[12px] font-bold text-brand-700 hover:underline text-left flex items-center gap-1.5"
+                className="tabular-nums text-[12px] font-bold text-brand-700 hover:underline text-left flex items-center gap-1.5"
               >
                 {r.purchase_no}
                 {r.purchase_type === 'EMERGENCY' && (
@@ -217,7 +217,7 @@ export function GeneralPurchasesPage() {
             render: (r: any) => (
               r.supplier_inv_no ? (
                 <div className="text-xs">
-                  <span className="font-mono font-medium text-slate-700">{r.supplier_inv_no}</span>
+                  <span className="tabular-nums font-medium text-slate-700">{r.supplier_inv_no}</span>
                   {r.supplier_inv_date && (
                     <div className="text-[10px] text-slate-400">{fmtDate(r.supplier_inv_date)}</div>
                   )}
@@ -243,7 +243,7 @@ export function GeneralPurchasesPage() {
             align: 'right',
             sortable: true,
             render: (r: any) => (
-              <span className="font-semibold text-slate-900 font-mono">
+              <span className="font-semibold text-slate-900 tabular-nums">
                 {r.currency_code || 'INR'} {fmtDecimal(r.grand_total, 2)}
               </span>
             ),

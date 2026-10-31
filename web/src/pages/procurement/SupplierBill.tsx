@@ -804,7 +804,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 shadow-2xs"
                     >
                       <span>📦 {gLabel}</span>
-                      <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1.5 py-0.5 rounded-full font-mono">
+                      <span className="text-[10px] bg-indigo-200 text-indigo-900 px-1.5 py-0.5 rounded-full tabular-nums">
                         {count} lines
                       </span>
                       <button
@@ -978,7 +978,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
                       <td className="py-1.5 px-2">
                         {l.grn_no || l.grn_id ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] tabular-nums font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                             {l.grn_no || `GRN #${l.grn_id}`}
                           </span>
                         ) : (
@@ -995,7 +995,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.lot_no || ''}
                               onChange={(e) => updateLine(idx, { lot_no: e.target.value })}
                               placeholder="Lot no"
-                              className="w-full text-xs font-mono border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs tabular-nums border border-slate-300 rounded px-1.5 py-1"
                             />
                           </td>
                           <td className="py-1.5 px-2 text-right">
@@ -1019,7 +1019,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                               value={l.dia || ''}
                               onChange={(e) => updateLine(idx, { dia: e.target.value })}
                               placeholder='e.g. 32"'
-                              className="w-full text-xs font-mono border border-slate-300 rounded px-1.5 py-1"
+                              className="w-full text-xs tabular-nums border border-slate-300 rounded px-1.5 py-1"
                             />
                           </td>
                           <td className="py-1.5 px-2 text-right">
@@ -1117,7 +1117,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                         />
                       </td>
 
-                      <td className="py-1.5 px-3 text-right font-bold text-brand-700 text-xs font-mono">
+                      <td className="py-1.5 px-3 text-right font-bold text-brand-700 text-xs tabular-nums">
                         {fmtDecimal(l.amount, 2)}
                       </td>
 
@@ -1307,7 +1307,7 @@ export function SupplierBillsPage() {
             header: 'Bill no',
             sortable: true,
             render: (r: any) => (
-              <span className="font-mono text-[12px] font-medium text-brand-700">{r.bill_no}</span>
+              <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.bill_no}</span>
             ),
           },
           {
@@ -1327,7 +1327,7 @@ export function SupplierBillsPage() {
             render: (r: any) => {
               if (r.po_no || r.grn_no) {
                 return (
-                  <div className="text-[11px] font-mono leading-tight space-y-0.5">
+                  <div className="text-[11px] tabular-nums leading-tight space-y-0.5">
                     {r.po_no && <div><span className="text-slate-400">PO:</span> {r.po_no}</div>}
                     {r.grn_no && <div><span className="text-slate-400">GRN:</span> {r.grn_no}</div>}
                   </div>
@@ -1335,14 +1335,14 @@ export function SupplierBillsPage() {
               }
               if (r.knitting_order_no) {
                 return (
-                  <div className="text-[11px] font-mono text-sky-700">
+                  <div className="text-[11px] tabular-nums text-sky-700">
                     <span className="text-slate-400">Knit Order:</span> {r.knitting_order_no}
                   </div>
                 );
               }
               if (r.fabric_process_order_no) {
                 return (
-                  <div className="text-[11px] font-mono text-pink-700">
+                  <div className="text-[11px] tabular-nums text-pink-700">
                     <span className="text-slate-400">Proc Order:</span> {r.fabric_process_order_no}
                   </div>
                 );

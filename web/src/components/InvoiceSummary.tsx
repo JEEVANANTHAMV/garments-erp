@@ -27,7 +27,7 @@ interface InvoiceSummaryProps {
 }
 
 const numCls =
-  'w-24 text-[11px] text-right font-mono border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
+  'w-24 text-[11px] text-right tabular-nums border border-slate-300 rounded px-1.5 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
 const pctCls =
   'w-14 text-[11px] text-right border border-slate-300 rounded px-1 py-0.5 bg-white focus:border-brand-500 focus:outline-none disabled:bg-slate-50';
 const selCls =
@@ -73,24 +73,24 @@ export function InvoiceSummary({
 
       <div className="flex items-center justify-between py-0.5">
         <span className="text-slate-600">Taxable Subtotal</span>
-        <span className="font-bold text-slate-900 text-sm font-mono">{money(t.taxable)}</span>
+        <span className="font-bold text-slate-900 text-sm tabular-nums">{money(t.taxable)}</span>
       </div>
 
       {gstMode === 'INTRA_STATE' ? (
         <>
           <div className="flex items-center justify-between py-0.5 text-slate-700">
             <span className="pl-2 text-slate-500">CGST{singleRate !== null ? ` @ ${singleRate / 2}%` : ''}</span>
-            <span className="font-medium font-mono">{money(t.cgst)}</span>
+            <span className="font-medium tabular-nums">{money(t.cgst)}</span>
           </div>
           <div className="flex items-center justify-between py-0.5 text-slate-700">
             <span className="pl-2 text-slate-500">SGST{singleRate !== null ? ` @ ${singleRate / 2}%` : ''}</span>
-            <span className="font-medium font-mono">{money(t.sgst)}</span>
+            <span className="font-medium tabular-nums">{money(t.sgst)}</span>
           </div>
         </>
       ) : (
         <div className="flex items-center justify-between py-0.5 text-slate-700">
           <span className="pl-2 text-slate-500">IGST{singleRate !== null ? ` @ ${singleRate}%` : ''}</span>
-          <span className="font-medium font-mono">{money(t.igst)}</span>
+          <span className="font-medium tabular-nums">{money(t.igst)}</span>
         </div>
       )}
 
@@ -154,7 +154,7 @@ export function InvoiceSummary({
           />
           <span className="text-[10px] text-slate-400">%</span>
         </div>
-        <span className="font-bold text-emerald-700 font-mono">+ {money(t.tcs)}</span>
+        <span className="font-bold text-emerald-700 tabular-nums">+ {money(t.tcs)}</span>
       </div>
 
       {/* TDS — deducted by us, on taxable value */}
@@ -179,7 +179,7 @@ export function InvoiceSummary({
           />
           <span className="text-[10px] text-slate-400">%</span>
         </div>
-        <span className="font-bold text-red-600 font-mono">− {money(t.tds)}</span>
+        <span className="font-bold text-red-600 tabular-nums">− {money(t.tds)}</span>
       </div>
 
       <div className="flex items-center justify-between py-0.5 text-slate-700">
@@ -205,13 +205,13 @@ export function InvoiceSummary({
 
       <div className="flex items-center justify-between pt-2 border-t border-brand-200 text-sm">
         <span className="font-extrabold text-brand-900">Net Payable ({currencyCode})</span>
-        <span className="font-extrabold text-brand-900 text-base font-mono">{money(t.net)}</span>
+        <span className="font-extrabold text-brand-900 text-base tabular-nums">{money(t.net)}</span>
       </div>
 
       {fx !== 1 && (
         <div className="flex items-center justify-between pt-1 text-[11px] font-bold text-emerald-900">
           <span>INR equivalent @ {fx}</span>
-          <span className="font-mono">₹{fmtDecimal(t.net * fx, 2)}</span>
+          <span className="tabular-nums">₹{fmtDecimal(t.net * fx, 2)}</span>
         </div>
       )}
     </div>

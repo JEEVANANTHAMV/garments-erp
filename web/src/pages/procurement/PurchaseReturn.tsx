@@ -160,7 +160,7 @@ export function PurchaseReturnsPage() {
                       onClick={() => nav(`/procurement/returns/${r.id}`)}
                       className="hover:bg-slate-50 cursor-pointer transition-colors"
                     >
-                      <td className="py-3 px-4 font-mono font-bold text-brand-700">
+                      <td className="py-3 px-4 tabular-nums font-bold text-brand-700">
                         {r.return_no}
                       </td>
                       <td className="py-3 px-4 text-slate-500">
@@ -172,21 +172,21 @@ export function PurchaseReturnsPage() {
                       <td className="py-3 px-4 font-medium text-slate-900">
                         {r.supplier_name || '—'}
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-600">
+                      <td className="py-3 px-4 tabular-nums text-slate-600">
                         {r.grn_no || '—'}
                       </td>
                       <td className="py-3 px-4">
                         <span className="text-slate-700 font-medium">{humanize(r.return_reason)}</span>
                       </td>
-                      <td className="py-3 px-4 text-right font-mono font-semibold text-red-700">
+                      <td className="py-3 px-4 text-right tabular-nums font-semibold text-red-700">
                         {fmtDecimal(r.total_qty, 2)}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
+                      <td className="py-3 px-4 text-right tabular-nums font-bold text-slate-800">
                         ₹{fmtDecimal(r.total_amount, 2)}
                       </td>
                       <td className="py-3 px-4">
                         {r.return_dc_no ? (
-                          <span className="font-mono text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
+                          <span className="tabular-nums text-[11px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
                             {r.return_dc_no}
                           </span>
                         ) : (

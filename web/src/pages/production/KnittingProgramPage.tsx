@@ -578,7 +578,7 @@ export default function KnittingProgramPage() {
               <tbody>
                 {programs.map((p: any) => (
                   <tr key={p.id} className="row-hover">
-                    <td className="td font-mono text-[12px] font-semibold text-brand-700">
+                    <td className="td tabular-nums text-[12px] font-semibold text-brand-700">
                       {p.program_no}
                     </td>
                     <td className="td text-slate-500">{fmtDate(p.program_date)}</td>
@@ -1163,7 +1163,7 @@ function DetailView({ prog }: { prog: any }) {
     <div className="space-y-4">
       {/* Program info grid */}
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-[12px] sm:grid-cols-3 lg:grid-cols-4">
-        <InfoRow label="Program No" value={<span className="font-mono font-bold text-brand-700">{prog.program_no}</span>} />
+        <InfoRow label="Program No" value={<span className="tabular-nums font-bold text-brand-700">{prog.program_no}</span>} />
         <InfoRow label="Date" value={fmtDate(prog.program_date)} />
         <InfoRow label="I/O No" value={prog.io_no ?? '—'} />
         <InfoRow label="Buyer PO" value={prog.buyer_po_no ?? '—'} />
@@ -1238,7 +1238,7 @@ function DetailView({ prog }: { prog: any }) {
                       <td className="td">{showRawColour(y.colour)}</td>
                       <td className="td">
                         {y.yarn_po_no ? (
-                          <span className="font-mono text-brand-700 font-semibold">{y.yarn_po_no}</span>
+                          <span className="tabular-nums text-brand-700 font-semibold">{y.yarn_po_no}</span>
                         ) : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="td text-slate-600">{y.yarn_lot_no || '—'}</td>
@@ -1323,10 +1323,10 @@ function DetailView({ prog }: { prog: any }) {
                   <tbody>
                     {(prog.issues ?? []).map((iss: any) => (
                       <tr key={iss.id} className="border-t border-slate-100">
-                        <td className="td font-mono text-brand-700 font-semibold">{iss.issue_no}</td>
+                        <td className="td tabular-nums text-brand-700 font-semibold">{iss.issue_no}</td>
                         <td className="td text-slate-500">{fmtDate(iss.issue_date)}</td>
                         <td className="td font-medium">{iss.yarn_code ? `${iss.yarn_code} — ${iss.yarn_name}` : '—'}</td>
-                        <td className="td font-mono text-[11px] text-brand-600">{iss.yarn_po_no || '—'}</td>
+                        <td className="td tabular-nums text-[11px] text-brand-600">{iss.yarn_po_no || '—'}</td>
                         <td className="td text-slate-600">{iss.yarn_lot_no || '—'}</td>
                         <td className="td text-right tabular-nums font-semibold text-emerald-700">
                           {fmtDecimal(iss.issued_qty_kg, 2)}

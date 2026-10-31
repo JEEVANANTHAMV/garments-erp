@@ -61,7 +61,7 @@ function TransferList({ onNew }: { onNew: () => void }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-mono font-semibold text-brand-700">{r.transfer_no}</td><td className="px-3 py-2">{fmtDate(r.transfer_date)}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.transfer_no}</td><td className="px-3 py-2">{fmtDate(r.transfer_date)}</td>
                   <td className="px-3 py-2">{MATERIALS.find((m) => m[0] === r.material_type)?.[1]}</td><td className="px-3 py-2 font-semibold">{r.from_job}</td>
                   <td className="px-1 text-slate-400"><ArrowRight size={12} /></td><td className="px-3 py-2 font-semibold">{r.to_job}</td><td className="px-3 py-2">{r.to_style || '—'}</td>
                   <td className="px-3 py-2 text-right">{r.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(r.total_qty, 3)}</td><td className="px-3 py-2">{r.reason}{r.decision_remarks ? <span className="block text-[10.5px] text-slate-500">↳ {r.decision_remarks}</span> : null}</td><td className="px-3 py-2">{r.created_by_name}</td>

@@ -17,10 +17,10 @@ export function DispatchesPage() {
     defaultSort={{ key: 'dispatch_date', dir: 'desc' }}
     columns={[
       { key: 'dispatch_no', header: 'Dispatch no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.dispatch_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.dispatch_no}</span> },
       { key: 'dispatch_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.dispatch_date) },
       { key: 'so_no', header: 'Sales order',
-        render: (r: any) => <span className="font-mono text-[12px] text-brand-700">{r.so_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] text-brand-700">{r.so_no}</span> },
       { key: 'carton_count', header: 'Cartons', align: 'right' },
       { key: 'total_qty', header: 'Qty', align: 'right', render: (r: any) => fmtNumber(r.total_qty) },
       { key: 'vehicle_no', header: 'Vehicle no' },
@@ -54,7 +54,7 @@ export function ContainersPage() {
     defaultSort={{ key: 'id', dir: 'desc' }}
     columns={[
       { key: 'container_no', header: 'Container no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.container_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.container_no}</span> },
       { key: 'container_type', header: 'Type', render: (r: any) => <Badge tone="blue">{humanize(r.container_type)}</Badge> },
       { key: 'seal_no', header: 'Seal no' },
       { key: 'dispatch_no', header: 'Dispatch' },
@@ -84,7 +84,7 @@ export function ShipmentsPage() {
     defaultSort={{ key: 'etd', dir: 'desc' }}
     columns={[
       { key: 'shipment_no', header: 'Shipment no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.shipment_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.shipment_no}</span> },
       { key: 'bl_no', header: 'BL no' },
       { key: 'vessel_name', header: 'Vessel' },
       { key: 'etd', header: 'ETD', sortable: true, render: (r: any) => fmtDate(r.etd) },
@@ -120,7 +120,7 @@ export function CertificatesPage() {
     defaultSort={{ key: 'issue_date', dir: 'desc' }}
     columns={[
       { key: 'cert_no', header: 'Cert no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.cert_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.cert_no}</span> },
       { key: 'cert_type_name', header: 'Type' },
       { key: 'issue_date', header: 'Issue date', sortable: true, render: (r: any) => fmtDate(r.issue_date) },
       { key: 'expiry_date', header: 'Expiry', render: (r: any) => fmtDate(r.expiry_date) },
@@ -147,7 +147,7 @@ export function PackingListsPage() {
     defaultSort={{ key: 'pl_date', dir: 'desc' }}
     columns={[
       { key: 'pl_no', header: 'PL no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.pl_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.pl_no}</span> },
       { key: 'pl_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.pl_date) },
       { key: 'invoice_no', header: 'Invoice' },
       { key: 'carton_count', header: 'Cartons', align: 'right' },

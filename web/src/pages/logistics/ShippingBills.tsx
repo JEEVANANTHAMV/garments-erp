@@ -40,9 +40,9 @@ export function ShippingBillsPage() {
       <DataTable rows={list.data?.data ?? []} loading={list.isLoading} error={list.error} onRetry={() => void list.refetch()} rowKey={(r: any) => r.id}
         onRowClick={(r: any) => nav(`/export/shipping-bills/${r.id}`)} pagination={list.data?.pagination} onPage={setPage} emptyTitle="No shipping bills"
         columns={[
-          { key: 'sb_no', header: 'S.B. No · Date', render: (r: any) => <div><p className="font-mono text-[12px] font-semibold text-brand-700">{r.sb_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.sb_date)}</p></div> },
+          { key: 'sb_no', header: 'S.B. No · Date', render: (r: any) => <div><p className="tabular-nums text-[12px] font-semibold text-brand-700">{r.sb_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.sb_date)}</p></div> },
           { key: 'port_code', header: 'Port · Mode', render: (r: any) => <span className="text-[12px]">{r.port_code ?? '—'}{r.mode ? ` · ${r.mode === 'AIR' ? 'Air' : r.mode === 'SEA' ? 'Sea' : r.mode}` : ''}</span> },
-          { key: 'invoice_no', header: 'Inv. No & Date', render: (r: any) => <div><p className="font-mono text-[12px]">{r.invoice_no ?? r.ci_invoice_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.invoice_date)} · {r.buyer_name ?? ''}</p></div> },
+          { key: 'invoice_no', header: 'Inv. No & Date', render: (r: any) => <div><p className="tabular-nums text-[12px]">{r.invoice_no ?? r.ci_invoice_no}</p><p className="text-[11px] text-slate-500">{fmtDate(r.invoice_date)} · {r.buyer_name ?? ''}</p></div> },
           { key: 'invoice_value_fc', header: 'Inv. Value', align: 'right', render: (r: any) => `${r.currency_code ?? ''} ${fmtDecimal(r.invoice_value_fc, 2)}` },
           { key: 'exchange_rate', header: 'Ex. Rate', align: 'right', render: (r: any) => fmtDecimal(r.exchange_rate, 2) },
           { key: 'fob_inr', header: 'FOB ₹', align: 'right', render: (r: any) => fmtDecimal(r.fob_inr, 2) },
@@ -170,7 +170,7 @@ export function ShippingBillDetailPage() {
   // client 23-Oct-2026 (handwritten list): only these fields — the rest of the customs copy is not entered
   return (
     <div>
-      <PageHeader breadcrumb={['Export', 'Shipping Bills']} title={isNew ? 'New shipping bill' : <span className="font-mono">SB {d.sb_no}</span>}
+      <PageHeader breadcrumb={['Export', 'Shipping Bills']} title={isNew ? 'New shipping bill' : <span className="tabular-nums">SB {d.sb_no}</span>}
         subtitle={isNew ? 'Pick the final commercial invoice — invoice no, date and value come from it' : `${d.buyer_name ?? ''} · ${d.so_no ?? ''} · invoice ${d.invoice_no}`}
         actions={<div className="flex gap-2">
           <Button variant="secondary" onClick={() => nav('/export/shipping-bills')}><ArrowLeft size={15} />Back</Button>

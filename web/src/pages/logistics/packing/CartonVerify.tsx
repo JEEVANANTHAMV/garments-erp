@@ -78,7 +78,7 @@ export function CartonVerifyPage() {
           </div>
         </Card>
         {!c ? <EmptyState title="Scan a carton" message="The carton barcode is its carton number (Code 128)." /> : (
-          <div id="carton-panel"><Card title={<span className="font-mono text-[15px] font-semibold">{c.carton_no}</span>}
+          <div id="carton-panel"><Card title={<span className="tabular-nums text-[15px] font-semibold">{c.carton_no}</span>}
             subtitle={<>{c.carton_seq} of {c.carton_count} · <Link className="text-brand-700 hover:underline" to={`/logistics/packing/orders/${c.packing_id}`}>{c.pack_no}</Link> · {c.io_no} · {c.style_code}{c.buyer_po_no ? ` · PO ${c.buyer_po_no}` : ''} · {c.buyer_name}</>}
             actions={<PkStatus value={c.carton_status} posted={c.is_posted} />}>
             <div className="space-y-4 p-4">

@@ -162,8 +162,8 @@ export function ClaimDrawer({ id, onClose }: { id: number; onClose: () => void }
                           {e.remarks && <p className="text-[11px] text-slate-500 no-underline">{e.remarks}</p>}
                           {e.custom_field_values && <p className="text-[11px] text-slate-500">{Object.entries(e.custom_field_values).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}</p>}</td>
                         <td className="td text-right tabular-nums">{e.event_type === 'REVERSAL' ? '−' : ''}{fmtDecimal(e.base_amount, 2)}{e.currency_code !== 'INR' && <p className="text-[10.5px] text-slate-400">{e.currency_code} {fmtDecimal(e.amount, 2)} @ {e.exchange_rate}</p>}</td>
-                        <td className="td text-[12px]">{e.bank_label && <span>{e.bank_label}</span>}{e.bank_reference && <p className="font-mono text-[11px]">{e.bank_reference}</p>}
-                          {e.scrip_number && <p className="font-mono text-[11px]">Scrip {e.scrip_number}</p>}{e.is_cash && e.status === 'POSTED' && <p className="text-[10.5px] text-slate-400">bank match {inr(e.matched_amount)}</p>}
+                        <td className="td text-[12px]">{e.bank_label && <span>{e.bank_label}</span>}{e.bank_reference && <p className="tabular-nums text-[11px]">{e.bank_reference}</p>}
+                          {e.scrip_number && <p className="tabular-nums text-[11px]">Scrip {e.scrip_number}</p>}{e.is_cash && e.status === 'POSTED' && <p className="text-[10.5px] text-slate-400">bank match {inr(e.matched_amount)}</p>}
                           {e.documents?.map((d: any) => <button key={d.id} className="mr-1 inline-flex items-center gap-0.5 text-[11px] text-brand-700 hover:underline" onClick={() => void openDocument(d.id, d.original_name).catch((er) => toast(errMsg(er), 'error'))}><Paperclip size={11} />{d.original_name}</button>)}</td>
                         <td className="td whitespace-nowrap text-[11px] text-slate-500">{fmtDateTime(e.created_at)} · {e.created_by_name ?? ''}{e.posted_at && <p>posted {fmtDateTime(e.posted_at)}{e.posted_by_name ? ` · ${e.posted_by_name}` : ''}</p>}</td>
                         <td className="td"><Badge tone={e.status === 'POSTED' ? 'green' : e.status === 'DRAFT' ? 'amber' : 'slate'}>{e.status.toLowerCase()}</Badge></td>
@@ -225,7 +225,7 @@ export function ClaimDrawer({ id, onClose }: { id: number; onClose: () => void }
           {tab === 'audit' && (
             <table className="w-full" id="bc-audit"><thead><tr><th className="th">When</th><th className="th">What</th><th className="th">Change</th><th className="th">By</th></tr></thead>
               <tbody>{x.audit.map((a: any) => <tr key={a.id} className="align-top"><td className="td whitespace-nowrap text-[12px]">{fmtDateTime(a.changed_at)}</td><td className="td text-[12px]">{a.table_name.replace('trx_export_', '').replace(/_/g, ' ')} #{a.record_id} · {a.action.toLowerCase()}</td>
-                <td className="td max-w-[480px] break-words font-mono text-[10.5px] text-slate-600">{a.old_values ? `${JSON.stringify(a.old_values).slice(0, 200)} → ` : ''}{a.new_values ? JSON.stringify(a.new_values).slice(0, 300) : ''}</td><td className="td text-[12px]">{a.changed_by_name ?? ''}</td></tr>)}</tbody></table>
+                <td className="td max-w-[480px] break-words tabular-nums text-[10.5px] text-slate-600">{a.old_values ? `${JSON.stringify(a.old_values).slice(0, 200)} → ` : ''}{a.new_values ? JSON.stringify(a.new_values).slice(0, 300) : ''}</td><td className="td text-[12px]">{a.changed_by_name ?? ''}</td></tr>)}</tbody></table>
           )}
         </div>
       )}

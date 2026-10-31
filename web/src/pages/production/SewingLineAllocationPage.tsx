@@ -402,7 +402,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                       <td className="px-2 py-1.5 text-center">
                         <input type="checkbox" checked={selJobs.has(j.io_no)} onChange={() => setSelJobs((s) => { const x = new Set(s); x.has(j.io_no) ? x.delete(j.io_no) : x.add(j.io_no); return x; })} />
                       </td>
-                      <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">
+                      <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">
                         <button className="hover:underline" onClick={() => cf.setFilter('job', filters.job === j.io_no ? '' : j.io_no)}>{j.io_no}</button>
                       </td>
                       <td className="px-2 py-1.5">{j.buyer || '—'}</td>
@@ -458,7 +458,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                         <tr key={b.bundle_id} onClick={() => setSelBundles((s) => { const x = new Set(s); x.has(b.bundle_id) ? x.delete(b.bundle_id) : x.add(b.bundle_id); return x; })}
                           className={`cursor-pointer border-t border-slate-100 ${selBundles.has(b.bundle_id) ? 'bg-brand-50' : 'hover:bg-slate-50'}`}>
                           <td className="px-2 py-1 text-center"><input type="checkbox" checked={selBundles.has(b.bundle_id)} readOnly /></td>
-                          <td className="px-2 py-1 font-mono font-semibold text-slate-800">{b.bundle_no}</td>
+                          <td className="px-2 py-1 tabular-nums font-semibold text-slate-800">{b.bundle_no}</td>
                           <td className="px-2 py-1">{b.colour || '—'}</td>
                           <td className="px-2 py-1 font-semibold">{b.size || '—'}</td>
                           <td className="px-2 py-1 text-slate-500">{[b.lay_no, b.cut_no].filter(Boolean).join(' / ') || '—'}</td>
@@ -517,7 +517,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                       <tr key={l.id} onClick={() => setTargetLine(l.id)}
                         className={`cursor-pointer border-t border-slate-100 ${targetLine === l.id ? 'bg-brand-50 ring-1 ring-brand-300' : 'hover:bg-slate-50'}`}>
                         <td className="px-2 py-1.5 text-center"><input type="radio" checked={targetLine === l.id} readOnly className="accent-brand-600" /></td>
-                        <td className="px-2 py-1.5 font-mono font-semibold text-brand-700">{l.line_code}</td>
+                        <td className="px-2 py-1.5 tabular-nums font-semibold text-brand-700">{l.line_code}</td>
                         <td className="px-2 py-1.5 font-medium">{l.line_name}</td>
                         <td className="px-2 py-1.5">{l.supervisor_name || '—'}</td>
                         <td className="px-2 py-1.5 text-right">{l.manpower || '—'}</td>
@@ -585,7 +585,7 @@ export function LineAllocationPage({ proc }: { proc: Proc }) {
                                     <input type="checkbox" disabled={!editable} checked={selAlloc.has(a._i)}
                                       onChange={() => setSelAlloc((s2) => { const x = new Set(s2); x.has(a._i) ? x.delete(a._i) : x.add(a._i); return x; })} />
                                   </td>
-                                  <td className="px-2 py-1 font-mono font-semibold">{a.bundle_no}</td>
+                                  <td className="px-2 py-1 tabular-nums font-semibold">{a.bundle_no}</td>
                                   <td className="px-2 py-1">{a.colour || '—'}</td>
                                   <td className="px-2 py-1 font-semibold">{a.size || '—'}</td>
                                   <td className="px-2 py-1 text-right">
@@ -709,7 +709,7 @@ function BundlePicker<T extends BundleInfo & { free_qty: number }>({ open, onClo
                 <tr key={b.bundle_id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
                   onClick={() => setSel((s) => { const x = new Set(s); x.has(b.bundle_id) ? x.delete(b.bundle_id) : x.add(b.bundle_id); return x; })}>
                   <td className="w-8 px-2 py-1 text-center"><input type="checkbox" checked={sel.has(b.bundle_id)} readOnly /></td>
-                  <td className="px-2 py-1 font-mono font-semibold">{b.bundle_no}</td>
+                  <td className="px-2 py-1 tabular-nums font-semibold">{b.bundle_no}</td>
                   <td className="px-2 py-1">{b.colour}</td>
                   <td className="px-2 py-1 font-semibold">{b.size}</td>
                   <td className="px-2 py-1 text-right">{fmtNumber(b.free_qty)} PCS</td>

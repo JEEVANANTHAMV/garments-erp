@@ -827,7 +827,7 @@ export default function KnittingPage() {
                               <td className="py-2 px-3 font-semibold text-indigo-700">{yi.issue_no}</td>
                               <td className="py-2 px-3 text-slate-500">{fmtDate(yi.issue_date)}</td>
                               <td className="py-2 px-3 font-medium text-slate-800">{yi.yarn_name}</td>
-                              <td className="py-2 px-3 font-mono text-slate-600">{yi.yarn_lot_no || '-'}</td>
+                              <td className="py-2 px-3 tabular-nums text-slate-600">{yi.yarn_lot_no || '-'}</td>
                               <td className="py-2 px-3 text-right">{yi.bags_cones}</td>
                               <td className="py-2 px-3 text-right font-bold text-indigo-700">{fmtDecimal(yi.issued_weight_kg)} kg</td>
                               <td className="py-2 px-3 text-center">
@@ -987,7 +987,7 @@ export default function KnittingPage() {
                           activeOrder.roll_outputs?.map((ro: any) => (
                             <tr key={ro.id} className="hover:bg-slate-50">
                               <td className="py-2 px-3 font-semibold text-teal-700">{ro.roll_no}</td>
-                              <td className="py-2 px-3 font-mono text-slate-600">{ro.lot_no}</td>
+                              <td className="py-2 px-3 tabular-nums text-slate-600">{ro.lot_no}</td>
                               <td className="py-2 px-3 text-slate-500">{fmtDate(ro.production_date)}</td>
                               <td className="py-2 px-3 text-slate-600">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
                               <td className="py-2 px-3 text-right font-medium">{fmtDecimal(ro.meters)} m</td>
@@ -1058,14 +1058,14 @@ export default function KnittingPage() {
               {/* Order Meta Grid */}
               <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
                 <div className="space-y-1.5">
-                  <div><span className="text-slate-500 font-medium">KWO Order No:</span> <span className="font-bold text-slate-900 font-mono text-sm">{activeOrder.kwo_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">KWO Order No:</span> <span className="font-bold text-slate-900 tabular-nums text-sm">{activeOrder.kwo_no}</span></div>
                   <div><span className="text-slate-500 font-medium">Order Date:</span> <span className="font-semibold text-slate-800">{fmtDate(activeOrder.kwo_date)}</span></div>
                   <div><span className="text-slate-500 font-medium">Sub-Process:</span> <span className="font-bold text-teal-700">{activeOrder.sub_process}</span></div>
                   <div><span className="text-slate-500 font-medium">Knitting Vendor:</span> <span className="font-semibold text-slate-800">{activeOrder.vendor_name || 'In-House Unit'}</span></div>
                 </div>
                 <div className="space-y-1.5 border-l border-slate-200 pl-4">
-                  <div><span className="text-slate-500 font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 font-mono">{activeOrder.io_no}</span></div>
-                  <div><span className="text-slate-500 font-medium">Customer PO No:</span> <span className="font-bold text-teal-800 font-mono">{activeOrder.customer_po_no || 'N/A'}</span></div>
+                  <div><span className="text-slate-500 font-medium">Internal Order (I/O No):</span> <span className="font-bold text-sky-800 tabular-nums">{activeOrder.io_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">Customer PO No:</span> <span className="font-bold text-teal-800 tabular-nums">{activeOrder.customer_po_no || 'N/A'}</span></div>
                   <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{activeOrder.style_code ? `${activeOrder.style_code} - ${activeOrder.style_name || ''}` : '-'}</span></div>
                   <div><span className="text-slate-500 font-medium">Fabric:</span> <span className="font-semibold text-slate-800">{activeOrder.fabric_name || '-'}</span></div>
                 </div>
@@ -1091,7 +1091,7 @@ export default function KnittingPage() {
                   </div>
                   <div className="p-2 bg-slate-50 rounded border border-slate-200">
                     <span className="text-[10px] text-slate-500 block uppercase font-medium">Yarn Lot No</span>
-                    <span className="text-sm font-bold text-slate-800 font-mono">{activeOrder.yarn_lot_no || '-'}</span>
+                    <span className="text-sm font-bold text-slate-800 tabular-nums">{activeOrder.yarn_lot_no || '-'}</span>
                   </div>
                 </div>
               </div>
@@ -1149,7 +1149,7 @@ export default function KnittingPage() {
                     ) : (
                       activeOrder.yarn_issues.map((yi: any, idx: number) => (
                         <tr key={yi.id || idx}>
-                          <td className="border border-slate-300 py-1 px-2 font-mono">{yi.issue_no}</td>
+                          <td className="border border-slate-300 py-1 px-2 tabular-nums">{yi.issue_no}</td>
                           <td className="border border-slate-300 py-1 px-2">{fmtDate(yi.issue_date)}</td>
                           <td className="border border-slate-300 py-1 px-2">{yi.yarn_name}</td>
                           <td className="border border-slate-300 py-1 px-2">{yi.yarn_lot_no || '-'}</td>
@@ -1188,7 +1188,7 @@ export default function KnittingPage() {
                     ) : (
                       activeOrder.roll_outputs.map((ro: any, idx: number) => (
                         <tr key={ro.id || idx}>
-                          <td className="border border-slate-300 py-1 px-2 font-mono font-semibold">{ro.roll_no}</td>
+                          <td className="border border-slate-300 py-1 px-2 tabular-nums font-semibold">{ro.roll_no}</td>
                           <td className="border border-slate-300 py-1 px-2">{ro.lot_no}</td>
                           <td className="border border-slate-300 py-1 px-2 text-center">{ro.dia || '-'} / {ro.gsm || '-'} GSM</td>
                           <td className="border border-slate-300 py-1 px-2 text-right">{fmtDecimal(ro.meters)} m</td>

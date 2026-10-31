@@ -60,7 +60,7 @@ export default function GrnBillStatusPage() {
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.source}${r.grn_id}`} className={`border-t border-slate-100 ${r.overdue ? 'bg-red-50/50' : ''}`}>
-                  <td className="px-3 py-1.5"><Link to={r.link} className="font-mono font-semibold text-brand-700 hover:underline">{r.grn_no}</Link></td>
+                  <td className="px-3 py-1.5"><Link to={r.link} className="tabular-nums font-semibold text-brand-700 hover:underline">{r.grn_no}</Link></td>
                   <td className="px-3 py-1.5">{fmtDate(r.grn_date)}</td>
                   <td className={`px-3 py-1.5 text-right tabular-nums ${r.overdue ? 'font-bold text-red-700' : ''}`}>{r.days}</td>
                   <td className="px-3 py-1.5">{SRC_LABEL[r.source]}{r.source === 'PURCHASE' && r.material ? <span className="text-slate-400"> · {String(r.material).toLowerCase()}</span> : null}</td>
@@ -68,7 +68,7 @@ export default function GrnBillStatusPage() {
                   <td className="px-3 py-1.5 text-right tabular-nums">{fmtDecimal(r.grn_qty, 3)}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.grn_value ? `₹${fmtDecimal(r.grn_value, 2)}` : '—'}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.billed_value ? `₹${fmtDecimal(r.billed_value, 2)}` : '—'}</td>
-                  <td className="px-3 py-1.5">{r.bill_nos ? <span className="font-mono">{r.bill_nos}</span> : '—'}{r.bill_status ? <span className="ml-1 text-slate-400">({String(r.bill_status).toLowerCase()})</span> : null}</td>
+                  <td className="px-3 py-1.5">{r.bill_nos ? <span className="tabular-nums">{r.bill_nos}</span> : '—'}{r.bill_status ? <span className="ml-1 text-slate-400">({String(r.bill_status).toLowerCase()})</span> : null}</td>
                   <td className="px-3 py-1.5"><Badge tone={r.status === 'RECEIVED' ? 'green' : r.status === 'PARTIAL' ? 'amber' : 'red'}>{r.status === 'RECEIVED' ? 'Bill received' : r.status === 'PARTIAL' ? 'Partly billed' : 'Bill pending'}</Badge>{r.overdue ? <span className="ml-1 text-[10.5px] font-bold text-red-700">overdue</span> : null}</td>
                   <td className="px-3 py-1.5 text-right">{r.status !== 'RECEIVED' && <Link to={BOOK[r.source]} className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 hover:underline"><Receipt size={12} /> Book bill</Link>}</td>
                 </tr>

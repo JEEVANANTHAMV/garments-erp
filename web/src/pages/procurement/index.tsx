@@ -23,7 +23,7 @@ export function PurchaseOrdersPage() {
     defaultSort={{ key: 'po_date', dir: 'desc' }}
     columns={[
       { key: 'po_no', header: 'PO no', sortable: true,
-        render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.po_no}</span> },
+        render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.po_no}</span> },
       { key: 'po_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.po_date) },
       { key: 'supplier_name', header: 'Supplier' },
       { key: 'po_type', header: 'Type', render: (r: any) => <Badge tone="violet">{humanize(r.po_type)}</Badge> },
@@ -97,7 +97,7 @@ export function MrpPage() {
       <DataTable
         columns={[
           { key: 'mrp_no', header: 'MRP no',
-            render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.mrp_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.mrp_no}</span> },
           { key: 'run_date', header: 'Run date', render: (r: any) => fmtDate(r.run_date) },
           { key: 'so_no', header: 'Sales order' },
           { key: 'requirement_count', header: 'Requirements', align: 'right',
@@ -287,7 +287,7 @@ export function GrnPage() {
       <DataTable
         columns={[
           { key: 'grn_no', header: 'GRN no',
-            render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.grn_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.grn_no}</span> },
           { key: 'grn_date', header: 'Date', render: (r: any) => fmtDate(r.grn_date) },
           { key: 'gate_entry_no', header: 'Gate entry',
             render: (r: any) => r.gate_entry_no ? (
@@ -637,7 +637,7 @@ export function MaterialIssuePage() {
       <DataTable
         columns={[
           { key: 'issue_no', header: 'Issue no',
-            render: (r: any) => <span className="font-mono text-[12px] font-medium text-brand-700">{r.issue_no}</span> },
+            render: (r: any) => <span className="tabular-nums text-[12px] font-medium text-brand-700">{r.issue_no}</span> },
           { key: 'issue_date', header: 'Date', render: (r: any) => fmtDate(r.issue_date) },
           { key: 'warehouse_name', header: 'From warehouse' },
           { key: 'po_prod_no', header: 'Work order' },

@@ -268,7 +268,7 @@ export default function YarnProcessPage() {
               <tbody>
                 {rows.map((r: any) => (
                   <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50/60">
-                    <td className="td font-mono font-semibold text-brand-700">{r.process_no}</td>
+                    <td className="td tabular-nums font-semibold text-brand-700">{r.process_no}</td>
                     <td className="td">{PROC_LABEL[r.process_type as ProcType] ?? r.process_type}</td>
                     <td className="td text-slate-500">{fmtDate(r.process_date)}</td>
                     <td className="td">{r.yarn_code ? `${r.yarn_code} — ${r.yarn_name}` : '—'}</td>
@@ -524,7 +524,7 @@ export default function YarnProcessPage() {
                   {(detail.receipts ?? []).map((r: any) => (
                     <div key={r.id} className="rounded border border-slate-200 p-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono font-semibold text-brand-700">{r.receipt_no}</span>
+                        <span className="tabular-nums font-semibold text-brand-700">{r.receipt_no}</span>
                         <Badge tone={r.qc_status === 'PASSED' ? 'emerald' : r.qc_status === 'REJECTED' ? 'rose' : 'amber'}>
                           QC {r.qc_status}
                         </Badge>

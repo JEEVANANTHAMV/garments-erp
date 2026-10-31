@@ -59,7 +59,7 @@ export default function SalesOrdersPage() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <Link to={`/sales/orders/${r.id}`}
-                    className="font-mono text-[12px] font-bold text-brand-700 hover:underline">{r.so_no}</Link>
+                    className="tabular-nums text-[12px] font-bold text-brand-700 hover:underline">{r.so_no}</Link>
                   {r.order_type && (
                     <span className="rounded bg-slate-100 px-1.5 py-0.2 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                       {r.order_type}
@@ -67,7 +67,7 @@ export default function SalesOrdersPage() {
                   )}
                 </div>
                 {r.io_no && (
-                  <p className="text-[11px] font-mono text-slate-500 font-medium">IO: {r.io_no}</p>
+                  <p className="text-[11px] tabular-nums text-slate-500 font-medium">IO: {r.io_no}</p>
                 )}
               </div>
             ) },

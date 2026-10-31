@@ -89,9 +89,9 @@ export function LaySpreadingPage() {
             loading={loading}
             columns={[
               { key: 'lay_no', header: 'Lay No', sortable: true, render: (r: any) => (
-                <button className="font-mono text-xs font-semibold text-brand-700 hover:underline" onClick={() => openView(r)}>{r.lay_no}</button>) },
+                <button className="tabular-nums text-xs font-semibold text-brand-700 hover:underline" onClick={() => openView(r)}>{r.lay_no}</button>) },
               { key: 'lay_date', header: 'Date', render: (r: any) => fmtDate(r.lay_date) },
-              { key: 'plan_no', header: 'Cut Order', render: (r: any) => <span className="font-mono text-xs">{r.plan_no}</span> },
+              { key: 'plan_no', header: 'Cut Order', render: (r: any) => <span className="tabular-nums text-xs">{r.plan_no}</span> },
               { key: 'marker', header: 'Marker', render: (r: any) => r.marker_no
                 ? <span className="text-xs">{r.marker_no} <b>v{r.marker_version}</b>{r.marker_locked ? ' 🔒' : ''}</span>
                 : <span className="text-xs text-slate-400">{r.marker_ref || '—'}</span> },
@@ -327,7 +327,7 @@ function ExecuteModal({ lay, onClose, onSaved }: { lay: any; onClose: () => void
                   const set = (k: string, v: any) => setRolls(rs => rs.map((x, j) => j === i ? { ...x, [k]: v } : x));
                   return (
                     <tr key={r.fabric_issue_roll_id} className="border-b">
-                      <td className="p-2"><span className="font-mono font-semibold">{r.dc.roll_no}</span> <span className="text-slate-400">{r.dc.lot_no}</span></td>
+                      <td className="p-2"><span className="tabular-nums font-semibold">{r.dc.roll_no}</span> <span className="text-slate-400">{r.dc.lot_no}</span></td>
                       <td className="p-2 text-right"><Qty v={r.dc.remaining_kg} uom="KG" dp={3} /></td>
                       <td className="p-1.5"><UomInput uom="KG" value={r.before_kg} min={0} onChange={v => set('before_kg', v)} /></td>
                       <td className="p-1.5"><UomInput uom="KG" value={r.after_kg} min={0} onChange={v => set('after_kg', v)} /></td>
@@ -487,11 +487,11 @@ function LayDetailModal({ lay, onClose }: { lay: any; onClose: () => void }) {
         {lay.marker_version && <p>Marker <b>{lay.marker_version.marker_no} v{lay.marker_version.version}</b> · ratio {ratioText(lay.marker_version.sizes, lay.marker_version.ratios)} · {lay.marker_version.pieces_per_marker} PCS/marker · {lay.marker_version.is_locked ? 'locked' : 'unlocked'}</p>}
         {lay.executed_at && <p>Executed {fmtDateTime(lay.executed_at)}{lay.override_reason ? ` · override: ${lay.override_reason}` : ''}{lay.cancel_reason ? ` · cancelled: ${lay.cancel_reason}` : ''}</p>}
         <table className="w-full border"><thead className="bg-slate-50"><tr><th className="p-1.5 text-left">Roll</th><th className="p-1.5 text-right">Before</th><th className="p-1.5 text-right">After</th><th className="p-1.5 text-right">Consumed</th></tr></thead>
-          <tbody>{lay.rolls.map((r: any) => <tr key={r.id} className="border-t"><td className="p-1.5 font-mono">{r.roll_no} <span className="text-slate-400">{r.issue_no}</span></td><td className="p-1.5 text-right"><Qty v={r.before_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={r.after_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right font-semibold"><Qty v={r.actual_consumed_kg} uom="KG" dp={3} /></td></tr>)}</tbody></table>
+          <tbody>{lay.rolls.map((r: any) => <tr key={r.id} className="border-t"><td className="p-1.5 tabular-nums">{r.roll_no} <span className="text-slate-400">{r.issue_no}</span></td><td className="p-1.5 text-right"><Qty v={r.before_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={r.after_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right font-semibold"><Qty v={r.actual_consumed_kg} uom="KG" dp={3} /></td></tr>)}</tbody></table>
         {lay.losses.length > 0 && <table className="w-full border"><thead className="bg-slate-50"><tr><th className="p-1.5 text-left">Loss</th><th className="p-1.5 text-right">KG</th><th className="p-1.5 text-left">Reason</th></tr></thead>
           <tbody>{lay.losses.map((l: any) => <tr key={l.id} className={`border-t ${l.is_reversed ? 'line-through text-slate-400' : ''}`}><td className="p-1.5">{l.loss_type}</td><td className="p-1.5 text-right"><Qty v={l.qty_kg} uom="KG" dp={3} /></td><td className="p-1.5">{l.reason}</td></tr>)}</tbody></table>}
         <table className="w-full border"><thead className="bg-slate-50"><tr><th className="p-1.5 text-left">Output</th><th className="p-1.5">Size</th><th className="p-1.5 text-right">Good</th><th className="p-1.5 text-right">Reject</th><th className="p-1.5 text-right">Re-cut</th><th className="p-1.5 text-right">Actual KG</th><th className="p-1.5 text-right">Bundled</th><th className="p-1.5">Status</th></tr></thead>
-          <tbody>{lay.outputs.map((o: any) => <tr key={o.id} className="border-t"><td className="p-1.5 font-mono">{o.output_no}</td><td className="p-1.5 text-center font-semibold">{o.size_code}</td><td className="p-1.5 text-right"><Qty v={o.good_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.reject_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.recut_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.actual_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={o.bundled_qty} uom="PCS" /></td><td className="p-1.5"><StatusChip status={o.status} /></td></tr>)}</tbody></table>
+          <tbody>{lay.outputs.map((o: any) => <tr key={o.id} className="border-t"><td className="p-1.5 tabular-nums">{o.output_no}</td><td className="p-1.5 text-center font-semibold">{o.size_code}</td><td className="p-1.5 text-right"><Qty v={o.good_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.reject_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.recut_qty} uom="PCS" /></td><td className="p-1.5 text-right"><Qty v={o.actual_kg} uom="KG" dp={3} /></td><td className="p-1.5 text-right"><Qty v={o.bundled_qty} uom="PCS" /></td><td className="p-1.5"><StatusChip status={o.status} /></td></tr>)}</tbody></table>
       </div>
     </Modal>
   );
@@ -578,7 +578,7 @@ function MarkerVersions() {
             options={[{ value: '', label: 'All' }, ...['IMPORTED', 'DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'OBSOLETE'].map((x) => ({ value: x, label: x }))]} />
         </div>
         <DataTable data={statusFilter ? rows.filter((r) => r.status === statusFilter) : rows} columns={[
-          { key: 'marker_no', header: 'Marker', render: (r: any) => <span className="font-mono text-xs font-semibold">{r.marker_no} v{r.version}</span> },
+          { key: 'marker_no', header: 'Marker', render: (r: any) => <span className="tabular-nums text-xs font-semibold">{r.marker_no} v{r.version}</span> },
           { key: 'source', header: 'Source', render: (r: any) => <span className="text-xs">{r.source}{r.cad_req_no ? ` · ${r.cad_req_no}` : ''}</span> },
           { key: 'style_code', header: 'Style' },
           { key: 'fabric_name', header: 'Fabric' },

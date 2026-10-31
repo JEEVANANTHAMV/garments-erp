@@ -35,7 +35,7 @@ function ReturnList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
             <tbody>
               {(list.data ?? []).map((r) => (
                 <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
-                  <td className="px-3 py-2 font-mono font-semibold text-brand-700">{r.return_no}</td><td className="px-3 py-2">{fmtDate(r.return_date)}</td><td className="px-3 py-2 font-mono">{r.inward_no || '—'}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.return_no}</td><td className="px-3 py-2">{fmtDate(r.return_date)}</td><td className="px-3 py-2 tabular-nums">{r.inward_no || '—'}</td>
                   <td className="px-3 py-2">{r.process_code || '—'}</td><td className="px-3 py-2">{r.vendor_name || '—'}</td><td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2">{r.return_type}</td>
                   <td className="px-3 py-2">{r.reason}</td><td className="px-3 py-2 text-right">{kg(r.total_kg)}</td><td className="px-3 py-2 text-right">{kg(r.reprocessed_kg)}</td><td className="px-3 py-2 text-right">{kg(r.rejected_kg)}</td>
                   <td className="px-3 py-2"><YpStatus value={r.status} /></td>
@@ -94,7 +94,7 @@ function ReturnEditor({ onBack, onDone }: { onBack: () => void; onDone: (id: num
               return (
                 <tr key={l.grn_line_id} className={`border-t border-slate-100 ${on ? 'bg-amber-50' : ''}`}>
                   <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[l.grn_line_id]; else x[l.grn_line_id] = { qty: l.balance_kg, defect: '' }; return x; })} /></td>
-                  <td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td><td className="px-2 py-1">{l.yarn_name}</td>
+                  <td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td><td className="px-2 py-1">{l.yarn_name}</td>
                   <td className="px-2 py-1">{l.shade || '—'}</td><td className="px-2 py-1">{l.warehouse_name}</td><td className="px-2 py-1 text-right">{kg(l.balance_kg)}</td>
                   <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[l.grn_line_id].qty} onChange={(e) => setSel((s) => ({ ...s, [l.grn_line_id]: { ...s[l.grn_line_id], qty: r3(Number(e.target.value)) } }))} /> : '—'}</td>
                   <td className="px-2 py-1">{on ? <input className="input w-40 py-0.5 text-xs" value={sel[l.grn_line_id].defect} onChange={(e) => setSel((s) => ({ ...s, [l.grn_line_id]: { ...s[l.grn_line_id], defect: e.target.value } }))} /> : ''}</td>
@@ -136,8 +136,8 @@ function ReturnView({ id, onBack }: { id: number; onBack: () => void }) {
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Lot', 'Cone', 'Return lot', 'Returned KG', 'Reprocessed KG', 'Eligible KG', 'Defect'].map((h) => <th key={h} className={`px-2 py-2 ${/KG/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{r.lines.map((l: any) => (
-            <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td>
-              <td className="px-2 py-1 font-mono">{l.return_lot_no}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{kg(l.reprocessed_kg)}</td>
+            <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td>
+              <td className="px-2 py-1 tabular-nums">{l.return_lot_no}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{kg(l.reprocessed_kg)}</td>
               <td className="px-2 py-1 text-right font-semibold">{kg(l.eligible_kg)}</td><td className="px-2 py-1">{l.defect_reason || '—'}</td></tr>
           ))}</tbody>
         </table>
@@ -169,11 +169,11 @@ function ReprocessList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
             <tbody>
               {(list.data ?? []).map((r) => (
                 <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
-                  <td className="px-3 py-2 font-mono font-semibold text-brand-700">{r.reprocess_no}</td><td className="px-3 py-2">{fmtDate(r.reprocess_date)}</td><td className="px-3 py-2">{r.process_name || r.process_code}</td>
-                  <td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2 font-mono">{r.return_no || 'GRN reject'}</td><td className="px-3 py-2 text-right">{kg(r.total_kg)}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.reprocess_no}</td><td className="px-3 py-2">{fmtDate(r.reprocess_date)}</td><td className="px-3 py-2">{r.process_name || r.process_code}</td>
+                  <td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.jobs || '—'}</td><td className="px-3 py-2 tabular-nums">{r.return_no || 'GRN reject'}</td><td className="px-3 py-2 text-right">{kg(r.total_kg)}</td>
                   <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold ${r.billing_type === 'BILLABLE' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700'}`}>{r.billing_type.replace('_', '-')}</span></td>
                   <td className="px-3 py-2">{r.cost_treatment}</td><td className="px-3 py-2 text-right">₹{fmtDecimal(r.bill_amount, 2)}</td><td className="px-3 py-2"><YpStatus value={r.billing_status} /></td>
-                  <td className="px-3 py-2 font-mono">{r.ypo_no || '—'}</td><td className="px-3 py-2"><YpStatus value={r.status} /></td>
+                  <td className="px-3 py-2 tabular-nums">{r.ypo_no || '—'}</td><td className="px-3 py-2"><YpStatus value={r.status} /></td>
                 </tr>
               ))}
               {!(list.data ?? []).length && <tr><td colSpan={13} className="px-3 py-10 text-center text-slate-400">No reprocess entries yet</td></tr>}
@@ -256,8 +256,8 @@ function ReprocessEditor({ returnId, onBack, onDone }: { returnId: number | null
               return (
                 <tr key={l.grn_line_id} className={`border-t border-slate-100 ${on ? 'bg-purple-50' : ''}`}>
                   <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[l.grn_line_id]; else x[l.grn_line_id] = l.balance_kg; return x; })} /></td>
-                  <td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td><td className="px-2 py-1">{l.yarn_name}</td>
-                  <td className="px-2 py-1">{l.shade || '—'}</td><td className="px-2 py-1 font-mono">{l.return_no || l.source_doc || '—'}</td><td className="px-2 py-1 text-right">{kg(l.balance_kg)}</td>
+                  <td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td><td className="px-2 py-1">{l.yarn_name}</td>
+                  <td className="px-2 py-1">{l.shade || '—'}</td><td className="px-2 py-1 tabular-nums">{l.return_no || l.source_doc || '—'}</td><td className="px-2 py-1 text-right">{kg(l.balance_kg)}</td>
                   <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[l.grn_line_id]} onChange={(e) => setSel((s) => ({ ...s, [l.grn_line_id]: r3(Number(e.target.value)) }))} /> : '—'}</td>
                 </tr>
               );
@@ -310,7 +310,7 @@ function ReprocessView({ id, onBack }: { id: number; onBack: () => void }) {
       <div className="card overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Lot', 'Cone', 'Yarn', 'Shade', 'KG'].map((h) => <th key={h} className={`px-2 py-2 ${h === 'KG' ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-          <tbody>{r.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td><td className="px-2 py-1">{l.yarn_name}</td><td className="px-2 py-1">{l.shade || '—'}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td></tr>)}</tbody>
+          <tbody>{r.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{l.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{l.lot_no}</td><td className="px-2 py-1">{l.cone_no || '—'}</td><td className="px-2 py-1">{l.yarn_name}</td><td className="px-2 py-1">{l.shade || '—'}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td></tr>)}</tbody>
         </table>
       </div>
       {r.billing_remarks && <pre className="card mt-3 whitespace-pre-wrap p-3 text-[11.5px] text-slate-600">{r.billing_remarks}</pre>}

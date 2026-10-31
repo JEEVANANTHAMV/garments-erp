@@ -457,10 +457,10 @@ export default function ProductionCostDetailPage() {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 font-mono">
+              <h1 className="text-xl font-bold text-slate-900 tabular-nums">
                 {head.cost_no || 'New Production Cost Sheet'}
               </h1>
-              <span className="rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-bold text-indigo-700 font-mono">
+              <span className="rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-xs font-bold text-indigo-700 tabular-nums">
                 v{head.version}
               </span>
               <StatusBadge value={head.status} />
@@ -585,7 +585,7 @@ export default function ProductionCostDetailPage() {
                 ))}
               </select>
             ) : (
-              <span className="font-bold text-slate-900 font-mono">{head.po_prod_no || '—'}</span>
+              <span className="font-bold text-slate-900 tabular-nums">{head.po_prod_no || '—'}</span>
             )}
           </div>
 
@@ -601,19 +601,19 @@ export default function ProductionCostDetailPage() {
 
           <div>
             <span className="text-slate-400 block text-[11px]">Buyer Style No</span>
-            <span className="font-semibold text-slate-900 font-mono">{head.buyer_style_ref || 'BST-2026'}</span>
+            <span className="font-semibold text-slate-900 tabular-nums">{head.buyer_style_ref || 'BST-2026'}</span>
           </div>
 
           <div>
             <span className="text-slate-400 block text-[11px]">Internal Style No</span>
-            <span className="font-semibold text-slate-900 font-mono">
+            <span className="font-semibold text-slate-900 tabular-nums">
               {head.style_code} {head.style_name ? `• ${head.style_name}` : ''}
             </span>
           </div>
 
           <div>
             <span className="text-slate-400 block text-[11px]">Internal Order (IO)</span>
-            <span className="font-bold text-brand-700 font-mono">{head.io_no || 'IO-2026-001'}</span>
+            <span className="font-bold text-brand-700 tabular-nums">{head.io_no || 'IO-2026-001'}</span>
           </div>
 
           <div>
@@ -643,7 +643,7 @@ export default function ProductionCostDetailPage() {
 
           <div>
             <span className="text-slate-400 block text-[11px]">Approved Std Costing</span>
-            <span className="font-medium text-indigo-700 font-mono">{head.merchandiser_costing_no}</span>
+            <span className="font-medium text-indigo-700 tabular-nums">{head.merchandiser_costing_no}</span>
           </div>
         </div>
       </div>
@@ -738,7 +738,7 @@ export default function ProductionCostDetailPage() {
                               {h.source === 'TRANSACTIONS' ? 'Transactions' : h.source === 'RATE_SETTING' ? 'Rate setting' : 'No data'}
                             </span>
                           </td>
-                          <td className="py-1.5 px-3 text-right font-mono w-28">₹{fmtNumber(Math.round(h.amount))}</td>
+                          <td className="py-1.5 px-3 text-right tabular-nums w-28">₹{fmtNumber(Math.round(h.amount))}</td>
                           <td className="py-1.5 px-3 text-slate-500">{h.note}</td>
                         </tr>
                       ))}
@@ -753,7 +753,7 @@ export default function ProductionCostDetailPage() {
                   <span className="font-bold text-slate-700">Profit &amp; Loss Statement — Standard vs Actual</span>
                   <span className="text-[11px] text-slate-500">
                     Standard = {standard.costing_no
-                      ? <>pre-costing <span className="font-mono font-semibold text-indigo-700">{standard.costing_no}</span>{!standard.approved && <span className="text-amber-700 font-semibold"> (not approved)</span>}</>
+                      ? <>pre-costing <span className="tabular-nums font-semibold text-indigo-700">{standard.costing_no}</span>{!standard.approved && <span className="text-amber-700 font-semibold"> (not approved)</span>}</>
                       : <span className="text-amber-700 font-semibold">no pre-costing for this style — standard not available</span>}
                     {' '}· Variance = Actual − Standard (+ adverse, − favourable)
                     {standard.original_currency_code && standard.original_currency_code !== 'INR' && standard.fx_rate != null && (
@@ -787,10 +787,10 @@ export default function ProductionCostDetailPage() {
                         return (
                           <tr key={i} className="hover:bg-slate-50">
                             <td className="py-2 px-3 font-medium">{h.head}</td>
-                            <td className="py-2 px-3 text-right font-mono">{stdOk ? `₹${perPc(est).toFixed(2)}` : '—'}</td>
-                            <td className="py-2 px-3 text-right font-mono font-semibold">₹{perPc(act).toFixed(2)}</td>
-                            <td className={`py-2 px-3 text-right font-mono font-bold ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(perPc(v)) : '—'}</td>
-                            <td className={`py-2 px-3 text-right font-mono ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(v, 0) : '—'}</td>
+                            <td className="py-2 px-3 text-right tabular-nums">{stdOk ? `₹${perPc(est).toFixed(2)}` : '—'}</td>
+                            <td className="py-2 px-3 text-right tabular-nums font-semibold">₹{perPc(act).toFixed(2)}</td>
+                            <td className={`py-2 px-3 text-right tabular-nums font-bold ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(perPc(v)) : '—'}</td>
+                            <td className={`py-2 px-3 text-right tabular-nums ${v > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(v, 0) : '—'}</td>
                           </tr>
                         );
                       })}
@@ -798,26 +798,26 @@ export default function ProductionCostDetailPage() {
                     <tfoot className="border-t-2 border-slate-300 text-slate-900">
                       <tr className="bg-slate-50 font-bold">
                         <td className="py-2.5 px-3">Total Production Cost</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{stdOk ? `₹${summary.estimated_cost_per_piece.toFixed(2)}` : '—'}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{perPc(summary.total_actual_cost).toFixed(2)}</td>
-                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(perPc(summary.variance_amount)) : '—'}</td>
-                        <td className={`py-2.5 px-3 text-right font-mono ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(summary.total_actual_cost - stdTotal, 0) : '—'}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{stdOk ? `₹${summary.estimated_cost_per_piece.toFixed(2)}` : '—'}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">₹{perPc(summary.total_actual_cost).toFixed(2)}</td>
+                        <td className={`py-2.5 px-3 text-right tabular-nums ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(perPc(summary.variance_amount)) : '—'}</td>
+                        <td className={`py-2.5 px-3 text-right tabular-nums ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{stdOk ? signed(summary.total_actual_cost - stdTotal, 0) : '—'}</td>
                       </tr>
                       {fobPc > 0 && (
                         <>
                           <tr className="font-semibold">
                             <td className="py-2 px-3">Selling Price (FOB) / Pc</td>
-                            <td className="py-2 px-3 text-right font-mono">₹{fobPc.toFixed(2)}</td>
-                            <td className="py-2 px-3 text-right font-mono">₹{fobPc.toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums">₹{fobPc.toFixed(2)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums">₹{fobPc.toFixed(2)}</td>
                             <td colSpan={2} className="py-2 px-3 text-right text-[11px] text-slate-500">
                               Revenue on {fmtNumber(head.good_qty)} good pcs: ₹{fmtNumber(Math.round(revenue))}
                             </td>
                           </tr>
                           <tr className="bg-slate-900 text-white font-bold">
                             <td className="py-2.5 px-3">Profit / (Loss)</td>
-                            <td className="py-2.5 px-3 text-right font-mono">₹{fmtNumber(Math.round(stdProfit))}</td>
-                            <td className={`py-2.5 px-3 text-right font-mono ${actProfit < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>₹{fmtNumber(Math.round(actProfit))}</td>
-                            <td colSpan={2} className="py-2.5 px-3 text-right font-mono">
+                            <td className="py-2.5 px-3 text-right tabular-nums">₹{fmtNumber(Math.round(stdProfit))}</td>
+                            <td className={`py-2.5 px-3 text-right tabular-nums ${actProfit < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>₹{fmtNumber(Math.round(actProfit))}</td>
+                            <td colSpan={2} className="py-2.5 px-3 text-right tabular-nums">
                               {signed(actProfit - stdProfit, 0)} vs standard
                             </td>
                           </tr>
@@ -836,7 +836,7 @@ export default function ProductionCostDetailPage() {
                     <div key={i} className="space-y-1">
                       <div className="flex justify-between font-semibold">
                         <span className="text-slate-700">{h.head}</span>
-                        <span className="text-slate-900 font-mono">₹{fmtNumber(h.actual)}</span>
+                        <span className="text-slate-900 tabular-nums">₹{fmtNumber(h.actual)}</span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden flex">
                         <div
@@ -875,14 +875,14 @@ export default function ProductionCostDetailPage() {
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {(tabsData.fabric || []).map((f: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 font-mono font-bold text-brand-700">{f.code}</td>
+                        <td className="py-2.5 px-3 tabular-nums font-bold text-brand-700">{f.code}</td>
                         <td className="py-2.5 px-3 font-medium text-slate-900">{f.fabric_name}</td>
-                        <td className="py-2.5 px-3 font-mono">{f.lot_no}</td>
-                        <td className="py-2.5 px-3 font-mono">{f.roll_no}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{f.std_qty} kg</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold">{f.issue_qty} kg</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{f.rate}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(f.amount)}</td>
+                        <td className="py-2.5 px-3 tabular-nums">{f.lot_no}</td>
+                        <td className="py-2.5 px-3 tabular-nums">{f.roll_no}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{f.std_qty} kg</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold">{f.issue_qty} kg</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">₹{f.rate}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(f.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -916,13 +916,13 @@ export default function ProductionCostDetailPage() {
                     {(tabsData.trims || []).map((t: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{t.trim_name}</td>
-                        <td className="py-2.5 px-3 text-center font-mono">{t.uom}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{fmtNumber(t.std_qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{fmtNumber(t.issue_qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{fmtNumber(t.return_qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{fmtNumber(t.net_qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{t.rate.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">₹{fmtNumber(t.actual_cost)}</td>
+                        <td className="py-2.5 px-3 text-center tabular-nums">{t.uom}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmtNumber(t.std_qty)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmtNumber(t.issue_qty)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmtNumber(t.return_qty)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">{fmtNumber(t.net_qty)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">₹{t.rate.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-emerald-700">₹{fmtNumber(t.actual_cost)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -963,11 +963,11 @@ export default function ProductionCostDetailPage() {
                               {part}
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono">{fmtNumber(p.input_qty)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-emerald-700 font-medium">{fmtNumber(p.output_qty)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-rose-600">{fmtNumber(p.loss_qty)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono">₹{Number(p.rate || 0).toFixed(2)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(p.actual_cost)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">{fmtNumber(p.input_qty)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-emerald-700 font-medium">{fmtNumber(p.output_qty)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-rose-600">{fmtNumber(p.loss_qty)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">₹{Number(p.rate || 0).toFixed(2)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(p.actual_cost)}</td>
                         </tr>
                       );
                     })}
@@ -996,7 +996,7 @@ export default function ProductionCostDetailPage() {
                     {(tabsData.cutting || []).map((c: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-medium text-slate-900">{c.component}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(c.actual_cost)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(c.actual_cost)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1027,10 +1027,10 @@ export default function ProductionCostDetailPage() {
                     {(tabsData.sewing || []).map((s: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{s.operation}</td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-indigo-700">{s.sam} min</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{s.rate_per_min.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{s.cost_per_pc.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">₹{fmtNumber(s.total)}</td>
+                        <td className="py-2.5 px-3 text-center tabular-nums font-bold text-indigo-700">{s.sam} min</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">₹{s.rate_per_min.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{s.cost_per_pc.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-emerald-700">₹{fmtNumber(s.total)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1058,7 +1058,7 @@ export default function ProductionCostDetailPage() {
                     {(tabsData.finishing || []).map((f: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-medium text-slate-900">{f.component}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(f.actual_cost)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(f.actual_cost)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1088,9 +1088,9 @@ export default function ProductionCostDetailPage() {
                     {(tabsData.packing || []).map((pk: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{pk.item_name}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{fmtNumber(pk.qty)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{pk.rate.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(pk.amount)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{fmtNumber(pk.qty)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">₹{pk.rate.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(pk.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1163,18 +1163,18 @@ export default function ProductionCostDetailPage() {
                                   {part}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-3 text-center font-mono">
+                              <td className="py-2.5 px-3 text-center tabular-nums">
                                 <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-slate-100">{l.labour_type}</span>
                               </td>
-                              <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                              <td className="py-2.5 px-3 text-right tabular-nums text-slate-600">
                                 {l.pieces_completed ? fmtNumber(l.pieces_completed) : '-'}
                               </td>
-                              <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-800">
+                              <td className="py-2.5 px-3 text-right tabular-nums font-medium text-slate-800">
                                 {l.piece_rate ? `₹${Number(l.piece_rate).toFixed(2)}` : '-'}
                               </td>
-                              <td className="py-2.5 px-3 text-right font-mono">{l.hours} hrs</td>
-                              <td className="py-2.5 px-3 text-right font-mono">₹{Number(l.rate_per_hour || 0).toFixed(2)}</td>
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(l.amount)}</td>
+                              <td className="py-2.5 px-3 text-right tabular-nums">{l.hours} hrs</td>
+                              <td className="py-2.5 px-3 text-right tabular-nums">₹{Number(l.rate_per_hour || 0).toFixed(2)}</td>
+                              <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(l.amount)}</td>
                             </tr>
                           );
                         })}
@@ -1207,11 +1207,11 @@ export default function ProductionCostDetailPage() {
                     {(tabsData.overhead || []).map((o: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{o.overhead_head}</td>
-                        <td className="py-2.5 px-3 text-center font-mono">
+                        <td className="py-2.5 px-3 text-center tabular-nums">
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">{o.allocation_basis}</span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono">₹{o.rate.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{fmtNumber(o.amount)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">₹{o.rate.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-slate-900">₹{fmtNumber(o.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1257,18 +1257,18 @@ export default function ProductionCostDetailPage() {
                       return (
                         <tr key={i} className={isTotal ? 'bg-slate-50/90 font-bold border-t-2 border-slate-300' : 'hover:bg-slate-50'}>
                           <td className={`py-2.5 px-3 ${isTotal ? 'text-slate-900 font-bold' : 'font-medium'}`}>{r.cost_head}</td>
-                          <td className="py-2.5 px-3 text-right font-mono">{money(r.standard_pc)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono">{money(r.production_pc)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold">
+                          <td className="py-2.5 px-3 text-right tabular-nums">{money(r.standard_pc)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">{money(r.production_pc)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums font-bold">
                             ₹{Number(r.actual_pc).toFixed(2)}
                             {r.source === 'NO_DATA' && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title={r.note}>no data</span>}
                             {r.source === 'RATE_CARD' && <span className="ml-1 rounded bg-emerald-100 px-1 text-[10px] font-semibold text-emerald-800" title={r.note}>rate card</span>}
                             {r.source === 'RATE_SETTING' && <span className="ml-1 rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-800" title={r.note}>rate setting</span>}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold">{sv(r.var_prod_vs_std)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold">{sv(r.var_actual_vs_prod)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold">{sv(r.variance)}</td>
-                          <td className={`py-2.5 px-3 text-right font-mono font-bold ${r.variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          <td className="py-2.5 px-3 text-right tabular-nums font-bold">{sv(r.var_prod_vs_std)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums font-bold">{sv(r.var_actual_vs_prod)}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums font-bold">{sv(r.variance)}</td>
+                          <td className={`py-2.5 px-3 text-right tabular-nums font-bold ${r.variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                             {r.variance_pct == null ? '—' : r.variance > 0 ? `+${r.variance_pct.toFixed(2)}%` : `${r.variance_pct.toFixed(2)}%`}
                           </td>
                         </tr>
@@ -1340,24 +1340,24 @@ export default function ProductionCostDetailPage() {
           <div className="space-y-2 text-xs">
             <div className="flex justify-between items-center py-1 border-b border-slate-100">
               <span className="text-slate-500">Standard Cost / Pc</span>
-              <span className="font-mono font-semibold text-slate-700">₹{summary.estimated_cost_per_piece.toFixed(2)}</span>
+              <span className="tabular-nums font-semibold text-slate-700">₹{summary.estimated_cost_per_piece.toFixed(2)}</span>
             </div>
 
             <div className="flex justify-between items-center py-1 border-b border-slate-100">
               <span className="text-slate-500">Actual Cost / Pc</span>
-              <span className="font-mono font-bold text-slate-900">₹{summary.actual_cost_per_piece.toFixed(2)}</span>
+              <span className="tabular-nums font-bold text-slate-900">₹{summary.actual_cost_per_piece.toFixed(2)}</span>
             </div>
 
             <div className="flex justify-between items-center py-1 border-b border-slate-100">
               <span className="text-slate-500">Variance / Pc</span>
-              <span className={`font-mono font-bold ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <span className={`tabular-nums font-bold ${summary.variance_amount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                 {summary.variance_amount >= 0 ? `+₹${(summary.variance_amount / (head.produced_qty || 1)).toFixed(2)}` : `-₹${Math.abs(summary.variance_amount / (head.produced_qty || 1)).toFixed(2)}`}
               </span>
             </div>
 
             <div className="flex justify-between items-center py-1 border-b border-slate-100">
               <span className="text-slate-500">Variance %</span>
-              <span className={`font-mono font-bold ${summary.variance_pct > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <span className={`tabular-nums font-bold ${summary.variance_pct > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                 {summary.variance_pct >= 0 ? `+${summary.variance_pct.toFixed(2)}%` : `${summary.variance_pct.toFixed(2)}%`}
               </span>
             </div>
@@ -1365,26 +1365,26 @@ export default function ProductionCostDetailPage() {
             <div className="pt-2 space-y-1.5 text-[11px] text-slate-600">
               <div className="flex justify-between">
                 <span>Material Cost</span>
-                <span className="font-mono font-semibold">₹{(summary.material_cost / (head.produced_qty || 1)).toFixed(2)}</span>
+                <span className="tabular-nums font-semibold">₹{(summary.material_cost / (head.produced_qty || 1)).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Process Cost</span>
-                <span className="font-mono font-semibold">₹{(summary.process_cost / (head.produced_qty || 1)).toFixed(2)}</span>
+                <span className="tabular-nums font-semibold">₹{(summary.process_cost / (head.produced_qty || 1)).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Labour Cost</span>
-                <span className="font-mono font-semibold">₹{(summary.labour_cost / (head.produced_qty || 1)).toFixed(2)}</span>
+                <span className="tabular-nums font-semibold">₹{(summary.labour_cost / (head.produced_qty || 1)).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Overhead Cost</span>
-                <span className="font-mono font-semibold">₹{perPc(summary.overhead_cost + legacyMachine).toFixed(2)}</span>
+                <span className="tabular-nums font-semibold">₹{perPc(summary.overhead_cost + legacyMachine).toFixed(2)}</span>
               </div>
             </div>
 
             {/* Total Actual Production Cost Card */}
             <div className="mt-3 p-2.5 rounded-lg bg-slate-900 text-white space-y-1">
               <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Actual Cost</div>
-              <div className="text-lg font-bold font-mono">₹{fmtNumber(summary.total_actual_cost)}</div>
+              <div className="text-lg font-bold tabular-nums">₹{fmtNumber(summary.total_actual_cost)}</div>
             </div>
 
             {/* Cost Per Good Finished Piece (Spec §19) */}
@@ -1393,7 +1393,7 @@ export default function ProductionCostDetailPage() {
                 <span>Cost / Good Finished Pc</span>
                 <span>{fmtNumber(head.good_qty)} Pcs</span>
               </div>
-              <div className="text-xl font-bold font-mono text-emerald-700">
+              <div className="text-xl font-bold tabular-nums text-emerald-700">
                 ₹{summary.cost_per_good_piece.toFixed(2)}
               </div>
             </div>
@@ -1432,11 +1432,11 @@ export default function ProductionCostDetailPage() {
                   ) : (
                     drilldownData.fabric.map((f: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
-                        <td className="p-2 font-mono font-bold text-brand-700">{f.issue_no}</td>
+                        <td className="p-2 tabular-nums font-bold text-brand-700">{f.issue_no}</td>
                         <td className="p-2">{f.fabric_name}</td>
-                        <td className="p-2 font-mono">{f.roll_no}</td>
-                        <td className="p-2 font-mono">{f.lot_no}</td>
-                        <td className="p-2 font-mono text-emerald-700">{f.grn_no}</td>
+                        <td className="p-2 tabular-nums">{f.roll_no}</td>
+                        <td className="p-2 tabular-nums">{f.lot_no}</td>
+                        <td className="p-2 tabular-nums text-emerald-700">{f.grn_no}</td>
                         <td className="p-2 font-semibold">{f.supplier_name}</td>
                       </tr>
                     ))
@@ -1469,11 +1469,11 @@ export default function ProductionCostDetailPage() {
                   ) : (
                     drilldownData.process.map((p: any, i: number) => (
                       <tr key={i} className="hover:bg-slate-50">
-                        <td className="p-2 font-mono font-bold text-indigo-700">{p.challan_no}</td>
+                        <td className="p-2 tabular-nums font-bold text-indigo-700">{p.challan_no}</td>
                         <td className="p-2">{p.stage_name}</td>
-                        <td className="p-2 text-right font-mono">{p.input_qty}</td>
-                        <td className="p-2 text-right font-mono font-bold text-emerald-700">{p.output_qty}</td>
-                        <td className="p-2 font-mono">{p.receipt_no || '—'}</td>
+                        <td className="p-2 text-right tabular-nums">{p.input_qty}</td>
+                        <td className="p-2 text-right tabular-nums font-bold text-emerald-700">{p.output_qty}</td>
+                        <td className="p-2 tabular-nums">{p.receipt_no || '—'}</td>
                         <td className="p-2 font-semibold">{p.vendor_name || 'In-House'}</td>
                       </tr>
                     ))

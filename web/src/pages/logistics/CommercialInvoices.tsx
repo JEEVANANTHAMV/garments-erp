@@ -52,7 +52,7 @@ export function CommercialInvoicesPage() {
       <DataTable rows={list.data?.data ?? []} loading={list.isLoading} error={list.error} onRetry={() => void list.refetch()} rowKey={(r: any) => r.id}
         onRowClick={(r: any) => nav(`/export/invoices/${r.id}`)} pagination={list.data?.pagination} onPage={setPage} emptyTitle="No invoices"
         columns={[
-          { key: 'invoice_no', header: 'Invoice no', render: (r: any) => <span className="font-mono text-[12px] font-semibold text-brand-700">{r.invoice_no}</span> },
+          { key: 'invoice_no', header: 'Invoice no', render: (r: any) => <span className="tabular-nums text-[12px] font-semibold text-brand-700">{r.invoice_no}</span> },
           { key: 'invoice_date', header: 'Date', render: (r: any) => fmtDate(r.invoice_date) },
           { key: 'buyer_name', header: 'Buyer / order', render: (r: any) => <div><p className="font-medium">{r.buyer_name}</p><p className="text-[11px] text-slate-500">{r.so_no}{r.io_no ? ` · ${r.io_no}` : ''}</p></div> },
           { key: 'buyer_order_ref', header: 'Buyer PO', render: (r: any) => <span className="text-[12px]">{String(r.buyer_order_ref ?? '').replace(/\n/g, ' / ') || '—'}</span> },
@@ -281,7 +281,7 @@ export function CommercialInvoiceDetailPage() {
   return (
     <div>
       <PageHeader breadcrumb={['Export', 'Commercial Invoices']}
-        title={<span className="flex flex-wrap items-center gap-2">{isNew ? 'New commercial invoice' : <span className="font-mono">{detail.data.invoice_no}</span>}
+        title={<span className="flex flex-wrap items-center gap-2">{isNew ? 'New commercial invoice' : <span className="tabular-nums">{detail.data.invoice_no}</span>}
           {!isNew && <Badge tone={final ? 'green' : 'amber'}>{final ? 'Final' : 'Draft'}</Badge>}
           {!isNew && detail.data.legacy && <Badge tone="slate">old form — fill the boxes</Badge>}</span>}
         subtitle={isNew ? 'Pick the order and its confirmed packing lists, fill, check, save' : `${detail.data.buyer_name ?? ''} · ${detail.data.so_no ?? ''}${final ? ` · finalised ${fmtDate(detail.data.finalized_at)} by ${detail.data.finalized_by_name ?? ''}` : ''}`}
@@ -307,10 +307,10 @@ export function CommercialInvoiceDetailPage() {
       {!isNew && detail.data?.gst_endorsement && <p className="mb-3 text-[12px] text-slate-600">GST endorsement printed: <b>{detail.data.gst_endorsement}</b></p>}
       {!isNew && (detail.data?.shipping_bill || detail.data?.eway_bill?.generated) && (
         <p className="mb-3 flex flex-wrap gap-x-4 text-[12px] text-slate-600" id="ci-links">
-          {detail.data.shipping_bill && <span>Shipping bill <a className="font-mono text-brand-700 hover:underline" href={`/export/shipping-bills/${detail.data.shipping_bill.id}`}
+          {detail.data.shipping_bill && <span>Shipping bill <a className="tabular-nums text-brand-700 hover:underline" href={`/export/shipping-bills/${detail.data.shipping_bill.id}`}
             onClick={(e) => { e.preventDefault(); nav(`/export/shipping-bills/${detail.data.shipping_bill.id}`); }}>{detail.data.shipping_bill.sb_no}</a> · {fmtDate(detail.data.shipping_bill.sb_date)}
             {detail.data.shipping_bill.sb_pdf_url && <> · <a className="text-brand-700 hover:underline" id="ci-sb-pdf" href={detail.data.shipping_bill.sb_pdf_url} target="_blank" rel="noreferrer">customs PDF</a></>}</span>}
-          {detail.data.eway_bill?.generated && <span>E-way bill <b className="font-mono">{detail.data.eway_bill.ewb_no}</b> · {detail.data.eway_bill.ewb_date} — printed on the invoice with its QR</span>}
+          {detail.data.eway_bill?.generated && <span>E-way bill <b className="tabular-nums">{detail.data.eway_bill.ewb_no}</b> · {detail.data.eway_bill.ewb_date} — printed on the invoice with its QR</span>}
         </p>
       )}
       {dirtyTotals && <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-amber-800">Not saved: the lines changed — Save before preview / print / Excel.</p>}
@@ -501,7 +501,7 @@ export function CommercialInvoiceDetailPage() {
               <thead><tr><th className="th">HSN</th><th className="th">Description</th><th className="th">UQC</th><th className="th text-right">Qty</th><th className="th text-right">Value {cur?.code}</th>
                 <th className="th text-right">Taxable ₹</th><th className="th text-right">IGST %</th><th className="th text-right">IGST ₹</th></tr></thead>
               <tbody>{detail.data.hsn_summary.map((h: any) => (
-                <tr key={`${h.hsn_code}|${h.uqc}|${h.gst_rate}`}><td className="td font-mono text-[12px]">{h.hsn_code || <span className="text-red-600">missing</span>}</td><td className="td text-[12px]">{h.description}</td>
+                <tr key={`${h.hsn_code}|${h.uqc}|${h.gst_rate}`}><td className="td tabular-nums text-[12px]">{h.hsn_code || <span className="text-red-600">missing</span>}</td><td className="td text-[12px]">{h.description}</td>
                   <td className="td text-[12px]">{h.uqc}</td><td className="td text-right tabular-nums">{fmtNumber(h.qty)}</td><td className="td text-right tabular-nums">{fmtDecimal(h.value_fc, 2)}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(h.value_inr, 2)}</td><td className="td text-right">{h.gst_rate}</td><td className="td text-right tabular-nums">{fmtDecimal(h.gst_inr, 2)}</td></tr>))}</tbody>
             </table>

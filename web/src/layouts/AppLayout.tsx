@@ -389,7 +389,7 @@ export default function AppLayout() {
                   {company?.trade_name || company?.legal_name || 'Select Company'}
                 </p>
                 {company?.gstin && (
-                  <p className="font-mono text-[10px] font-semibold leading-tight text-slate-600">
+                  <p className="tabular-nums text-[10px] font-semibold leading-tight text-slate-600">
                     GST: {company.gstin}
                   </p>
                 )}
@@ -437,7 +437,7 @@ export default function AppLayout() {
                               <p className="text-[11px] font-medium text-slate-600">{c.trade_name}</p>
                             )}
                             {c.gstin && (
-                              <p className="font-mono text-[10px] font-medium text-slate-500">GST: {c.gstin}</p>
+                              <p className="tabular-nums text-[10px] font-medium text-slate-500">GST: {c.gstin}</p>
                             )}
                           </div>
                           {isCurrent && (
@@ -491,7 +491,7 @@ export default function AppLayout() {
                     <span className="flex items-center gap-1.5 font-medium text-slate-700">
                       <Building2 size={12} className="text-brand-600" />{company?.trade_name || company?.legal_name}
                     </span>
-                    {company?.gstin && <p className="mt-0.5 font-mono text-[10px] text-slate-400">GST: {company.gstin}</p>}
+                    {company?.gstin && <p className="mt-0.5 tabular-nums text-[10px] text-slate-400">GST: {company.gstin}</p>}
                   </div>
 
                   {companies.length > 1 && (

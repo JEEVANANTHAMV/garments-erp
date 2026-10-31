@@ -514,30 +514,30 @@ export default function TrimPurchaseOrderDetailPage() {
       <div className={`grid grid-cols-2 ${isForeignCurrency ? 'sm:grid-cols-6' : 'sm:grid-cols-5'} gap-3`}>
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
           <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Total Items</div>
-          <div className="text-lg font-bold text-slate-900 mt-0.5 font-mono">{lines.length} Lines</div>
+          <div className="text-lg font-bold text-slate-900 mt-0.5 tabular-nums">{lines.length} Lines</div>
         </div>
         <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
           <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Order Qty</div>
-          <div className="text-lg font-bold text-emerald-900 mt-0.5 font-mono">{fmtDecimal(totals.totalQty)}</div>
+          <div className="text-lg font-bold text-emerald-900 mt-0.5 tabular-nums">{fmtDecimal(totals.totalQty)}</div>
         </div>
         <div className="p-3 bg-sky-50/70 rounded-xl border border-sky-200">
           <div className="text-[11px] font-semibold text-sky-700 uppercase tracking-wider">Taxable Value</div>
-          <div className="text-lg font-bold text-sky-900 mt-0.5 font-mono">{currSymbol}{fmtDecimal(totals.totalAmount, 2)}</div>
+          <div className="text-lg font-bold text-sky-900 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.totalAmount, 2)}</div>
         </div>
         <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
           <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">
             {head.is_interstate ? 'IGST (Total)' : 'CGST + SGST'}
           </div>
-          <div className="text-lg font-bold text-purple-900 mt-0.5 font-mono">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</div>
+          <div className="text-lg font-bold text-purple-900 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</div>
         </div>
         <div className="p-3 bg-emerald-100/60 rounded-xl border border-emerald-300">
           <div className="text-[11px] font-semibold text-emerald-900 uppercase tracking-wider">Grand Total</div>
-          <div className="text-lg font-bold text-emerald-950 mt-0.5 font-mono">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</div>
+          <div className="text-lg font-bold text-emerald-950 mt-0.5 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal, 2)}</div>
         </div>
         {isForeignCurrency && (
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-300">
             <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">INR Equivalent</div>
-            <div className="text-lg font-bold text-amber-950 mt-0.5 font-mono">₹{fmtDecimal(inrGrandTotal, 2)}</div>
+            <div className="text-lg font-bold text-amber-950 mt-0.5 tabular-nums">₹{fmtDecimal(inrGrandTotal, 2)}</div>
             <div className="text-[10px] text-amber-700">@ ₹{head.exchange_rate} / {selectedCurrency.code}</div>
           </div>
         )}
@@ -774,7 +774,7 @@ export default function TrimPurchaseOrderDetailPage() {
                 return (
                   <tr key={line._key} className="hover:bg-slate-50/50">
                     {/* 1. S.No */}
-                    <td className="py-2 px-2 text-center font-mono font-medium text-slate-400">
+                    <td className="py-2 px-2 text-center tabular-nums font-medium text-slate-400">
                       {idx + 1}
                     </td>
 
@@ -919,12 +919,12 @@ export default function TrimPurchaseOrderDetailPage() {
                         step="0.01"
                         value={line.rate}
                         onChange={(e) => updateLine(idx, { rate: Number(e.target.value) })}
-                        className="input text-xs py-1 text-right font-mono"
+                        className="input text-xs py-1 text-right tabular-nums"
                       />
                     </td>
 
                     {/* 11. Taxable */}
-                    <td className="py-2 px-2 text-right font-mono font-medium text-slate-800">
+                    <td className="py-2 px-2 text-right tabular-nums font-medium text-slate-800">
                       {currSymbol}{fmtDecimal(line.amount, 2)}
                     </td>
 
@@ -944,12 +944,12 @@ export default function TrimPurchaseOrderDetailPage() {
                     </td>
 
                     {/* 13. Tax Amount */}
-                    <td className="py-2 px-2 text-right font-mono text-slate-600">
+                    <td className="py-2 px-2 text-right tabular-nums text-slate-600">
                       {currSymbol}{fmtDecimal(line.tax_amount, 2)}
                     </td>
 
                     {/* 14. Net Amount */}
-                    <td className="py-2 px-2 text-right font-mono font-bold text-slate-950">
+                    <td className="py-2 px-2 text-right tabular-nums font-bold text-slate-950">
                       {currSymbol}{fmtDecimal(line.net_amount, 2)}
                     </td>
 
@@ -971,14 +971,14 @@ export default function TrimPurchaseOrderDetailPage() {
             <tfoot className="bg-slate-50/80 border-t border-slate-200 font-bold text-slate-800">
               <tr>
                 <td colSpan={7} className="py-3 px-3 text-right text-slate-600">Total Items:</td>
-                <td className="py-3 px-2 text-right font-mono text-emerald-800">{fmtDecimal(totals.totalQty)}</td>
+                <td className="py-3 px-2 text-right tabular-nums text-emerald-800">{fmtDecimal(totals.totalQty)}</td>
                 <td colSpan={2} className="py-3 px-2 text-right text-slate-500 text-xs">Taxable Total:</td>
-                <td className="py-3 px-2 text-right font-mono">{currSymbol}{fmtDecimal(totals.totalAmount, 2)}</td>
+                <td className="py-3 px-2 text-right tabular-nums">{currSymbol}{fmtDecimal(totals.totalAmount, 2)}</td>
                 <td className="py-3 px-2 text-center text-xs text-slate-500">
                   {head.is_interstate ? 'IGST:' : 'CGST+SGST:'}
                 </td>
-                <td className="py-3 px-2 text-right font-mono text-purple-700">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</td>
-                <td className="py-3 px-2 text-right font-mono text-sm font-black text-slate-900">
+                <td className="py-3 px-2 text-right tabular-nums text-purple-700">{currSymbol}{fmtDecimal(totals.taxAmount, 2)}</td>
+                <td className="py-3 px-2 text-right tabular-nums text-sm font-black text-slate-900">
                   {currSymbol}{fmtDecimal(totals.grandTotal, 2)}
                 </td>
                 <td></td>
@@ -989,7 +989,7 @@ export default function TrimPurchaseOrderDetailPage() {
 
         {/* Footer Tax Breakdown */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-end items-end gap-6 text-xs">
-          <div className="space-y-1 text-right font-mono">
+          <div className="space-y-1 text-right tabular-nums">
             <div className="text-slate-600">
               Taxable Amount: <span className="font-semibold text-slate-900">{currSymbol}{fmtDecimal(totals.totalAmount, 2)}</span>
             </div>
@@ -1052,11 +1052,11 @@ export default function TrimPurchaseOrderDetailPage() {
                 ) : (
                   trimQuotes.map((q: any) => (
                     <tr key={q.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-mono font-bold text-brand-700">{q.quotation_no}</td>
+                      <td className="py-2.5 px-3 tabular-nums font-bold text-brand-700">{q.quotation_no}</td>
                       <td className="py-2.5 px-3">{q.quotation_date?.slice(0, 10)}</td>
                       <td className="py-2.5 px-3">{q.job_no || '—'}</td>
                       <td className="py-2.5 px-3">{q.supplier_name || '—'}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold">₹{fmtDecimal(q.total_amount, 2)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums font-bold">₹{fmtDecimal(q.total_amount, 2)}</td>
                       <td className="py-2.5 px-3 text-center">
                         <button
                           type="button"
@@ -1114,14 +1114,14 @@ export default function TrimPurchaseOrderDetailPage() {
 
               <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded-lg p-3.5 mb-4 bg-slate-50/50">
                 <div className="space-y-1.5">
-                  <div><span className="text-slate-500 font-medium">PO Number:</span> <span className="font-bold text-slate-900 font-mono text-sm">{head.po_no || id}</span></div>
+                  <div><span className="text-slate-500 font-medium">PO Number:</span> <span className="font-bold text-slate-900 tabular-nums text-sm">{head.po_no || id}</span></div>
                   <div><span className="text-slate-500 font-medium">PO Date:</span> <span className="font-semibold text-slate-800">{head.po_date}</span></div>
                   <div><span className="text-slate-500 font-medium">Expected Delivery:</span> <span className="font-semibold text-slate-800">{head.delivery_date || '-'}</span></div>
                   <div><span className="text-slate-500 font-medium">Payment Terms:</span> <span className="font-semibold text-slate-800">{head.payment_terms || '-'}</span></div>
                 </div>
                 <div className="space-y-1.5 border-l border-slate-200 pl-4">
                   <div><span className="text-slate-500 font-medium">Supplier / Vendor:</span> <span className="font-bold text-slate-900">{suppliers.find((sp: any) => String(sp.id) === String(head.supplier_id))?.label || '-'}</span></div>
-                  <div><span className="text-slate-500 font-medium">IO No (Internal Order):</span> <span className="font-bold text-sky-800 font-mono">{head.io_no}</span></div>
+                  <div><span className="text-slate-500 font-medium">IO No (Internal Order):</span> <span className="font-bold text-sky-800 tabular-nums">{head.io_no}</span></div>
                   <div><span className="text-slate-500 font-medium">Style:</span> <span className="font-semibold text-slate-800">{styles.find((st: any) => String(st.id) === String(head.style_id))?.code || '-'}</span></div>
                   <div><span className="text-slate-500 font-medium">Taxation:</span> <span className="font-bold text-emerald-700">{head.is_interstate ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}</span></div>
                 </div>

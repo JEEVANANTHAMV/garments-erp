@@ -40,7 +40,7 @@ function BillList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
             <tbody>
               {(list.data ?? []).map((b) => (
                 <tr key={b.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(b.id)}>
-                  <td className="px-3 py-2 font-mono font-semibold text-brand-700">{b.bill_no}</td><td className="px-3 py-2">{fmtDate(b.bill_date)}</td><td className="px-3 py-2">{b.vendor_name}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{b.bill_no}</td><td className="px-3 py-2">{fmtDate(b.bill_date)}</td><td className="px-3 py-2">{b.vendor_name}</td>
                   <td className="px-3 py-2">{b.party_bill_no || '—'}</td><td className="px-3 py-2 text-right">{b.line_count}</td><td className="px-3 py-2 text-right">{money(b.gross_amount)}</td>
                   <td className="px-3 py-2 text-right text-red-700">{n(b.recovery_amount) ? `− ${money(b.recovery_amount)}` : '—'}</td><td className="px-3 py-2 text-right">{money(b.gst_amount)}</td>
                   <td className="px-3 py-2 text-right font-semibold">{money(b.net_amount)}</td><td className="px-3 py-2"><FpStatus value={b.status} /></td>
@@ -79,7 +79,7 @@ function BillView({ id, onBack }: { id: number; onBack: () => void }) {
       <div className="card overflow-x-auto p-2">
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>{['Type', 'Doc no', 'Date', 'Our DC', 'Party challan', 'Vehicle', 'Job', 'Process', 'Qty KG', 'Rate', 'Amount'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Rate|Amount/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
-          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 font-mono">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 font-mono">{l.dc_no || '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.sub_process}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{money(l.rate)}</td><td className={`px-2 py-1 text-right ${n(l.amount) < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td></tr>)}</tbody>
+          <tbody>{b.lines.map((l: any) => <tr key={l.id} className="border-t border-slate-100"><td className="px-2 py-1">{l.line_type}</td><td className="px-2 py-1 tabular-nums">{l.doc_no}</td><td className="px-2 py-1">{fmtDate(l.doc_date)}</td><td className="px-2 py-1 tabular-nums">{l.dc_no || '—'}</td><td className="px-2 py-1">{l.challan_no || '—'}</td><td className="px-2 py-1">{l.vehicle_no || '—'}</td><td className="px-2 py-1">{l.io_no || '—'}</td><td className="px-2 py-1">{l.sub_process}</td><td className="px-2 py-1 text-right">{kg(l.qty_kg)}</td><td className="px-2 py-1 text-right">{money(l.rate)}</td><td className={`px-2 py-1 text-right ${n(l.amount) < 0 ? 'text-red-700' : ''}`}>{money(l.amount)}</td></tr>)}</tbody>
         </table>
         <div className="mt-2 border-t border-slate-100 pt-2"><ProcessBillTotalsView b={b} /></div>
       </div>

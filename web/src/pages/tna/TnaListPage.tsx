@@ -311,7 +311,7 @@ export default function TnaListPage() {
                       className="hover:bg-slate-50/80 transition-colors cursor-pointer"
                       onClick={() => nav(`/tna/${row.id}`)}
                     >
-                      <td className="py-3 px-3 font-mono font-bold text-brand-700">
+                      <td className="py-3 px-3 tabular-nums font-bold text-brand-700">
                         {row.tna_no}
                         {row.version > 1 && (
                           <span className="ml-1 rounded bg-indigo-50 border border-indigo-200 px-1 text-[10px] text-indigo-700">
@@ -321,15 +321,15 @@ export default function TnaListPage() {
                       </td>
                       <td className="py-3 px-3">
                         <div className="font-semibold text-slate-900">{row.buyer_name || 'Buyer'}</div>
-                        <div className="text-[11px] text-slate-500 font-mono">
+                        <div className="text-[11px] text-slate-500 tabular-nums">
                           {row.style_code} {row.style_name ? `• ${row.style_name}` : ''}
                         </div>
                       </td>
                       <td className="py-3 px-3">
                         <div className="font-medium text-slate-800">{row.so_no}</div>
-                        <div className="text-[11px] text-slate-500 font-mono">IO: {row.io_no || '—'}</div>
+                        <div className="text-[11px] text-slate-500 tabular-nums">IO: {row.io_no || '—'}</div>
                       </td>
-                      <td className="py-3 px-3 text-right font-mono font-medium">
+                      <td className="py-3 px-3 text-right tabular-nums font-medium">
                         {fmtNumber(row.order_qty)} pcs
                       </td>
                       <td className="py-3 px-3">

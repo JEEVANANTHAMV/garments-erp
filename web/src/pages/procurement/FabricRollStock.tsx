@@ -303,14 +303,14 @@ export default function FabricRollStockPage() {
                 filtered.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/70 transition">
                     <td className="py-3 px-4">
-                      <div className="font-mono font-bold text-sky-700">{r.roll_no}</div>
+                      <div className="tabular-nums font-bold text-sky-700">{r.roll_no}</div>
                       <div className="text-[10px] text-slate-400">ID #{r.id}</div>
                     </td>
                     <td className="py-3 px-3 font-semibold text-slate-900">
                       {r.fabric_name || 'Fabric Item'}
                       <div className="text-[10px] text-slate-400 font-normal">{r.fabric_code || ''}</div>
                     </td>
-                    <td className="py-3 px-3 font-mono text-slate-700 text-[11px]">{r.lot_no || '—'}</td>
+                    <td className="py-3 px-3 tabular-nums text-slate-700 text-[11px]">{r.lot_no || '—'}</td>
                     <td className="py-3 px-3 font-medium text-slate-800">{r.shade || '—'}</td>
                     <td className="py-3 px-3 text-center text-slate-600 text-[11px]">
                       {r.gsm} gsm / {r.dia || '30"'}
@@ -326,14 +326,14 @@ export default function FabricRollStockPage() {
                     </td>
                     <td className="py-3 px-3">
                       <div className="text-slate-800 font-medium">{r.warehouse_name || 'Main Fabric Store'}</div>
-                      <span className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded text-slate-600">
+                      <span className="tabular-nums text-[10px] bg-slate-100 px-1 py-0.5 rounded text-slate-600">
                         Bin: {r.location_bin || 'Unassigned'}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-[11px]">
                       {r.internal_ir_no ? (
                         <button onClick={() => setIoFilter(r.internal_ir_no)} title="Filter by this IO"
-                          className="font-mono font-semibold text-indigo-700 hover:underline">{r.internal_ir_no}</button>
+                          className="tabular-nums font-semibold text-indigo-700 hover:underline">{r.internal_ir_no}</button>
                       ) : (
                         <span className="text-slate-300">No IO</span>
                       )}

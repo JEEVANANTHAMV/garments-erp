@@ -41,8 +41,8 @@ export function FabricRollTrackingPage() {
               <thead className="bg-slate-50 text-slate-500"><tr>{['#', 'Date', 'Transaction', 'Doc no', 'Process', 'From', 'To', 'Roll no', 'Job', 'Qty KG', 'Remarks'].map((x) => <th key={x} className={`px-2 py-2 ${x === 'Qty KG' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.timeline.map((e: any, i: number) => (
                 <tr key={i} className="border-t border-slate-100"><td className="px-2 py-1 text-slate-400">{i + 1}</td><td className="px-2 py-1">{fmtDate(e.when)}</td>
-                  <td className="px-2 py-1 font-semibold">{EVENT_LABEL[e.event] ?? e.event}</td><td className="px-2 py-1 font-mono">{e.ref_no || '—'}</td><td className="px-2 py-1">{e.process || '—'}</td>
-                  <td className="px-2 py-1">{e.from || '—'}</td><td className="px-2 py-1">{e.to || '—'}</td><td className="px-2 py-1 font-mono">{e.roll_no}</td><td className="px-2 py-1">{e.io_no || '—'}</td>
+                  <td className="px-2 py-1 font-semibold">{EVENT_LABEL[e.event] ?? e.event}</td><td className="px-2 py-1 tabular-nums">{e.ref_no || '—'}</td><td className="px-2 py-1">{e.process || '—'}</td>
+                  <td className="px-2 py-1">{e.from || '—'}</td><td className="px-2 py-1">{e.to || '—'}</td><td className="px-2 py-1 tabular-nums">{e.roll_no}</td><td className="px-2 py-1">{e.io_no || '—'}</td>
                   <td className="px-2 py-1 text-right">{kg(e.qty_kg)}</td><td className="px-2 py-1">{e.remarks || ''}</td></tr>
               ))}</tbody>
             </table>
@@ -52,8 +52,8 @@ export function FabricRollTrackingPage() {
             <table className="mt-2 w-full text-xs">
               <thead className="bg-slate-50 text-slate-500"><tr>{['Roll', 'State', 'Colour', 'Job', 'GRN', 'Store', 'KG', 'In store'].map((x) => <th key={x} className={`px-2 py-2 ${/KG|store$/.test(x) && x !== 'Store' ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
               <tbody>{d.lineage.map((r: any) => (
-                <tr key={r.id} className={`border-t border-slate-100 ${r.id === d.roll.id ? 'bg-sky-50' : ''}`}><td className="px-2 py-1 font-mono">{r.roll_no}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name || '—'}</td>
-                  <td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1 font-mono">{r.grn_no}</td><td className="px-2 py-1">{r.warehouse_name || '—'}</td><td className="px-2 py-1 text-right">{kg(r.weight_kg)}</td><td className="px-2 py-1 text-right">{kg(r.balance_kg)}</td></tr>
+                <tr key={r.id} className={`border-t border-slate-100 ${r.id === d.roll.id ? 'bg-sky-50' : ''}`}><td className="px-2 py-1 tabular-nums">{r.roll_no}</td><td className="px-2 py-1">{r.process_state}</td><td className="px-2 py-1">{r.color_name || '—'}</td>
+                  <td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1 tabular-nums">{r.grn_no}</td><td className="px-2 py-1">{r.warehouse_name || '—'}</td><td className="px-2 py-1 text-right">{kg(r.weight_kg)}</td><td className="px-2 py-1 text-right">{kg(r.balance_kg)}</td></tr>
               ))}</tbody>
             </table>
           </div>
@@ -126,7 +126,7 @@ export function FabricProcessLedgerPage() {
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500"><tr>{['#', 'Doc date', 'Doc no', 'Transaction', 'Process', 'Contractor', 'Jobs', 'Outward KG', 'Good KG', 'Reject KG', 'Loss KG', 'Balance at vendor', 'Status'].map((h) => <th key={h} className={`px-3 py-2 ${/KG|Balance/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
             <tbody>{(ledger.data ?? []).map((r, i) => (
-              <tr key={i} className="border-t border-slate-100"><td className="px-3 py-1.5 text-slate-400">{i + 1}</td><td className="px-3 py-1.5">{fmtDate(r.doc_date)}</td><td className="px-3 py-1.5 font-mono">{r.doc_no}</td><td className="px-3 py-1.5 font-semibold">{r.txn}</td>
+              <tr key={i} className="border-t border-slate-100"><td className="px-3 py-1.5 text-slate-400">{i + 1}</td><td className="px-3 py-1.5">{fmtDate(r.doc_date)}</td><td className="px-3 py-1.5 tabular-nums">{r.doc_no}</td><td className="px-3 py-1.5 font-semibold">{r.txn}</td>
                 <td className="px-3 py-1.5">{r.sub_process}</td><td className="px-3 py-1.5">{r.contractor}</td><td className="px-3 py-1.5">{r.jobs || '—'}</td><td className="px-3 py-1.5 text-right">{r.outward_kg ? kg(r.outward_kg) : ''}</td>
                 <td className="px-3 py-1.5 text-right">{r.good_kg ? kg(r.good_kg) : ''}</td><td className="px-3 py-1.5 text-right">{r.reject_kg ? kg(r.reject_kg) : ''}</td><td className="px-3 py-1.5 text-right">{r.loss_kg ? kg(r.loss_kg) : ''}</td>
                 <td className="px-3 py-1.5 text-right font-semibold">{kg(r.balance_kg)}</td><td className="px-3 py-1.5"><FpStatus value={r.status} /></td></tr>

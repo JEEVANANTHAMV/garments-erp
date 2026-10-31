@@ -59,7 +59,7 @@ function OutwardList({ onOpen }: { onOpen: (id: number | 'new') => void }) {
               <tbody>
                 {rows.map((o) => (
                   <tr key={o.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(o.id)}>
-                    <td className="px-3 py-2 font-mono font-semibold text-brand-700">{o.fpo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
+                    <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{o.fpo_no}{o.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
                     <td className="px-3 py-2">{fmtDate(o.fpo_date)}</td>
                     <td className="px-3 py-2">{o.process_name || o.sub_process}</td>
                     <td className="px-3 py-2">{o.vendor_name}</td>
@@ -320,7 +320,7 @@ function JobGroup({ g, editable, dyeing, set, remove }: { g: { io_no: string; ro
       {g.rows.map((r, i) => (
         <tr key={r.fabric_roll_id} className="border-t border-slate-100">
           <td className="px-2 py-1 text-slate-400">{i + 1}</td>
-          <td className="px-2 py-1 font-mono">{r.roll_no}</td>
+          <td className="px-2 py-1 tabular-nums">{r.roll_no}</td>
           <td className="px-2 py-1">{r.lot_no || '—'}</td>
           <td className="px-2 py-1">{r.fabric_name}</td>
           {dyeing ? (
@@ -423,11 +423,11 @@ function RollPicker({ mode, jobs, warehouseId, quotationId, taken, onClose, onAd
               return (
                 <tr key={r.id} className={`border-t border-slate-100 ${on ? 'bg-emerald-50' : ''}`}>
                   {mode === 'job' && <td className="px-2 py-1"><input type="checkbox" checked={on} onChange={() => setSel((s) => { const x = { ...s }; if (on) delete x[r.id]; else x[r.id] = r.balance_kg; return x; })} /></td>}
-                  <td className="px-2 py-1 font-mono font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.lot_no || '—'}</td><td className="px-2 py-1">{r.fabric_name}</td>
+                  <td className="px-2 py-1 tabular-nums font-semibold">{r.roll_no}</td><td className="px-2 py-1">{r.lot_no || '—'}</td><td className="px-2 py-1">{r.fabric_name}</td>
                   <td className="px-2 py-1">{r.so_id ? r.io_no : <span className="text-slate-400">no job</span>}</td>
                   <td className="px-2 py-1"><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${r.process_state === 'GREY' ? 'bg-slate-100 text-slate-600' : 'bg-purple-100 text-purple-800'}`}>{stateLabel(r.process_state)}</span></td>
                   <td className="px-2 py-1">{r.color_name || (r.process_state === 'GREY' ? RAW_COLOUR : '—')}</td><td className="px-2 py-1">{r.gsm || '—'}</td><td className="px-2 py-1">{r.dia || '—'}</td>
-                  <td className="px-2 py-1 font-mono">{r.grn_no}</td><td className="px-2 py-1">{r.warehouse_name || '—'}</td>
+                  <td className="px-2 py-1 tabular-nums">{r.grn_no}</td><td className="px-2 py-1">{r.warehouse_name || '—'}</td>
                   <td className="px-2 py-1 text-right tabular-nums">{kg(r.balance_kg)}</td>
                   {mode === 'job' && <td className="px-2 py-1 text-right">{on ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={sel[r.id]} onChange={(e) => setSel((s) => ({ ...s, [r.id]: r3(Number(e.target.value)) }))} /> : '—'}</td>}
                 </tr>

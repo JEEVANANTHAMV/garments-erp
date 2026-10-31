@@ -152,11 +152,11 @@ export default function Login() {
                             </p>
                           )}
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-medium text-slate-700">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 tabular-nums font-medium text-slate-700">
                               {comp.company_code}
                             </span>
                             {comp.gstin && (
-                              <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-emerald-700">
+                              <span className="rounded bg-emerald-50 px-1.5 py-0.5 tabular-nums text-emerald-700">
                                 GST: {comp.gstin}
                               </span>
                             )}
@@ -227,7 +227,7 @@ export default function Login() {
                     <button key={u} type="button"
                       onClick={() => { setUsername(u); setPassword('Admin@123'); setError(null); }}
                       className="rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-brand-50">
-                      <span className="block font-mono text-[12px] font-medium text-brand-700">{u}</span>
+                      <span className="block tabular-nums text-[12px] font-medium text-brand-700">{u}</span>
                       <span className="block text-[10.5px] text-slate-500">{role}</span>
                     </button>
                   ))}

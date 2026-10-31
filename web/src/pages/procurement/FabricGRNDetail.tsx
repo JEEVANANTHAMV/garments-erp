@@ -776,7 +776,7 @@ export default function FabricGRNDetailPage() {
             label="GRN No"
             value={isNew ? '(Auto-generated on Save)' : header.grn_no}
             disabled
-            className="font-mono font-bold text-emerald-800 bg-emerald-50/40"
+            className="tabular-nums font-bold text-emerald-800 bg-emerald-50/40"
           />
 
           <Input
@@ -824,7 +824,7 @@ export default function FabricGRNDetailPage() {
                     return (
                       <span key={pId} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
                         <span>📋 {label}</span>
-                        {lineCnt > 0 && <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1 rounded font-mono">{lineCnt} items</span>}
+                        {lineCnt > 0 && <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1 rounded tabular-nums">{lineCnt} items</span>}
                         <button
                           type="button"
                           onClick={() => handleRemovePO(pId)}
@@ -1026,12 +1026,12 @@ export default function FabricGRNDetailPage() {
                   }`}
                 >
                   {/* # S.No */}
-                  <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                  <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-[11px]">{idx + 1}</td>
 
                   {/* PO Ref */}
                   <td className="py-2.5 px-2">
                     {l.po_no || l.po_id ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] tabular-nums font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
                         {l.po_no || `PO #${l.po_id}`}
                       </span>
                     ) : (
@@ -1120,11 +1120,11 @@ export default function FabricGRNDetailPage() {
                     {' '}{l.fabric_type}
                   </td>
                   <td className="py-2.5 px-2">
-                    <span className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
+                    <span className="tabular-nums text-[11px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">
                       {l.color_name && <>{l.color_name} / </>}{l.shade_code || '—'} / {l.lot_no}
                     </span>
                     {l.fabric_category === 'Dyed Fabric' && l.pantone_spec && (
-                      <span className="ml-1 text-[10px] text-purple-600 font-mono">[{l.pantone_spec}]</span>
+                      <span className="ml-1 text-[10px] text-purple-600 tabular-nums">[{l.pantone_spec}]</span>
                     )}
                   </td>
                   <td className="py-2.5 px-2 text-right whitespace-nowrap">
@@ -1277,17 +1277,17 @@ export default function FabricGRNDetailPage() {
                 ) : (
                   activeLine.rolls.map((r, rIdx) => (
                     <tr key={r._key || rIdx} className="hover:bg-slate-50/60">
-                      <td className="py-2 px-3 text-slate-400 font-mono text-[11px]">{rIdx + 1}</td>
+                      <td className="py-2 px-3 text-slate-400 tabular-nums text-[11px]">{rIdx + 1}</td>
                       <td className="py-2 px-2">
                         {isNew ? (
                           <input
                             type="text"
                             value={r.roll_no}
                             onChange={(e) => updateRoll(rIdx, 'roll_no', e.target.value)}
-                            className="w-24 text-xs font-mono font-semibold text-sky-700 border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-24 text-xs tabular-nums font-semibold text-sky-700 border border-slate-300 rounded px-1.5 py-0.5"
                           />
                         ) : (
-                          <span className="font-mono font-semibold text-sky-700">{r.roll_no}</span>
+                          <span className="tabular-nums font-semibold text-sky-700">{r.roll_no}</span>
                         )}
                       </td>
                       <td className="py-2 px-2">
@@ -1296,10 +1296,10 @@ export default function FabricGRNDetailPage() {
                             type="text"
                             value={r.lot_no}
                             onChange={(e) => updateRoll(rIdx, 'lot_no', e.target.value)}
-                            className="w-24 text-xs font-mono border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-24 text-xs tabular-nums border border-slate-300 rounded px-1.5 py-0.5"
                           />
                         ) : (
-                          <span className="font-mono text-slate-600">{r.lot_no}</span>
+                          <span className="tabular-nums text-slate-600">{r.lot_no}</span>
                         )}
                       </td>
                       <td className="py-2 px-2 text-right">
@@ -1379,10 +1379,10 @@ export default function FabricGRNDetailPage() {
                             type="text"
                             value={r.location_bin}
                             onChange={(e) => updateRoll(rIdx, 'location_bin', e.target.value)}
-                            className="w-20 text-xs font-mono border border-slate-300 rounded px-1.5 py-0.5"
+                            className="w-20 text-xs tabular-nums border border-slate-300 rounded px-1.5 py-0.5"
                           />
                         ) : (
-                          <span className="font-mono text-slate-700">{r.location_bin || '—'}</span>
+                          <span className="tabular-nums text-slate-700">{r.location_bin || '—'}</span>
                         )}
                       </td>
                       <td className="py-2 px-2 text-center">

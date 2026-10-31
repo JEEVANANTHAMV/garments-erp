@@ -60,7 +60,7 @@ export function PreCostingRowTable({
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full text-left text-xs font-mono">
+        <table className="w-full text-left text-xs tabular-nums">
           <thead className="bg-slate-50 text-slate-700 font-sans font-bold border-b border-slate-200">
             <tr>
               <th className="py-2.5 px-3 w-8">#</th>
@@ -112,7 +112,7 @@ export function PreCostingRowTable({
                               if (i === rows.length - 1) addRow();
                               else focusCell(i + 1);
                             }}
-                            className={`${cellCls} text-right font-mono font-bold text-brand-700 ${c.width ?? 'w-24'}`}
+                            className={`${cellCls} text-right tabular-nums font-bold text-brand-700 ${c.width ?? 'w-24'}`}
                           />
                           {c.suffix && <span className="ml-1 font-sans text-[11px] text-slate-500">{c.suffix(row)}</span>}
                         </>

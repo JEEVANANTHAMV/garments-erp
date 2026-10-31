@@ -162,7 +162,7 @@ export function CuttingReconciliationPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card title="Lays">
               <DataTable data={data.lays} columns={[
-                { key: 'lay_no', header: 'Lay', render: (r: any) => <span className="font-mono text-xs">{r.lay_no}</span> },
+                { key: 'lay_no', header: 'Lay', render: (r: any) => <span className="tabular-nums text-xs">{r.lay_no}</span> },
                 { key: 'status', header: 'Status', render: (r: any) => <StatusChip status={r.status} /> },
                 { key: 'planned_kg', header: 'Planned', align: 'right' as const, render: (r: any) => <Qty v={r.planned_kg} uom="KG" dp={3} /> },
                 { key: 'actual_kg', header: 'Actual', align: 'right' as const, render: (r: any) => <Qty v={r.actual_kg} uom="KG" dp={3} /> },
@@ -188,7 +188,7 @@ export function CuttingReconciliationPage() {
 
       <Card title="Reconciliations">
         <DataTable data={recons} columns={[
-          { key: 'recon_no', header: 'No', render: (r: any) => <button className="font-mono text-xs text-brand-700 hover:underline" onClick={() => setPlanId(String(r.cutting_plan_id))}>{r.recon_no}</button> },
+          { key: 'recon_no', header: 'No', render: (r: any) => <button className="tabular-nums text-xs text-brand-700 hover:underline" onClick={() => setPlanId(String(r.cutting_plan_id))}>{r.recon_no}</button> },
           { key: 'plan_no', header: 'Cut Order' },
           { key: 'style_code', header: 'Style' },
           { key: 'issued_kg', header: 'Issued', align: 'right' as const, render: (r: any) => <Qty v={r.issued_kg} uom="KG" dp={3} /> },

@@ -515,7 +515,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Return No</label>
             <input
-              className="input font-mono font-semibold text-brand-700 bg-slate-50"
+              className="input tabular-nums font-semibold text-brand-700 bg-slate-50"
               value={head.return_no || 'Auto-generated on save'}
               readOnly
             />
@@ -582,7 +582,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Source GRN Ref (Auto-loads items)</label>
             <select
-              className="input font-mono font-medium text-brand-700 bg-amber-50/40 border-amber-300"
+              className="input tabular-nums font-medium text-brand-700 bg-amber-50/40 border-amber-300"
               value={head.source_grn_id}
               onChange={(e) => handleGrnSelect(e.target.value)}
               disabled={!isDraft}
@@ -597,7 +597,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Source PO Ref</label>
             <select
-              className="input font-mono"
+              className="input tabular-nums"
               value={head.source_po_id}
               onChange={(e) => setHead({ ...head, source_po_id: e.target.value })}
               disabled={!isDraft}
@@ -701,14 +701,14 @@ export function PurchaseReturnDetailPage() {
               ) : (
                 lines.map((l, idx) => (
                   <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-2 px-3 font-mono font-bold text-slate-400">{idx + 1}</td>
+                    <td className="py-2 px-3 tabular-nums font-bold text-slate-400">{idx + 1}</td>
                     <td className="py-2 px-3 font-medium text-slate-900 max-w-xs truncate">
                       {l.item_name || 'Material Item'}
                     </td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-500">{fmtDecimal(l.grn_qty, 2)}</td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-500">{fmtDecimal(l.prev_returned_qty, 2)}</td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-500">{fmtDecimal(l.issued_qty, 2)}</td>
-                    <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 bg-emerald-50/30">
+                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{fmtDecimal(l.grn_qty, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{fmtDecimal(l.prev_returned_qty, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{fmtDecimal(l.issued_qty, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums font-bold text-emerald-700 bg-emerald-50/30">
                       {fmtDecimal(l.returnable_qty, 2)}
                     </td>
                     <td className="py-2 px-3 text-right bg-red-50/30">
@@ -721,8 +721,8 @@ export function PurchaseReturnDetailPage() {
                         disabled={!isDraft}
                       />
                     </td>
-                    <td className="py-2 px-3 font-mono text-slate-600">{l.uom_code || 'KG'}</td>
-                    <td className="py-2 px-3 text-right font-mono">
+                    <td className="py-2 px-3 tabular-nums text-slate-600">{l.uom_code || 'KG'}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">
                       <input
                         type="number"
                         step="0.01"
@@ -732,9 +732,9 @@ export function PurchaseReturnDetailPage() {
                         disabled={!isDraft}
                       />
                     </td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-700">{fmtDecimal(l.basic_amount, 2)}</td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-500">{l.gst_percent}%</td>
-                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">{fmtDecimal(l.total_amount, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-slate-700">{fmtDecimal(l.basic_amount, 2)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-slate-500">{l.gst_percent}%</td>
+                    <td className="py-2 px-3 text-right tabular-nums font-bold text-slate-900">{fmtDecimal(l.total_amount, 2)}</td>
                     <td className="py-2 px-3 max-w-[140px]">
                       <select
                         className="input text-[11px] h-8 py-0 px-1"
@@ -785,7 +785,7 @@ export function PurchaseReturnDetailPage() {
                       <div>
                         <label className="text-[11px] text-slate-500">Lot No</label>
                         <input
-                          className="input h-8 text-xs font-mono"
+                          className="input h-8 text-xs tabular-nums"
                           value={l.lot_no || ''}
                           onChange={(e) => updateLine(idx, { lot_no: e.target.value })}
                           placeholder="Yarn Lot"
@@ -795,7 +795,7 @@ export function PurchaseReturnDetailPage() {
                       <div>
                         <label className="text-[11px] text-slate-500">Dye Lot No</label>
                         <input
-                          className="input h-8 text-xs font-mono"
+                          className="input h-8 text-xs tabular-nums"
                           value={l.dye_lot_no || ''}
                           onChange={(e) => updateLine(idx, { dye_lot_no: e.target.value })}
                           placeholder="Dye Lot"
@@ -829,7 +829,7 @@ export function PurchaseReturnDetailPage() {
                         <input
                           type="number"
                           step="0.01"
-                          className="input h-8 text-xs font-mono font-bold text-brand-700"
+                          className="input h-8 text-xs tabular-nums font-bold text-brand-700"
                           value={l.return_qty}
                           onChange={(e) => updateLine(idx, { return_qty: Number(e.target.value) })}
                           disabled={!isDraft}
@@ -843,7 +843,7 @@ export function PurchaseReturnDetailPage() {
                       <div>
                         <label className="text-[11px] text-slate-500">Roll No / Barcode</label>
                         <input
-                          className="input h-8 text-xs font-mono"
+                          className="input h-8 text-xs tabular-nums"
                           value={l.roll_no || ''}
                           onChange={(e) => updateLine(idx, { roll_no: e.target.value })}
                           placeholder="Roll No"
@@ -853,7 +853,7 @@ export function PurchaseReturnDetailPage() {
                       <div>
                         <label className="text-[11px] text-slate-500">Batch / Dye Lot</label>
                         <input
-                          className="input h-8 text-xs font-mono"
+                          className="input h-8 text-xs tabular-nums"
                           value={l.dye_lot_no || l.batch_no || ''}
                           onChange={(e) => updateLine(idx, { dye_lot_no: e.target.value, batch_no: e.target.value })}
                           placeholder="Dye Lot"
@@ -885,7 +885,7 @@ export function PurchaseReturnDetailPage() {
                         <input
                           type="number"
                           step="0.01"
-                          className="input h-8 text-xs font-mono font-bold text-brand-700"
+                          className="input h-8 text-xs tabular-nums font-bold text-brand-700"
                           value={l.return_qty}
                           onChange={(e) => updateLine(idx, { return_qty: Number(e.target.value) })}
                           disabled={!isDraft}
@@ -899,7 +899,7 @@ export function PurchaseReturnDetailPage() {
                       <div>
                         <label className="text-[11px] text-slate-500">Batch No</label>
                         <input
-                          className="input h-8 text-xs font-mono"
+                          className="input h-8 text-xs tabular-nums"
                           value={l.batch_no || ''}
                           onChange={(e) => updateLine(idx, { batch_no: e.target.value })}
                           disabled={!isDraft}
@@ -927,7 +927,7 @@ export function PurchaseReturnDetailPage() {
                         <label className="text-[11px] text-slate-500">Return Qty</label>
                         <input
                           type="number"
-                          className="input h-8 text-xs font-mono font-bold text-brand-700"
+                          className="input h-8 text-xs tabular-nums font-bold text-brand-700"
                           value={l.return_qty}
                           onChange={(e) => updateLine(idx, { return_qty: Number(e.target.value) })}
                           disabled={!isDraft}
@@ -941,7 +941,7 @@ export function PurchaseReturnDetailPage() {
                       <div>
                         <label className="text-[11px] text-slate-500">Batch / Serial No</label>
                         <input
-                          className="input h-8 text-xs font-mono"
+                          className="input h-8 text-xs tabular-nums"
                           value={l.batch_no || ''}
                           onChange={(e) => updateLine(idx, { batch_no: e.target.value })}
                           disabled={!isDraft}
@@ -970,7 +970,7 @@ export function PurchaseReturnDetailPage() {
                         <label className="text-[11px] text-slate-500">Return Qty</label>
                         <input
                           type="number"
-                          className="input h-8 text-xs font-mono font-bold text-brand-700"
+                          className="input h-8 text-xs tabular-nums font-bold text-brand-700"
                           value={l.return_qty}
                           onChange={(e) => updateLine(idx, { return_qty: Number(e.target.value) })}
                           disabled={!isDraft}
@@ -990,10 +990,10 @@ export function PurchaseReturnDetailPage() {
             Total Items: <span className="font-bold text-slate-900">{lines.length}</span> | Total Return Quantity: <span className="font-bold text-brand-700">{fmtDecimal(totalReturnQty, 2)}</span>
           </div>
           <div className="flex items-center gap-6 text-xs">
-            <div>Taxable Basic: <span className="font-mono font-bold text-slate-800">₹{fmtDecimal(totalBasic, 2)}</span></div>
-            <div>GST: <span className="font-mono font-bold text-slate-800">₹{fmtDecimal(totalGst, 2)}</span></div>
+            <div>Taxable Basic: <span className="tabular-nums font-bold text-slate-800">₹{fmtDecimal(totalBasic, 2)}</span></div>
+            <div>GST: <span className="tabular-nums font-bold text-slate-800">₹{fmtDecimal(totalGst, 2)}</span></div>
             <div className="text-sm bg-white px-3 py-1.5 rounded-lg border border-slate-200">
-              Net Return Value: <span className="font-mono font-bold text-brand-700">₹{fmtDecimal(grandTotal, 2)}</span>
+              Net Return Value: <span className="tabular-nums font-bold text-brand-700">₹{fmtDecimal(grandTotal, 2)}</span>
             </div>
           </div>
         </div>
@@ -1060,7 +1060,7 @@ export function PurchaseReturnDetailPage() {
                     </td>
                     <td className="py-2 px-3">
                       <input
-                        className="input h-8 text-xs font-mono"
+                        className="input h-8 text-xs tabular-nums"
                         value={a.style_no}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -1074,7 +1074,7 @@ export function PurchaseReturnDetailPage() {
                       <input
                         type="number"
                         step="0.01"
-                        className="input h-8 w-24 text-right font-mono font-semibold"
+                        className="input h-8 w-24 text-right tabular-nums font-semibold"
                         value={a.allocated_qty}
                         onChange={(e) => {
                           const val = Number(e.target.value);
@@ -1128,7 +1128,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Return DC No</label>
             <input
-              className="input font-mono font-bold text-slate-700 bg-slate-50"
+              className="input tabular-nums font-bold text-slate-700 bg-slate-50"
               value={head.return_dc_no || 'Auto-generated upon DC approval'}
               readOnly
             />
@@ -1145,7 +1145,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">E-Way Bill No</label>
             <input
-              className={`input font-mono${ewb ? ' bg-slate-50' : ''}`}
+              className={`input tabular-nums${ewb ? ' bg-slate-50' : ''}`}
               value={head.eway_bill_no || ''}
               onChange={(e) => setHead({ ...head, eway_bill_no: e.target.value })}
               readOnly={Boolean(ewb)}
@@ -1165,7 +1165,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Vehicle No</label>
             <input
-              className="input font-mono uppercase"
+              className="input tabular-nums uppercase"
               value={head.vehicle_no || ''}
               onChange={(e) => setHead({ ...head, vehicle_no: e.target.value })}
               placeholder="TN 38 AB 1234"
@@ -1194,7 +1194,7 @@ export function PurchaseReturnDetailPage() {
           <div>
             <label className="label">Supplier Credit Note Ref</label>
             <input
-              className="input font-mono"
+              className="input tabular-nums"
               value={head.credit_note_ref || ''}
               onChange={(e) => setHead({ ...head, credit_note_ref: e.target.value })}
               placeholder="e.g. CN-2026-891"
@@ -1214,7 +1214,7 @@ export function PurchaseReturnDetailPage() {
             <input
               type="number"
               step="0.01"
-              className="input font-mono font-bold text-slate-800"
+              className="input tabular-nums font-bold text-slate-800"
               value={head.credit_note_amount || grandTotal}
               onChange={(e) => setHead({ ...head, credit_note_amount: Number(e.target.value) })}
             />

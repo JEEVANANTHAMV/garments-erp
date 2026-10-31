@@ -406,7 +406,7 @@ function FragmentRow({ a, open, toggle, onReq, onVoid }: { a: any; open: boolean
     <>
       <tr className="row-hover cursor-pointer" onClick={toggle} data-amendment={a.amendment_no}>
         <td className="td text-slate-400">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
-        <td className="td font-mono font-semibold text-brand-700">{a.amendment_no}</td>
+        <td className="td tabular-nums font-semibold text-brand-700">{a.amendment_no}</td>
         <td className="td">{fmtDate(a.amendment_date)}</td>
         <td className="td"><Badge tone={add ? 'emerald' : 'red'}>{add ? 'Additional' : 'Cancel'}</Badge></td>
         <td className={`td text-right font-semibold tabular-nums ${add ? 'text-emerald-700' : 'text-red-700'}`}>{add ? '+' : '−'}{fmtNumber(a.total_qty)}</td>

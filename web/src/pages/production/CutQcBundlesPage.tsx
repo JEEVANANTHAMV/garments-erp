@@ -333,7 +333,7 @@ export function CutQcBundlesPage() {
                 </button>
               ))}
             </div>
-            <div className="text-slate-500 font-mono">
+            <div className="text-slate-500 tabular-nums">
               {fmtNumber(bMeta.summary.bundles)} bundles · {fmtNumber(bMeta.summary.qty)} PCS
             </div>
           </div>
@@ -374,7 +374,7 @@ export function CutQcBundlesPage() {
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
               {(bMeta.summary.by_status || []).map((st: any) => (
                 <button key={st.status} type="button" onClick={() => setBf({ ...bf, status: bf.status === st.status ? '' : st.status })}
-                  className={`rounded-md border px-2 py-1 font-mono ${bf.status === st.status ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600'}`}>
+                  className={`rounded-md border px-2 py-1 tabular-nums ${bf.status === st.status ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600'}`}>
                   {st.status} {fmtNumber(st.bundles)}
                 </button>
               ))}
@@ -398,14 +398,14 @@ export function CutQcBundlesPage() {
               { key: 'bundle_no', header: 'Bundle No & Sequence', sortable: true, render: (r: any) => (
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-xs font-bold text-brand-700">{r.bundle_no}</span>
+                    <span className="tabular-nums text-xs font-bold text-brand-700">{r.bundle_no}</span>
                     {r.bundle_seq ? (
-                      <span className="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5 text-[10px] font-mono font-bold">
+                      <span className="rounded bg-slate-100 text-slate-700 px-1.5 py-0.5 text-[10px] tabular-nums font-bold">
                         #{r.bundle_seq} / {r.total_bundles || '?'}
                       </span>
                     ) : null}
                   </div>
-                  {r.barcode && <p className="font-mono text-[10px] text-slate-400">{r.barcode}</p>}
+                  {r.barcode && <p className="tabular-nums text-[10px] text-slate-400">{r.barcode}</p>}
                 </div>
               ) },
               { key: 'part_name', header: 'Part', sortable: true, render: (r: any) => {
@@ -424,7 +424,7 @@ export function CutQcBundlesPage() {
               { key: 'color_name', header: 'Colour' },
               { key: 'size_code', header: 'Size' },
               { key: 'lay_no', header: 'Cut Order / Lay', render: (r: any) => (
-                <div className="text-[11px]"><p className="font-mono">{r.plan_no || r.cut_no || '—'}</p>
+                <div className="text-[11px]"><p className="tabular-nums">{r.plan_no || r.cut_no || '—'}</p>
                   <p className="text-slate-400">{r.lay_no || ''}{r.marker_no ? ` · ${r.marker_no} v${r.marker_version}` : ''}</p></div>) },
               { key: 'qty', header: 'Qty', align: 'right' as const, render: (r: any) => <Qty v={r.qty} uom="PCS" className="font-semibold text-blue-700" /> },
               { key: 'balance_qty', header: 'Balance', align: 'right' as const, render: (r: any) => <Qty v={r.balance_qty ?? r.qty} uom="PCS" /> },
@@ -470,7 +470,7 @@ export function CutQcBundlesPage() {
                 placeholder="Scan or type bundle barcode / bundle number..."
                 value={scanCode}
                 onChange={e => setScanCode(e.target.value)}
-                className="flex-1 text-base font-mono"
+                className="flex-1 text-base tabular-nums"
               />
               <Button type="submit" loading={scanning}>Scan</Button>
             </form>
@@ -490,7 +490,7 @@ export function CutQcBundlesPage() {
                   </div>
                   <div>
                     <span className="text-xs text-slate-500">Bundle Seq</span>
-                    <p className="font-mono font-bold text-slate-800 text-lg">
+                    <p className="tabular-nums font-bold text-slate-800 text-lg">
                       {scannedBundle.bundle_seq ? `#${scannedBundle.bundle_seq} / ${scannedBundle.total_bundles || '?'}` : scannedBundle.bundle_no}
                     </p>
                   </div>
@@ -508,7 +508,7 @@ export function CutQcBundlesPage() {
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Components in this Bundle</h4>
                   <div className="flex flex-wrap gap-2">
                     {scannedBundle.components?.map((c: any) => (
-                      <span key={c.id} className="px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs font-mono font-medium text-slate-700">
+                      <span key={c.id} className="px-2.5 py-1 bg-white border border-slate-200 rounded-md text-xs tabular-nums font-medium text-slate-700">
                         {c.component} ({c.piece_qty} pcs)
                       </span>
                     ))}
@@ -541,7 +541,7 @@ export function CutQcBundlesPage() {
             data={cutQcs}
             loading={loading}
             columns={[
-              { key: 'qc_no', header: 'QC No', sortable: true, render: (r: any) => <span className="font-mono text-xs font-semibold text-brand-700">{r.qc_no}</span> },
+              { key: 'qc_no', header: 'QC No', sortable: true, render: (r: any) => <span className="tabular-nums text-xs font-semibold text-brand-700">{r.qc_no}</span> },
               { key: 'qc_date', header: 'Date', sortable: true, render: (r: any) => fmtDate(r.qc_date) },
               { key: 'io_no', header: 'I/O No', render: (r: any) => <Badge variant="outline" color="indigo">{r.io_no}</Badge> },
               { key: 'component', header: 'Component', render: (r: any) => <Badge color="slate">{r.component}</Badge> },
@@ -563,7 +563,7 @@ export function CutQcBundlesPage() {
           icon={<Boxes size={16} />}
           footerStart={genMode === 'LEGACY'
             ? <>Will create <b>{Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))}</b> bundles for <b>Part: {bundleForm.part_name === 'CUSTOM' ? bundleForm.custom_part || 'CUSTOM' : bundleForm.part_name || 'TOP'}</b>
-                {' '}<span className="rounded bg-blue-100 px-2 py-0.5 font-mono text-[11px] font-bold text-blue-800">B01 to B{String(Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))).padStart(2, '0')}</span></>
+                {' '}<span className="rounded bg-blue-100 px-2 py-0.5 tabular-nums text-[11px] font-bold text-blue-800">B01 to B{String(Math.ceil(bundleForm.total_qty / (bundleForm.bundle_size || 1))).padStart(2, '0')}</span></>
             : preview ? <><b>{preview.bundle_count}</b> bundles · <b>{fmtNumber(preview.qty)}</b> PCS</> : null}
           footer={<>
             <Button variant="secondary" onClick={() => setShowBundleModal(false)}>Cancel</Button>
@@ -662,7 +662,7 @@ export function CutQcBundlesPage() {
                 ) : (
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">Selected Part Code</label>
-                    <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold font-mono text-brand-700">
+                    <div className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold tabular-nums text-brand-700">
                       PART: {bundleForm.part_name || 'TOP'}
                     </div>
                   </div>

@@ -96,7 +96,7 @@ export function DashboardTab({ kind }: { kind: Kind }) {
               <th className="px-2 py-1 text-left">Job</th><th className="px-2 py-1 text-left">Style</th><th className="px-2 py-1 text-right">Good</th>
               <th className="px-2 py-1 text-right">Standard</th><th className="px-2 py-1 text-right">Actual</th><th className="px-2 py-1 text-right">Variance</th><th className="px-2 py-1 text-right">₹ / pc</th>
             </tr></thead><tbody>{d.data.high_variance_jobs.map((r: any) => (
-              <tr key={r.job_id} className="border-t border-slate-100"><td className="px-2 py-1 font-mono">{r.job_no}</td><td className="px-2 py-1">{r.style_code ?? '—'}</td>
+              <tr key={r.job_id} className="border-t border-slate-100"><td className="px-2 py-1 tabular-nums">{r.job_no}</td><td className="px-2 py-1">{r.style_code ?? '—'}</td>
                 <td className="px-2 py-1 text-right">{qty(r.good, 0)}</td><td className="px-2 py-1 text-right">{money(r.std_total)}</td><td className="px-2 py-1 text-right">{money(r.total)}</td>
                 <td className="px-2 py-1 text-right font-semibold">{pctTxt(r.variance_pct)}</td><td className="px-2 py-1 text-right">{money(r.cost_per_good)}</td></tr>
             ))}</tbody></table>

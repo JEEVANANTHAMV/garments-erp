@@ -60,8 +60,8 @@ function InwardList({ onOpen, onNew }: { onOpen: (id: number) => void; onNew: ()
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(r.id)}>
-                  <td className="px-3 py-2 font-mono font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
-                  <td className="px-3 py-2">{fmtDate(r.inward_date)}</td><td className="px-3 py-2"><YpStatus value={r.status} /></td><td className="px-3 py-2 font-mono">{r.ypo_no}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{r.inward_no}{r.is_reprocess ? <span className="ml-1 rounded bg-purple-100 px-1 text-[10px] text-purple-800">Reprocess</span> : null}</td>
+                  <td className="px-3 py-2">{fmtDate(r.inward_date)}</td><td className="px-3 py-2"><YpStatus value={r.status} /></td><td className="px-3 py-2 tabular-nums">{r.ypo_no}</td>
                   <td className="px-3 py-2">{r.process_name || r.process_code}</td><td className="px-3 py-2">{r.vendor_name}</td><td className="px-3 py-2">{r.jobs || '—'}</td>
                   <td className="px-3 py-2 text-right">{r.cone_count}</td><td className="px-3 py-2 text-right text-emerald-700">{kg(r.good_kg)}</td><td className="px-3 py-2 text-right text-red-700">{kg(r.reject_kg)}</td>
                   <td className="px-3 py-2 text-right text-amber-700">{kg(r.loss_kg)}</td><td className="px-3 py-2">{r.challan_no || '—'}</td>
@@ -229,7 +229,7 @@ function InwardEditor({ editId, ypoId: ypoParam, onBack, onDone, onPickDc }: { e
                                   </div>
                                 ))}
                               </div>
-                            ) : (first ? <span className="font-mono">{l?.lot_no}{l?.cone_no ? ` / ${l.cone_no}` : ''}<span className="ml-1 font-sans text-slate-400">{l?.yarn_name}</span></span> : <span className="text-slate-400">↳ more cones</span>)}</td>
+                            ) : (first ? <span className="tabular-nums">{l?.lot_no}{l?.cone_no ? ` / ${l.cone_no}` : ''}<span className="ml-1 font-sans text-slate-400">{l?.yarn_name}</span></span> : <span className="text-slate-400">↳ more cones</span>)}</td>
                             <td className="px-2 py-1 text-right tabular-nums">{many ? kg(outIn(o)) : first ? kg(l?.balance_kg) : ''}</td>
                             <td className="px-1 py-1"><input className={`${inp} w-24`} value={o.output_cone_no} onChange={(e) => set(o.key, { output_cone_no: e.target.value })} /></td>
                             <td className="px-1 py-1"><input className={`${inp} w-28`} value={o.output_lot_no} onChange={(e) => set(o.key, { output_lot_no: e.target.value })} /></td>
@@ -302,8 +302,8 @@ function InwardView({ id, onBack, onEdit }: { id: number; onBack: () => void; on
         <table className="w-full text-xs">
           <thead className="bg-slate-50 text-slate-500"><tr>{['Job', 'Input cone(s) (KG)', 'Output cone', 'Output lot', 'Yarn', ...(isDyeing(g.process_code) ? ['Yarn colour', 'Dye colour'] : ['Shade']), 'Ply', 'Cones', 'Input KG', 'Good KG', 'Reject KG', 'Loss KG', 'Reject reason'].map((h) => <th key={h} className={`px-2 py-2 ${/KG|Cones|Ply/.test(h) && !/cone\(s\)/.test(h) ? 'text-right' : 'text-left'}`}>{h}</th>)}</tr></thead>
           <tbody>{g.outputs.map((o: any) => (
-            <tr key={o.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{o.inputs}</td><td className="px-2 py-1 font-mono">{o.output_cone_no || '—'}</td>
-              <td className="px-2 py-1 font-mono">{o.output_lot_no}</td><td className="px-2 py-1">{o.yarn_name}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td><td className="px-2 py-1 text-right">{o.ply || '—'}</td><td className="px-2 py-1 text-right">{o.no_of_cones || '—'}</td>
+            <tr key={o.id} className="border-t border-slate-100"><td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{o.inputs}</td><td className="px-2 py-1 tabular-nums">{o.output_cone_no || '—'}</td>
+              <td className="px-2 py-1 tabular-nums">{o.output_lot_no}</td><td className="px-2 py-1">{o.yarn_name}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td><td className="px-2 py-1 text-right">{o.ply || '—'}</td><td className="px-2 py-1 text-right">{o.no_of_cones || '—'}</td>
               <td className="px-2 py-1 text-right">{kg(o.input_kg)}</td><td className="px-2 py-1 text-right text-emerald-700">{kg(o.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(o.reject_kg)}</td>
               <td className="px-2 py-1 text-right text-amber-700">{kg(o.loss_kg)}</td><td className="px-2 py-1">{o.reject_reason || '—'}</td></tr>
           ))}</tbody>
@@ -363,8 +363,8 @@ function DraftView({ g, onBack, onEdit }: { g: any; onBack: () => void; onEdit: 
               const k = o.line_index as number; const good = n(o.good_kg) > 0; const f = fails(k);
               return (
                 <tr key={k} className={`border-t border-slate-100 ${f ? 'bg-red-50/60' : ''}`}>
-                  <td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 font-mono">{o.input_text}</td><td className="px-2 py-1 font-mono">{o.output_cone_no || '—'}</td>
-                  <td className="px-2 py-1 font-mono">{o.output_lot_no || <span className="text-slate-400">auto</span>}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td>
+                  <td className="px-2 py-1 font-semibold">{o.io_no || 'STOCK'}</td><td className="px-2 py-1 tabular-nums">{o.input_text}</td><td className="px-2 py-1 tabular-nums">{o.output_cone_no || '—'}</td>
+                  <td className="px-2 py-1 tabular-nums">{o.output_lot_no || <span className="text-slate-400">auto</span>}</td>{isDyeing(g.process_code) && <td className="px-2 py-1">{o.input_shade || '—'}</td>}<td className="px-2 py-1">{o.shade || '—'}</td>
                   <td className="px-2 py-1 text-right text-emerald-700">{kg(o.good_kg)}</td><td className="px-2 py-1 text-right text-red-700">{kg(o.reject_kg)}</td><td className="px-2 py-1 text-right text-amber-700">{kg(o.loss_kg)}</td>
                   {params.map((p) => {
                     const raw = vals[k]?.[String(p.id)]; const rs = result(p, raw);

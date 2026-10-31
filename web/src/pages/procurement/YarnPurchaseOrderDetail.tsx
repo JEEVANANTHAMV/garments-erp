@@ -932,7 +932,7 @@ export default function YarnPurchaseOrderDetailPage() {
           </div>
           <textarea
             rows={4}
-            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            className="input w-full tabular-nums text-xs leading-relaxed resize-y"
             value={header.billing_address}
             onChange={(e) => setHeader({ ...header, billing_address: e.target.value })}
             placeholder="Enter company billing address with GSTIN..."
@@ -970,7 +970,7 @@ export default function YarnPurchaseOrderDetailPage() {
           </div>
           <textarea
             rows={3}
-            className="input w-full font-mono text-xs leading-relaxed resize-y"
+            className="input w-full tabular-nums text-xs leading-relaxed resize-y"
             value={header.shipping_address}
             onChange={(e) => setHeader({ ...header, shipping_address: e.target.value })}
             placeholder="Enter destination delivery address (Knitting unit, dyeing plant, or company warehouse)..."
@@ -1041,7 +1041,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 return (
                   <tr key={l._key || idx} className="hover:bg-slate-50/70 transition">
                     {/* # S NO */}
-                    <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                    <td className="py-2.5 px-2 text-center text-slate-400 tabular-nums text-[11px]">{idx + 1}</td>
 
                     {/* I/O Num (Sales Order / Job) */}
                     <td className="py-2.5 px-2 min-w-[130px]">
@@ -1189,7 +1189,7 @@ export default function YarnPurchaseOrderDetailPage() {
                           const c: any = (yarnCounts.data || []).find((x: any) => String(x.id) === cnt);
                           updateLine(idx, { yarn_count_str: c ? String(c.count_value) : '' });
                         }}
-                        className="w-20 text-xs font-mono font-medium border border-slate-300 rounded px-1 py-1"
+                        className="w-20 text-xs tabular-nums font-medium border border-slate-300 rounded px-1 py-1"
                         title="The count is part of the yarn item: changing it switches to that base's item for the count"
                       >
                         <option value="">{l.yarn_count_str || '—'}</option>
@@ -1214,7 +1214,7 @@ export default function YarnPurchaseOrderDetailPage() {
                         type="text"
                         value={l.hsn_code}
                         onChange={(e) => updateLine(idx, { hsn_code: e.target.value })}
-                        className="w-14 text-xs font-mono border border-slate-300 rounded px-1 py-1"
+                        className="w-14 text-xs tabular-nums border border-slate-300 rounded px-1 py-1"
                         placeholder="5205"
                       />
                     </td>
@@ -1405,7 +1405,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 step="10"
                 value={header.freight_charges}
                 onChange={(e) => setHeader((h) => ({ ...h, freight_charges: parseFloat(e.target.value) || 0 }))}
-                className="input py-1.5 text-xs text-right font-mono"
+                className="input py-1.5 text-xs text-right tabular-nums"
                 placeholder="0.00"
               />
             </div>
@@ -1417,7 +1417,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 step="10"
                 value={header.other_charges}
                 onChange={(e) => setHeader((h) => ({ ...h, other_charges: parseFloat(e.target.value) || 0 }))}
-                className="input py-1.5 text-xs text-right font-mono"
+                className="input py-1.5 text-xs text-right tabular-nums"
                 placeholder="0.00"
               />
             </div>
@@ -1429,7 +1429,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 step="0.01"
                 value={header.round_off}
                 onChange={(e) => setHeader((h) => ({ ...h, round_off: parseFloat(e.target.value) || 0 }))}
-                className="input py-1.5 text-xs text-right font-mono"
+                className="input py-1.5 text-xs text-right tabular-nums"
                 placeholder="0.00"
               />
             </div>
@@ -1446,7 +1446,7 @@ export default function YarnPurchaseOrderDetailPage() {
                   <span>TCS Applicable</span>
                 </label>
                 {header.tcs_applicable && (
-                  <span className="text-[11px] font-bold font-mono text-amber-800">
+                  <span className="text-[11px] font-bold tabular-nums text-amber-800">
                     + ₹{fmtDecimal(totals.tcsAmt)}
                   </span>
                 )}
@@ -1466,7 +1466,7 @@ export default function YarnPurchaseOrderDetailPage() {
                     step="0.01"
                     value={header.tcs_rate}
                     onChange={(e) => setHeader((h) => ({ ...h, tcs_rate: parseFloat(e.target.value) || 0 }))}
-                    className="input py-0.5 px-1.5 text-[10px] text-right font-mono w-16"
+                    className="input py-0.5 px-1.5 text-[10px] text-right tabular-nums w-16"
                     placeholder="0.10"
                   />
                   <span className="text-slate-500">%</span>
@@ -1476,7 +1476,7 @@ export default function YarnPurchaseOrderDetailPage() {
 
             <div className="flex flex-col items-end justify-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
               <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider block">Net Payable Amount ({currCode})</span>
-              <span className="text-xl font-black text-brand-900 font-mono">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
+              <span className="text-xl font-black text-brand-900 tabular-nums">{currSymbol}{fmtDecimal(totals.grandTotal)}</span>
               {isForeignCurrency && (
                 <span className="text-xs font-bold text-amber-900 mt-0.5">
                   INR Converted: ₹{fmtDecimal(totals.grandTotal * Number(header.exchange_rate), 2)}
@@ -1549,7 +1549,7 @@ export default function YarnPurchaseOrderDetailPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-900 font-mono">{q.quotation_no}</span>
+                          <span className="font-bold text-slate-900 tabular-nums">{q.quotation_no}</span>
                           <span className="font-bold text-slate-900">₹{fmtDecimal(q.total_amount || 0)}</span>
                         </div>
                         <div className="text-[11px] text-slate-500 flex items-center justify-between mt-0.5">

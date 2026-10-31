@@ -44,7 +44,7 @@ export default function DocumentInwardPage() {
   const list = useQuery({ queryKey: ['stores', 'doc-inward', qs.toString()], queryFn: async () => http.get<{ data: any[]; pagination: any }>(`/stores/document-inward?${qs}`) });
   const rows = (list.data?.data ?? []).filter((r) => !get('unresolved') || r.completeness !== 'COMPLETE');
   const cols: Col[] = [
-    { key: 'inward_no', label: 'Inward no', render: (r) => <span className="font-mono font-semibold text-brand-700">{r.inward_no}</span> },
+    { key: 'inward_no', label: 'Inward no', render: (r) => <span className="tabular-nums font-semibold text-brand-700">{r.inward_no}</span> },
     { key: 'received_at', label: 'Received', render: (r) => `${fmtDate(r.receipt_date)}` }, { key: 'doc_type', label: 'Type', render: (r) => labelOf(DOC_TYPE_OPTIONS, r.doc_type) },
     { key: 'channel', label: 'Channel', render: (r) => labelOf(CHANNEL_OPTIONS, r.channel) }, { key: 'party_name', label: 'Party', render: (r) => r.party_name ?? r.sender_name ?? <span className="text-amber-600">unknown</span> },
     { key: 'doc_no', label: 'Doc no' }, { key: 'doc_date', label: 'Doc date', kind: 'date' }, { key: 'amount', label: 'Amount', kind: 'money' },
@@ -174,14 +174,14 @@ function InwardView({ id, onClose }: { id: number; onClose: () => void }) {
         <div className="mb-1 text-[13px] font-semibold">Bills</div>
         {doc.bills.length ? <table className="mb-3 w-full text-xs"><tbody>{doc.bills.map((b: any) => (
           <tr key={b.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => navigate(`/stores/bill-tracker/${b.id}`)}>
-            <td className="py-1.5 font-mono text-brand-700">{b.entry_no}</td><td>{b.party_name}</td><td>{b.bill_no}</td><td className="text-right">₹{fmtDecimal(b.amount, 2)}</td><td><StatusBadge value={b.workflow_status} /></td></tr>))}</tbody></table>
+            <td className="py-1.5 tabular-nums text-brand-700">{b.entry_no}</td><td>{b.party_name}</td><td>{b.bill_no}</td><td className="text-right">₹{fmtDecimal(b.amount, 2)}</td><td><StatusBadge value={b.workflow_status} /></td></tr>))}</tbody></table>
           : <div className="mb-3 text-[12.5px] text-slate-400">{['DC', 'PROCESS_CHALLAN', 'GRN_COPY'].includes(doc.doc_type) ? 'Bill not received yet (a DC never creates a bill or a GRN)' : 'Not registered as a bill yet'}</div>}
         <div className="mb-1 text-[13px] font-semibold">Linked documents</div>
         <table className="mb-3 w-full text-xs"><tbody>
           {doc.links.map((l: any) => (
-            <tr key={l.id} className={`border-t border-slate-100 ${l.removed_at ? 'text-slate-400 line-through' : ''}`}><td className="py-1.5">{l.type_label}</td><td className="font-mono">{l.target_no}</td><td>{l.note}</td><td>{l.linked_by_name}</td>
+            <tr key={l.id} className={`border-t border-slate-100 ${l.removed_at ? 'text-slate-400 line-through' : ''}`}><td className="py-1.5">{l.type_label}</td><td className="tabular-nums">{l.target_no}</td><td>{l.note}</td><td>{l.linked_by_name}</td>
               <td className="text-right">{!l.removed_at && edit && active && <button className="text-red-600 hover:underline" onClick={() => { setSel(l); setDlg('unlink'); }}>Unlink</button>}</td></tr>))}
-          {doc.linked_from.map((l: any) => <tr key={`f${l.id}`} className="border-t border-slate-100"><td className="py-1.5">Linked from</td><td className="font-mono">{l.source_no}</td><td>{labelOf(DOC_TYPE_OPTIONS, l.source_type)}</td><td /><td /></tr>)}
+          {doc.linked_from.map((l: any) => <tr key={`f${l.id}`} className="border-t border-slate-100"><td className="py-1.5">Linked from</td><td className="tabular-nums">{l.source_no}</td><td>{labelOf(DOC_TYPE_OPTIONS, l.source_type)}</td><td /><td /></tr>)}
           {!doc.links.length && !doc.linked_from.length && <tr><td className="py-2 text-slate-400">None</td></tr>}
         </tbody></table>
         <div className="mb-1 flex items-center justify-between"><div className="text-[13px] font-semibold">Files</div>

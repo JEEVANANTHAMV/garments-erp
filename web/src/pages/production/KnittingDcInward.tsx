@@ -134,7 +134,7 @@ export function KnittingReconciliation({ programId, compact = false }: { program
             <tbody>
               {data.dcs.map((d: any) => (
                 <tr key={d.dc_no} className="border-t border-slate-100">
-                  <td className="td font-mono font-semibold text-brand-700">{d.dc_no}</td>
+                  <td className="td tabular-nums font-semibold text-brand-700">{d.dc_no}</td>
                   <td className="td text-slate-500">{fmtDate(d.dc_date)}</td>
                   <td className="td text-right tabular-nums">{fmtDecimal(d.issued_kg, 3)}</td>
                   <td className="td text-right tabular-nums">{d.cones}</td>
@@ -617,7 +617,7 @@ export function KnittingInwardModal({ programId, open, onClose }: {
                 return (
                   <label key={d.dc_no} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11.5px] ${closed ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : on ? 'border-brand-400 bg-brand-50' : 'border-slate-200'}`}>
                     <input type="checkbox" disabled={closed} checked={on} onChange={() => toggleDc(d.dc_no)} id={`kin-dc-${d.dc_no}`} />
-                    <span className="font-mono font-semibold">{d.dc_no}</span><span>{fmtDate(d.dc_date)}</span>
+                    <span className="tabular-nums font-semibold">{d.dc_no}</span><span>{fmtDate(d.dc_date)}</span>
                     <span>given {fmtDecimal(d.issued_kg, 3)} · bal <b>{fmtDecimal(d.balance_kg, 3)}</b> kg</span>
                     <span className={`rounded px-1 text-[10px] font-bold ${closed ? 'bg-slate-200' : d.status === 'PARTIALLY_RECEIVED' ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'}`}>{closed ? 'CLOSED' : d.status === 'PARTIALLY_RECEIVED' ? 'PART RECEIVED' : 'OPEN'}</span>
                   </label>
@@ -896,7 +896,7 @@ export function KnittingYarnReturnModal({ dcNo, onClose, onPrint }: {
                     <tr key={l.key} className="border-t border-slate-100">
                       <td className="td font-medium">{l.yarn}</td>
                       <td className="td">{showRawColour(l.colour)}</td>
-                      <td className="td font-mono">{l.lot_no || '—'}</td>
+                      <td className="td tabular-nums">{l.lot_no || '—'}</td>
                       <td className="td text-right tabular-nums">{fmtDecimal(l.issued_kg, 3)}</td>
                       <td className="td text-right tabular-nums">{fmtDecimal(l.consumed_kg, 3)}</td>
                       <td className="td text-right tabular-nums">{fmtDecimal(l.returned_kg, 3)}</td>
@@ -1135,7 +1135,7 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
               <tbody>
                 {dcs.map((d: any) => (
                   <tr key={d.dc_no} className="border-t border-slate-100">
-                    <td className="td font-mono font-semibold text-brand-700">{d.dc_no}</td>
+                    <td className="td tabular-nums font-semibold text-brand-700">{d.dc_no}</td>
                     <td className="td text-slate-500">{fmtDate(d.dc_date)}</td>
                     <td className="td">{d.vendor_name ?? '—'}</td>
                     <td className="td">{d.vehicle_no ?? '—'}</td>
@@ -1199,12 +1199,12 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
               <tbody>
                 {inwards.map((r: any) => (
                   <tr key={r.id} className="border-t border-slate-100 align-top">
-                    <td className="td font-mono font-semibold text-brand-700">{r.receipt_no}</td>
+                    <td className="td tabular-nums font-semibold text-brand-700">{r.receipt_no}</td>
                     <td className="td text-slate-500">{fmtDate(r.receipt_date)}</td>
-                    <td className="td font-mono">{r.dc_nos || r.ref_dc_no || '—'}
+                    <td className="td tabular-nums">{r.dc_nos || r.ref_dc_no || '—'}
                       <span className={`ml-1 rounded px-1 text-[10px] font-bold ${r.receipt_type === 'FINAL' ? 'bg-emerald-100 text-emerald-800' : r.receipt_type === 'ADJUST' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-800'}`}>{r.receipt_type === 'FINAL' ? 'FINAL' : r.receipt_type === 'ADJUST' ? 'WRITE-OFF' : 'PARTIAL'}</span>
                       {r.gate_entry_no ? <span className="block text-[10px] text-slate-400">Gate {r.gate_entry_no}</span> : null}</td>
-                    <td className="td font-mono">{r.party_dc_no ?? '—'}</td>
+                    <td className="td tabular-nums">{r.party_dc_no ?? '—'}</td>
                     <td className="td">{r.output_lot_no}</td>
                     <td className="td text-right">{r.no_of_rolls}</td>
                     <td className="td text-right tabular-nums font-semibold text-emerald-700">{fmtDecimal(r.output_qty, 3)}</td>
@@ -1236,10 +1236,10 @@ export function KnittingDcInwardTab({ prog }: { prog: any }) {
               <tbody>
                 {yarnReturns.map((r: any) => (
                   <tr key={r.id} className={`border-t border-slate-100 align-top ${r.status === 'CANCELLED' ? 'opacity-50 line-through' : ''}`}>
-                    <td className="td font-mono font-semibold text-brand-700">{r.return_no}{r.status === 'CANCELLED' && <span className="ml-1 text-[10px] text-red-600 no-underline">cancelled</span>}</td>
+                    <td className="td tabular-nums font-semibold text-brand-700">{r.return_no}{r.status === 'CANCELLED' && <span className="ml-1 text-[10px] text-red-600 no-underline">cancelled</span>}</td>
                     <td className="td text-slate-500">{fmtDate(r.return_date)}</td>
-                    <td className="td font-mono">{r.dc_no}</td>
-                    <td className="td font-mono">{r.party_dc_no ?? '—'}</td>
+                    <td className="td tabular-nums">{r.dc_no}</td>
+                    <td className="td tabular-nums">{r.party_dc_no ?? '—'}</td>
                     <td className="td">{r.warehouse_name ?? '—'}</td>
                     <td className="td text-[11px] text-slate-600">
                       {(r.lines ?? []).map((l: any) =>

@@ -72,7 +72,7 @@ export default function TnaDashboardPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Orders</span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-3xl font-bold text-slate-900 font-mono">{d.total_orders}</span>
+            <span className="text-3xl font-bold text-slate-900 tabular-nums">{d.total_orders}</span>
             <span className="text-xs text-slate-500 font-medium">In Production</span>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default function TnaDashboardPage() {
             <CheckCircle2 size={13} /> On Track
           </span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-3xl font-bold text-emerald-700 font-mono">{d.on_track}</span>
+            <span className="text-3xl font-bold text-emerald-700 tabular-nums">{d.on_track}</span>
             <span className="text-xs font-semibold text-emerald-600">
               {d.total_orders > 0 ? ((d.on_track / d.total_orders) * 100).toFixed(0) : 0}% of Total
             </span>
@@ -94,7 +94,7 @@ export default function TnaDashboardPage() {
             <Clock size={13} /> At Risk
           </span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-3xl font-bold text-amber-700 font-mono">{d.at_risk}</span>
+            <span className="text-3xl font-bold text-amber-700 tabular-nums">{d.at_risk}</span>
             <span className="text-xs font-semibold text-amber-600">Approaching Due</span>
           </div>
         </div>
@@ -104,7 +104,7 @@ export default function TnaDashboardPage() {
             <AlertTriangle size={13} /> Critical Orders
           </span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-3xl font-bold text-rose-700 font-mono">{d.critical}</span>
+            <span className="text-3xl font-bold text-rose-700 tabular-nums">{d.critical}</span>
             <span className="text-xs font-semibold text-rose-600">Delayed Mandatories</span>
           </div>
         </div>
@@ -114,7 +114,7 @@ export default function TnaDashboardPage() {
             <TrendingUp size={13} /> Avg Completion
           </span>
           <div className="flex items-baseline justify-between mt-2">
-            <span className="text-3xl font-bold text-indigo-700 font-mono">{d.avg_completion}%</span>
+            <span className="text-3xl font-bold text-indigo-700 tabular-nums">{d.avg_completion}%</span>
             <span className="text-xs font-semibold text-indigo-600">Overall Progress</span>
           </div>
         </div>
@@ -133,7 +133,7 @@ export default function TnaDashboardPage() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500">Fabric Delays</p>
-              <p className="text-xl font-bold text-slate-900 font-mono">{d.fabric_delays}</p>
+              <p className="text-xl font-bold text-slate-900 tabular-nums">{d.fabric_delays}</p>
             </div>
           </div>
 
@@ -143,7 +143,7 @@ export default function TnaDashboardPage() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500">Trim Delays</p>
-              <p className="text-xl font-bold text-slate-900 font-mono">{d.trim_delays}</p>
+              <p className="text-xl font-bold text-slate-900 tabular-nums">{d.trim_delays}</p>
             </div>
           </div>
 
@@ -153,7 +153,7 @@ export default function TnaDashboardPage() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500">Sample Approval Delays</p>
-              <p className="text-xl font-bold text-slate-900 font-mono">{d.sample_delays}</p>
+              <p className="text-xl font-bold text-slate-900 tabular-nums">{d.sample_delays}</p>
             </div>
           </div>
 
@@ -163,7 +163,7 @@ export default function TnaDashboardPage() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500">Production Delays</p>
-              <p className="text-xl font-bold text-slate-900 font-mono">{d.production_delays}</p>
+              <p className="text-xl font-bold text-slate-900 tabular-nums">{d.production_delays}</p>
             </div>
           </div>
 
@@ -173,7 +173,7 @@ export default function TnaDashboardPage() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500">Shipment At Risk</p>
-              <p className="text-xl font-bold text-rose-600 font-mono">{d.shipment_risk_orders}</p>
+              <p className="text-xl font-bold text-rose-600 tabular-nums">{d.shipment_risk_orders}</p>
             </div>
           </div>
         </div>
@@ -223,17 +223,17 @@ export default function TnaDashboardPage() {
                     className="hover:bg-slate-50 transition-colors cursor-pointer"
                     onClick={() => nav(`/tna/${row.id}`)}
                   >
-                    <td className="py-3 px-3 font-mono font-bold text-brand-700">{row.tna_no}</td>
+                    <td className="py-3 px-3 tabular-nums font-bold text-brand-700">{row.tna_no}</td>
                     <td className="py-3 px-3 font-semibold text-slate-900">{row.buyer_name}</td>
                     <td className="py-3 px-3">
-                      <div className="font-mono font-medium">{row.style_code}</div>
+                      <div className="tabular-nums font-medium">{row.style_code}</div>
                       <div className="text-[11px] text-slate-500">{row.style_name}</div>
                     </td>
-                    <td className="py-3 px-3 font-mono text-slate-600">
+                    <td className="py-3 px-3 tabular-nums text-slate-600">
                       <div>{row.so_no}</div>
                       <div className="text-[11px] text-slate-400">IO: {row.io_no || '—'}</div>
                     </td>
-                    <td className="py-3 px-3 text-right font-mono font-medium">
+                    <td className="py-3 px-3 text-right tabular-nums font-medium">
                       {fmtNumber(row.order_qty)}
                     </td>
                     <td className="py-3 px-3 font-bold text-rose-600">

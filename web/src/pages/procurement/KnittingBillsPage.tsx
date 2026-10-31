@@ -45,7 +45,7 @@ function KnittingBillList({ onOpen }: { onOpen: (v: 'new' | number) => void }) {
             <tbody>
               {(list.data ?? []).map((b) => (
                 <tr key={b.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => onOpen(Number(b.id))}>
-                  <td className="px-3 py-2 font-mono font-semibold text-brand-700">{b.bill_no}</td><td className="px-3 py-2">{fmtDate(b.bill_date)}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold text-brand-700">{b.bill_no}</td><td className="px-3 py-2">{fmtDate(b.bill_date)}</td>
                   <td className="px-3 py-2">{b.vendor_name}</td><td className="px-3 py-2">{b.party_bill_no || '—'}</td>
                   <td className="px-3 py-2 text-right">{b.line_count}</td><td className="px-3 py-2 text-right">{fmtDecimal(b.fabric_kg, 3)}</td>
                   <td className="px-3 py-2 text-right">{money(b.gross_amount)}</td><td className="px-3 py-2 text-right">{money(b.gst_amount)}</td>
@@ -122,9 +122,9 @@ function KnittingBillEditor({ onBack, onDone }: { onBack: () => void; onDone: (i
                   const diff = r.quotation_rate != null && Math.abs(n(r.quotation_rate) - n(sel[r.receipt_id])) > 0.005;
                   return (
                     <tr key={r.receipt_id} className="border-t border-slate-100">
-                      <td className="px-2 py-1 font-mono">{r.receipt_no}{r.grn_no && <span className="block text-[10px] text-slate-400">{r.grn_no}</span>}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
+                      <td className="px-2 py-1 tabular-nums">{r.receipt_no}{r.grn_no && <span className="block text-[10px] text-slate-400">{r.grn_no}</span>}</td><td className="px-2 py-1">{fmtDate(r.receipt_date)}</td>
                       <td className="px-2 py-1">{r.program_no}</td><td className="px-2 py-1">{r.io_no || '—'}</td><td className="px-2 py-1">{[r.fabric_type, r.fabric_colour ? `Kora / Raw for ${r.fabric_colour}` : ''].filter(Boolean).join(' · ') || '—'}</td>
-                      <td className="px-2 py-1 font-mono">{r.dc_nos || '—'}</td><td className="px-2 py-1">{r.party_dc_no || '—'}</td><td className="px-2 py-1">{r.gate_entry_no ? `${r.gate_entry_no}${r.vehicle_no ? ` · ${r.vehicle_no}` : ''}` : '—'}</td>
+                      <td className="px-2 py-1 tabular-nums">{r.dc_nos || '—'}</td><td className="px-2 py-1">{r.party_dc_no || '—'}</td><td className="px-2 py-1">{r.gate_entry_no ? `${r.gate_entry_no}${r.vehicle_no ? ` · ${r.vehicle_no}` : ''}` : '—'}</td>
                       <td className="px-2 py-1">{r.receipt_type === 'FINAL' ? 'Final' : 'Partial'}</td><td className="px-2 py-1 text-right">{r.rolls || '—'}</td>
                       <td className="px-2 py-1 text-right font-semibold">{fmtDecimal(r.fabric_kg, 3)}</td><td className="px-2 py-1 text-right">{fmtDecimal(r.reject_kg, 3)}</td><td className="px-2 py-1 text-right">{fmtDecimal(r.loss_kg, 3)}</td>
                       <td className="px-2 py-1">{r.quotation_no ? `${r.quotation_no} · ${money(r.quotation_rate)}` : <span className="text-amber-700">no quotation</span>}</td>
@@ -181,8 +181,8 @@ function KnittingBillView({ id, onBack }: { id: number; onBack: () => void }) {
           <thead className="bg-slate-50 text-slate-500"><tr>{['GRN', 'Date', 'Program', 'Job', 'DC(s)', 'Fabric KG', 'Quotation rate', 'Rate', 'Amount'].map((x) => <th key={x} className={`px-2 py-2 ${/KG|rate|Rate|Amount/.test(x) ? 'text-right' : 'text-left'}`}>{x}</th>)}</tr></thead>
           <tbody>{(b.lines ?? []).map((l: any) => (
             <tr key={l.id} className="border-t border-slate-100">
-              <td className="px-2 py-1 font-mono">{l.receipt_no}</td><td className="px-2 py-1">{fmtDate(l.receipt_date)}</td><td className="px-2 py-1">{l.program_no}</td><td className="px-2 py-1">{l.io_no || '—'}</td>
-              <td className="px-2 py-1 font-mono">{l.dc_nos || '—'}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.fabric_kg, 3)}</td>
+              <td className="px-2 py-1 tabular-nums">{l.receipt_no}</td><td className="px-2 py-1">{fmtDate(l.receipt_date)}</td><td className="px-2 py-1">{l.program_no}</td><td className="px-2 py-1">{l.io_no || '—'}</td>
+              <td className="px-2 py-1 tabular-nums">{l.dc_nos || '—'}</td><td className="px-2 py-1 text-right">{fmtDecimal(l.fabric_kg, 3)}</td>
               <td className="px-2 py-1 text-right">{l.quotation_rate != null ? money(l.quotation_rate) : '—'}</td>
               <td className={`px-2 py-1 text-right ${l.quotation_rate != null && Math.abs(n(l.quotation_rate) - n(l.rate)) > 0.005 ? 'font-semibold text-amber-700' : ''}`}>{money(l.rate)}</td>
               <td className="px-2 py-1 text-right font-semibold">{money(l.amount)}</td>
