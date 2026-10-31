@@ -40,3 +40,16 @@ Queries use existing auth/company context and independently expose loading, empt
 Aggregation tests cover India date rollover, month/year/leap boundaries, stage/style totals, empty data, and separate inventory units. Contrast checks cover navigation, primary controls and small status labels.
 
 BrowserOS tools were unavailable in this session. A signed-in visual comparison at 1536 × 1024, tablet/mobile widths, and representative entry grids remains pending; live API/CRUD and keyboard interaction tests were not run. Existing Vite configuration and large-bundle warnings also occur on the baseline build.
+
+## Follow-up 31-Oct-2026 (reference image gaps)
+
+- **Sidebar:** flat reference groups (`NAV_GROUPS` in `web/src/lib/nav.ts`: MASTER, SALES & PLANNING, PROCUREMENT, PRODUCTION, INVENTORY, SHIPMENT & EXPORT, FINANCE & REPORTS, ADMINISTRATION). Each workflow step is an expandable menu item with icon and chevron; the numbered step labels still drive the step bar. "Recent" removed; favourites kept.
+- **Collapsed sidebar:** 64 px icon rail; hover / focus / click an icon opens a flyout with the step's screens. Collapsed state is remembered per browser.
+- **Header:** "Search anything" calls `GET /api/search?q=` (`server/src/modules/search/search.routes.ts`): sales orders, jobs, styles, POs (yarn / fabric / general / trim), general purchases, GRNs, fabrics, yarns, parties, quotations, samples, packing lists, dispatches and commercial invoices — company-scoped and permission-filtered — plus matching screens. Records without a detail page open their list pre-filtered via `?q=`. Message icon = the user's notifications (mark read / all read); bell = live alerts; app launcher = grid of every module the user can open. The A− / A / A+ control moves into the user menu below 1280 px.
+- **Dashboard:**
+  - Production charts read `GET /api/dashboard/output`: cutting, sewing (bundle + confirmed line output), finishing (finishing + confirmed checking output) and packing (polybagged pieces). The old source, `trx_daily_output`, belongs to a retired hidden screen.
+  - KPI trends compare month-to-date with the same days last month (today's output vs yesterday); no trend is shown when there is nothing to compare.
+  - The production jobs table shows the buyer.
+  - Gate panel counts visitors and contractors from the new Visitor / Contractor Register (`/gate/visitors`, table `trx_gate_visitor`, `db/148_gate_visitors.sql`, GATE_INWARD permissions).
+- **Colours:** screen greys mapped to theme tokens (`ink`, `ink-secondary`, `ink-muted`, `ink-disabled`, `surface-*`); `typography.test.mjs` guards them. Dark code / overlay shades and the four print layouts are unchanged.
+- **Not done:** MUI migration. The app stays on Tailwind; rewriting 150+ screens on a new framework would change nothing visible and risks regressions.
