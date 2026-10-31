@@ -63,7 +63,7 @@ export function GeneralPurchasesPage() {
             : "Inward Gate Entry pass linkage, QC verification, direct job allocation, and stock ledger posting"
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Mode Switcher Pills */}
             <div className="flex items-center rounded-lg bg-surface-header p-1 border border-surface-border text-xs">
               <button

@@ -212,7 +212,7 @@ export function FabricsPage() {
         title="Fabric Masters"
         subtitle="2-Tier Architecture: Base structures (Fibre, Weave, Finish, Cert) &amp; GSM/Width Inventory SKUs"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => nav('/masters/gsm')}
@@ -1018,7 +1018,7 @@ export function FabricDetailPage() {
         title={isNew ? 'New Fabric Base Master' : `${head.base_name || 'Fabric Base'} (${head.base_code})`}
         subtitle="2-Tier Parent Master: Base Construction, Finish, Certification &amp; Linked GSM Variants"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="btn-secondary" onClick={() => nav('/masters/fabrics')}>
               <ArrowLeft size={15} /> Back to List
             </button>

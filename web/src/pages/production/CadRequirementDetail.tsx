@@ -2050,7 +2050,7 @@ export default function CadRequirementDetailPage() {
                   {activeMarker.fabric_dia_type === 'TUBE' ? 'TUBE (2 LAYERS/PLY)' : 'OPEN (1 LAYER/PLY)'}
                 </Badge>
               </div>
-              <span className="text-xs text-ink-secondary tabular-nums">
+              <span className="text-xs text-ink-secondary tabular-nums [overflow-wrap:anywhere]">
                 {activeMarker.parts_in_lay || 'Body / Sleeve'}
               </span>
             </div>

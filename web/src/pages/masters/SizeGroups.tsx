@@ -587,7 +587,7 @@ export function SizeGroupDetailPage() {
         title={isNew ? 'New Size Group Scale' : `${head.group_name} (${head.group_code})`}
         subtitle="Ordered Size Scale Definition for Garment Styles, Cutting Ratios, and PO Breakdowns"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="btn-secondary" onClick={() => nav('/masters/size-groups')}>
               <ArrowLeft size={15} /> Back to List
             </button>

@@ -867,7 +867,7 @@ export default function QuotationDetailPage() {
         subtitle={isNew ? 'Create quotation with dynamic fields for Fabric, Yarn, Trims, General, Buyer & Import'
           : `Version ${head.version || 1} • ${head.quotation_date || ''}${(head as any).prepared_by_name ? ` • Prepared by ${(head as any).prepared_by_name}` : ''}${(head as any).approved_by_name ? ` • Approved by ${(head as any).approved_by_name}${(head as any).approved_at ? ` on ${String((head as any).approved_at).slice(0, 10)}` : ''}` : (head as any).status_code && (head as any).status_code !== 'ACCEPTED' ? ' • Not approved yet' : ''}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button className="btn-secondary" onClick={() => nav('/sales/quotations')}>
               <ArrowLeft size={15} /> Back
             </button>

@@ -111,7 +111,7 @@ export function YarnsPage() {
         title="Yarn Masters"
         subtitle="Yarn Base Master specifications &amp; Fibre compositions (Counts managed in Yarn Count Master)"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button className="btn-secondary" onClick={() => nav('/masters/yarn-counts')}>
               <SlidersHorizontal size={15} /> Yarn Counts Master
             </button>
