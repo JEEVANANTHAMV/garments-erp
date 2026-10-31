@@ -104,8 +104,15 @@
     min-inline-size: calc(11ch + 2rem);
     padding-inline: 0.5rem;
   }
+  /* Quantity fields typed as text (inputMode / right-aligned) get the same room, minus the spinner. */
+  input:is([inputmode="numeric"], [inputmode="decimal"], .text-right):not([type="number"]) {
+    font-variant-numeric: tabular-nums;
+    min-inline-size: calc(10ch + 1rem);
+    padding-inline: 0.5rem;
+    text-overflow: clip;
+  }
   /* Let editable grids scroll instead of squeezing quantities into narrow columns. */
-  td:has(input[type="number"]) { min-width: 8rem; }
+  td:has(input[type="number"], input[inputmode="numeric"], input[inputmode="decimal"], input.text-right) { min-width: 8rem; }
   td input[type="number"] { min-inline-size: calc(14ch + 2rem); }
   td.text-right, th.text-right { white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.text-right { overflow: visible; text-overflow: clip; max-width: none; }
