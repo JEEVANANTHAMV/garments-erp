@@ -116,6 +116,11 @@
   /* Let editable grids scroll instead of squeezing quantities into narrow columns. */
   td:has(input[type="number"], input[inputmode="numeric"], input[inputmode="decimal"], input.text-right) { min-width: 8rem; }
   td input[type="number"] { min-inline-size: calc(14ch + 2rem); }
+  /* Grid text cells (PO / style / CAD nos, units) grow with what is in them instead of hiding characters;
+     the table scrolls. Dropdowns in cells keep room for their value next to the chevron. */
+  td input:is([type="text"], :not([type])) { field-sizing: content; inline-size: auto; min-inline-size: 100%; }
+  td:has(> input:is([type="text"], :not([type])), > div > input:is([type="text"], :not([type]))) { min-width: 5rem; }
+  td select { min-inline-size: 5.5rem; }
   td.text-right, th.text-right { white-space: nowrap; font-variant-numeric: tabular-nums; }
   td.text-right { overflow: visible; text-overflow: clip; max-width: none; }
   .app-sidebar { background: theme('colors.surface.sidebar'); }

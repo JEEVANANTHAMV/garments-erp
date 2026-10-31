@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useMemo, useEffect, useRef, Fragment, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu, X, LogOut, ChevronDown, ChevronRight, Search, Bell, Building2, Star, ArrowLeft, ArrowRight, MessageSquare, LayoutGrid, FileText,
@@ -235,19 +235,6 @@ export default function AppLayout() {
       ? <Link key={key} to={to} aria-current={active ? 'page' : undefined} {...props}>{icon}</Link>
       : <button key={key} type="button" aria-expanded={flyout?.key === key} onClick={(e) => flyout?.key === key ? setFlyout(null) : openFly(key, e.currentTarget)} {...props}>{icon}</button>;
   };
-  const rail = (
-    <div className="flex h-full flex-col items-center border-r border-surface-border bg-surface-sidebar">
-      <Link to="/" className="flex h-[62px] w-full shrink-0 items-center justify-center border-b border-surface-border text-lg font-bold tracking-tight text-ink-heading" aria-label="C-ONE ERP home">C1</Link>
-      <nav aria-label="Main navigation" className="flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-2" id="side-rail">
-        {dashboardItems.map((i) => railButton('/', i.label, activeTo === '/', <i.icon size={18} />, '/'))}
-        {grouped.map(({ group, secs }) => (
-          <div key={group} className="flex w-full flex-col items-center gap-1 border-t border-surface-border pt-1">
-            {secs.map((sec) => { const Icon = sec.icon ?? Menu; return railButton(sec.label, sec.menu ?? sec.label, sec.label === currentSection, <Icon size={18} />); })}
-          </div>
-        ))}
-      </nav>
-    </div>
-  );
   const flyoutPanel = flyout && (
     <div role="menu" aria-label={flySection ? flySection.menu ?? flySection.label : 'Dashboard'} id="rail-flyout"
       onMouseEnter={() => window.clearTimeout(flyTimer.current)} onMouseLeave={closeFly}
@@ -266,6 +253,20 @@ export default function AppLayout() {
     </div>
   );
 
+  const rail = (
+    <div className="flex h-full flex-col items-center border-r border-surface-border bg-surface-sidebar">
+      <Link to="/" className="flex h-[62px] w-full shrink-0 items-center justify-center border-b border-surface-border text-lg font-bold tracking-tight text-ink-heading" aria-label="C-ONE ERP home">C1</Link>
+      <nav aria-label="Main navigation" className="flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-2" id="side-rail">
+        {dashboardItems.map((i) => <Fragment key="/">{railButton('/', i.label, activeTo === '/', <i.icon size={18} />, '/')}{flyout?.key === '/' && flyoutPanel}</Fragment>)}
+        {grouped.map(({ group, secs }) => (
+          <div key={group} className="flex w-full flex-col items-center gap-1 border-t border-surface-border pt-1">
+            {/* the flyout follows its icon in tab order, so Tab moves from the icon into its screens */}
+            {secs.map((sec) => { const Icon = sec.icon ?? Menu; return <Fragment key={sec.label}>{railButton(sec.label, sec.menu ?? sec.label, sec.label === currentSection, <Icon size={18} />)}{flyout?.key === sec.label && flyoutPanel}</Fragment>; })}
+          </div>
+        ))}
+      </nav>
+    </div>
+  );
   const sidebar = (
     <div className="flex h-full flex-col bg-surface-sidebar border-r border-surface-border text-ink">
       <div className="flex h-[62px] shrink-0 items-center border-b border-surface-border px-4">
@@ -333,7 +334,7 @@ export default function AppLayout() {
       {/* Desktop sidebar */}
       {desktopOpen
         ? <aside className="app-sidebar hidden w-56 shrink-0 lg:block">{sidebar}</aside>
-        : <aside className="app-sidebar hidden w-16 shrink-0 lg:block">{rail}{flyoutPanel}</aside>}
+        : <aside className="app-sidebar hidden w-16 shrink-0 lg:block">{rail}</aside>}
 
       {/* Mobile drawer */}
       {mobileOpen && (
