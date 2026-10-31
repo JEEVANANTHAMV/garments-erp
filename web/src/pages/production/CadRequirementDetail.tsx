@@ -2057,7 +2057,7 @@ export default function CadRequirementDetailPage() {
 
             <MarkerFilesPanel cadId={isNew ? null : Number(id)} markerRef={activeMarker.marker_ref} files={markerFiles} onFiles={setMarkerFiles} onApply={applyMarkerReport} />
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2.5 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-9 gap-2.5 text-xs">
               <div>
                 <label className="block text-caption font-semibold text-ink-secondary">Marker Ref</label>
                 <input
