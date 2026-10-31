@@ -81,6 +81,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'Inward Gate Entry',  to: '/gate/inwards', icon: Truck, perms: ['GATE_INWARD.VIEW'] },
       { label: 'Outward Gate Pass',  to: '/gate/outwards', icon: Shield, perms: ['GATE_OUTWARD.VIEW'] },
+      { label: 'Visitors & Contractors', to: '/gate/visitors', icon: Users, perms: ['GATE_INWARD.VIEW'] },
       { label: 'Stock on Hand',      to: '/inventory/stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Yarn Stock List',    to: '/procurement/yarn/stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Fabric Roll Stock',  to: '/procurement/fabric/roll-stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },

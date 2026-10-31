@@ -400,3 +400,61 @@ export function GateOutwardsPage() {
     </>
   );
 }
+
+const VISITOR_TYPES = [{ value: 'VISITOR', label: 'Visitor' }, { value: 'CONTRACTOR', label: 'Contractor' }];
+const VISITOR_STATUSES = [{ value: 'IN', label: 'In' }, { value: 'OUT', label: 'Out' }, { value: 'CANCELLED', label: 'Cancelled' }];
+
+/** People through the gate — visitors (buyer QA, auditors, guests) and contractors; counted on the dashboard. */
+export function GateVisitorsPage() {
+  return (
+    <CrudPage
+      path="gate-visitors"
+      title="Visitor / Contractor Register"
+      permission="GATE_INWARD"
+      singular="Visitor Entry"
+      subtitle="Visitors and contractors coming through the gate, with in and out time"
+      searchPlaceholder="Search entry no, name, company, phone or vehicle…"
+      defaultSort={{ key: 'visit_date', dir: 'desc' }}
+      columns={[
+        { key: 'entry_no', header: 'Entry No', sortable: true,
+          render: (r: any) => <span className="tabular-nums text-small font-bold text-brand-700">{r.entry_no}</span> },
+        { key: 'visit_date', header: 'Date & Time', sortable: true,
+          render: (r: any) => (
+            <div className="text-xs">
+              <span className="font-semibold text-ink">{fmtDate(r.visit_date)}</span>
+              <span className="ml-1 tabular-nums text-ink-secondary">{r.in_time ?? '—'}{r.out_time ? ` – ${r.out_time}` : ''}</span>
+            </div>
+          ) },
+        { key: 'visitor_type', header: 'Type', render: (r: any) => <Badge tone={r.visitor_type === 'CONTRACTOR' ? 'violet' : 'blue'}>{humanize(r.visitor_type)}</Badge> },
+        { key: 'person_name', header: 'Name',
+          render: (r: any) => <div><p className="font-medium">{r.person_name}{r.person_count > 1 ? ` +${r.person_count - 1}` : ''}</p><p className="text-caption text-ink-secondary">{r.organisation || r.party_name || ''}</p></div> },
+        { key: 'purpose', header: 'Purpose', render: (r: any) => r.purpose || '—' },
+        { key: 'whom_to_meet', header: 'Meeting', render: (r: any) => r.whom_to_meet || '—' },
+        { key: 'status', header: 'Status',
+          render: (r: any) => <Badge tone={r.status === 'IN' ? 'green' : r.status === 'OUT' ? 'slate' : 'red'}>{humanize(r.status)}</Badge> },
+      ]}
+      filters={[
+        { name: 'visitor_type', label: 'Type', options: VISITOR_TYPES },
+        { name: 'status', label: 'Status', options: VISITOR_STATUSES },
+      ]}
+      fields={[
+        { name: 'visit_date', label: 'Date', type: 'date', readOnly: true, defaultValue: () => nowStamp().date, hint: 'System date' },
+        { name: 'in_time', label: 'In Time', type: 'time', readOnly: true, defaultValue: () => nowStamp().time, hint: 'System time' },
+        { name: 'visitor_type', label: 'Type', required: true, options: VISITOR_TYPES, defaultValue: 'VISITOR' },
+        { name: 'person_name', label: 'Name', required: true, placeholder: 'Visitor / contractor name' },
+        { name: 'organisation', label: 'Company / Organisation' },
+        { name: 'party_id', label: 'Or Business Partner', lookup: 'trade-parties' },
+        { name: 'phone', label: 'Phone', placeholder: '+91 98765 43210' },
+        { name: 'person_count', label: 'No. of Persons', type: 'number', defaultValue: 1 },
+        { name: 'purpose', label: 'Purpose', placeholder: 'e.g. Buyer inline inspection / machine service' },
+        { name: 'whom_to_meet', label: 'Whom to Meet' },
+        { name: 'vehicle_no', label: 'Vehicle Number' },
+        { name: 'id_proof', label: 'ID Proof', placeholder: 'e.g. Aadhaar / Driving licence' },
+        { name: 'out_time', label: 'Out Time', type: 'time' },
+        { name: 'status', label: 'Status', options: VISITOR_STATUSES, defaultValue: 'IN' },
+        { name: 'security_guard', label: 'Security Officer Name' },
+        { name: 'remarks', label: 'Remarks', type: 'textarea', span: 2 },
+      ]}
+    />
+  );
+}

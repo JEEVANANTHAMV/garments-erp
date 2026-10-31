@@ -41,7 +41,7 @@ import TnaDashboardPage from './pages/tna/TnaDashboardPage';
 import TnaTemplatesPage from './pages/tna/TnaTemplatesPage';
 
 /* Gate & Security */
-import { GateInwardsPage, GateOutwardsPage } from './pages/gate';
+import { GateInwardsPage, GateOutwardsPage, GateVisitorsPage } from './pages/gate';
 
 /* Procurement */
 import {
@@ -264,6 +264,7 @@ export default function App() {
                 <Route path="gate">
                   <Route path="inwards" element={<GateInwardsPage />} />
                   <Route path="outwards" element={<GateOutwardsPage />} />
+                  <Route path="visitors" element={<GateVisitorsPage />} />
                 </Route>
 
                 {/* Stores transactions (14-Oct) */}
