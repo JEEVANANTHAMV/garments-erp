@@ -25,3 +25,7 @@ test('screens use the type scale instead of hard-coded px sizes', () => {
 test('screens use regular / medium / semibold / bold weights only', () => {
   assert.deepEqual(offenders(/\bfont-(black|extrabold|thin|extralight)\b/), []);
 });
+
+test('screens use theme colour tokens instead of generic light greys (dark code / overlay shades excepted)', () => {
+  assert.deepEqual(offenders(/(?<![\w-])(text-slate-(300|400|500|600|700|800|900)|(bg|border|divide|ring)-slate-(50|100|200|300))(?![\d])/), []);
+});
