@@ -34,18 +34,26 @@ async function loadOutput(params: Record<string, unknown>, signal: AbortSignal) 
     const response = await api.get<ListResponse<OutputRow>>('/daily-outputs', {
       params: { ...params, page, pageSize: 200, sort: 'id', dir: 'asc' }, signal,
     });
-    rows.push(...response.data.data);
-    totalPages = response.data.pagination.totalPages;
+    rows.push(...(response.data.data ?? []));
+    totalPages = response.data.pagination?.totalPages ?? 1;
     page++;
   } while (page <= totalPages);
   return rows;
 }
 
+interface DashboardList<T> { rows: T[]; total: number }
+
+// Some routes (e.g. /dispatches) return every row with no pagination block; count those rows instead.
 function useDashboardList<T>(path: string, permission: string, params: Record<string, unknown> = {}) {
   const { can, company } = useAuth();
+  const pageSize = Number(params.pageSize ?? 5);
   return useQuery({
     queryKey: ['dashboard', company?.id, path, params], enabled: can(permission), staleTime: 60_000,
-    queryFn: () => http.get<ListResponse<T>>(`/${path}`, { page: 1, pageSize: 5, ...params }),
+    queryFn: async (): Promise<DashboardList<T>> => {
+      const response = await http.get<Partial<ListResponse<T>>>(`/${path}`, { page: 1, pageSize, ...params });
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      return { rows: rows.slice(0, pageSize), total: Number(response?.pagination?.total ?? rows.length) };
+    },
   });
 }
 
@@ -113,10 +121,10 @@ export default function Dashboard() {
       {summary.isLoading ? <div className="card"><LoadingBlock rows={6} /></div> : summary.error ? <div className="card"><ErrorState error={summary.error} onRetry={() => void summary.refetch()} /></div> : data && <>
         <div className="dashboard-grid dashboard-kpis">
           <Kpi icon={ClipboardList} color={chartColors.cutting} label="Total Orders" value={fmtNumber(data.orders.total_orders)} caption="All sales orders" />
-          {can('PURCHASE.VIEW') && <Kpi icon={ShoppingCart} color={chartColors.sewing} label="Purchase Orders" value={fmtNumber(purchases.data?.pagination.total)} caption="All purchase orders" query={purchases} />}
+          {can('PURCHASE.VIEW') && <Kpi icon={ShoppingCart} color={chartColors.sewing} label="Purchase Orders" value={fmtNumber(purchases.data?.total)} caption="All purchase orders" query={purchases} />}
           {can('PRODUCTION.VIEW') && <Kpi icon={Package} color={chartColors.packing} label="Production Jobs" value={fmtNumber(data.production.total_prod_orders)} caption={`${fmtNumber(data.production.in_progress)} in progress`} />}
           {can('PRODUCTION.VIEW') && <Kpi icon={Factory} color={chartColors.finishing} label="Today Output" value={todayOutput.data ? fmtNumber(todayOutput.data.reduce((sum, r) => sum + Number(r.actual_good), 0)) : '—'} caption="Good pcs · all stages" query={todayOutput} />}
-          {can('DISPATCH.VIEW') && <Kpi icon={Truck} color={chartColors.dispatch} label="Dispatches" value={fmtNumber(dispatches.data?.pagination.total)} caption="All dispatches" query={dispatches} />}
+          {can('DISPATCH.VIEW') && <Kpi icon={Truck} color={chartColors.dispatch} label="Dispatches" value={fmtNumber(dispatches.data?.total)} caption="All dispatches" query={dispatches} />}
           {can('INVENTORY.VIEW') && <Kpi icon={Layers} color={chartColors.inventory} label="Fabric Stock" value={stock.data ? (fabric.totals.length ? fabric.totals.map((t) => `${fmtNumber(t.value, 2)} ${t.unit}`).join(' / ') : '0') : '—'} caption="Current balance by unit" query={stock} />}
         </div>
         <div className="dashboard-grid dashboard-charts">
@@ -152,9 +160,9 @@ export default function Dashboard() {
         </div>
         <div className="dashboard-grid dashboard-tables">
           {can('PRODUCTION.VIEW') && <Panel title="Recent Production Jobs" to="/production/orders">
-            <QueryContent query={jobs} empty={!jobs.data?.data.length}>
+            <QueryContent query={jobs} empty={!jobs.data?.rows.length}>
               <Table headers={['Job No', 'Style', 'Sales Order', 'Order Qty', 'Produced', 'Balance', 'Status']} numeric={[3, 4, 5]}>
-                {jobs.data?.data.map((j) => <tr key={j.id} className="row-hover"><td className="td">{j.po_prod_no}</td><td className="td">{j.style_code || '—'}</td><td className="td">{j.so_no || '—'}</td><td className="td text-right">{fmtNumber(j.order_qty)}</td><td className="td text-right">{fmtNumber(j.produced_qty)}</td><td className="td text-right">{fmtNumber(Number(j.order_qty) - Number(j.produced_qty))}</td><td className="td"><StatusBadge value={j.approval_state} /></td></tr>)}
+                {jobs.data?.rows.map((j) => <tr key={j.id} className="row-hover"><td className="td">{j.po_prod_no}</td><td className="td">{j.style_code || '—'}</td><td className="td">{j.so_no || '—'}</td><td className="td text-right">{fmtNumber(j.order_qty)}</td><td className="td text-right">{fmtNumber(j.produced_qty)}</td><td className="td text-right">{fmtNumber(Number(j.order_qty) - Number(j.produced_qty))}</td><td className="td"><StatusBadge value={j.approval_state} /></td></tr>)}
               </Table>
             </QueryContent>
           </Panel>}
@@ -175,9 +183,9 @@ export default function Dashboard() {
             </QueryContent>
           </Panel>}
           {can('PURCHASE.VIEW') && <Panel title="Purchase Orders" to="/procurement/purchase-orders">
-            <QueryContent query={purchases} empty={!purchases.data?.data.length}>
+            <QueryContent query={purchases} empty={!purchases.data?.rows.length}>
               <Table headers={['PO No', 'Supplier', 'Value', 'Status']} numeric={[2]}>
-                {purchases.data?.data.map((p) => <tr key={p.id} className="row-hover"><td className="td">{p.po_no}</td><td className="td">{p.supplier_name}</td><td className="td text-right">{p.currency_code} {fmtNumber(p.total_amount, 2)}</td><td className="td"><StatusBadge value={p.approval_state} /></td></tr>)}
+                {purchases.data?.rows.map((p) => <tr key={p.id} className="row-hover"><td className="td">{p.po_no}</td><td className="td">{p.supplier_name}</td><td className="td text-right">{p.currency_code} {fmtNumber(p.total_amount, 2)}</td><td className="td"><StatusBadge value={p.approval_state} /></td></tr>)}
               </Table>
             </QueryContent>
           </Panel>}
@@ -223,8 +231,8 @@ function Empty({ text = 'No records available' }: { text?: string }) { return <p
 function QueryContent({ query, empty, emptyText, children }: { query: UseQueryResult<unknown>; empty: boolean; emptyText?: string; children: ReactNode }) {
   return query.isLoading ? <LoadingBlock rows={4} /> : query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : empty ? <Empty text={emptyText} /> : children;
 }
-function Count({ query }: { query: UseQueryResult<ListResponse<unknown>> }) {
-  return query.isLoading ? <span aria-label="Loading count">…</span> : query.error ? <button className="text-brand-700 underline" onClick={() => void query.refetch()}>Retry</button> : fmtNumber(query.data?.pagination.total);
+function Count({ query }: { query: UseQueryResult<DashboardList<unknown>> }) {
+  return query.isLoading ? <span aria-label="Loading count">…</span> : query.error ? <button className="text-brand-700 underline" onClick={() => void query.refetch()}>Retry</button> : fmtNumber(query.data?.total);
 }
 function Kpi({ icon: Icon, color, label, value, caption, query }: { icon: LucideIcon; color: string; label: string; value: string; caption: string; query?: UseQueryResult<unknown> }) {
   return <section className="card min-w-0 p-3"><div className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-2.5"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-white" style={{ backgroundColor: color }}><Icon size={21} /></div><h2 className="text-[0.8125rem] text-ink">{label}</h2><div className="col-span-2 mt-2 min-w-0">{query?.isLoading ? <div className="skeleton my-1 h-7 w-20" aria-label={`Loading ${label}`} /> : query?.error ? <button className="py-1 text-xs text-brand-700 underline" onClick={() => void query.refetch()}>Unable to load · Retry</button> : <p tabIndex={0} className="dashboard-kpi-value font-bold leading-tight text-ink-heading">{value}</p>}<p className="mt-1 text-[0.6875rem] text-ink-secondary">{caption}</p></div></div></section>;
