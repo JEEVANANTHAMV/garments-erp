@@ -203,7 +203,9 @@ export async function overlapping(tx: Tx | null, companyId: number, start: Date,
        AND (${conds.join(' OR ')})
        AND t.planned_start_at < ?
        AND (CASE WHEN t.status IN ('STARTED','IN_PROGRESS') AND t.planned_end_at < ? THEN ? ELSE t.planned_end_at END) > ?
-     ORDER BY t.planned_start_at`;
+     ORDER BY t.planned_start_at${tx ? ' FOR UPDATE' : ''}`;
+  // inside a transaction this is a locking read: it sees trips committed after the snapshot began (REPEATABLE READ
+  // plain reads would not), so a coordinator waiting on the driver / vehicle lock re-checks against the winner's trip
   const params = [companyId, excludeTripId ?? 0, ...ACTIVE_TRIP, ...args, end, now, now, start];
   return tx ? txQuery<Conflicting>(tx, sql, params) : query<Conflicting>(sql, params);
 }
