@@ -151,7 +151,7 @@ export default function AppLayout() {
 
   const notifications = useQuery({
     queryKey: ['notifications'],
-    queryFn: async () => (await http.get<{ data: { id: number; title: string; body: string; is_read: number; created_at: string }[] }>('/admin/notifications')).data,
+    queryFn: async () => (await http.get<{ data: { id: number; title: string; body: string; is_read: number; created_at: string; action_url?: string | null }[] }>('/admin/notifications')).data,
     refetchInterval: 60_000,
   }).data;
   // Messages = the user's own notifications (header message icon); the bell keeps the live alerts.
@@ -475,7 +475,7 @@ export default function AppLayout() {
                   </div>
                   <div className="max-h-80 overflow-y-auto">
                     {(notifications ?? []).map((n) => (
-                      <button key={n.id} onClick={() => { if (!n.is_read) void markRead(n.id); }}
+                      <button key={n.id} onClick={() => { if (!n.is_read) void markRead(n.id); if (n.action_url?.startsWith('/')) { setMsgOpen(false); goto(n.action_url); } }}
                         className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left hover:bg-surface-hover">
                         <span className={clsx('mt-1.5 h-2 w-2 shrink-0 rounded-full', n.is_read ? 'bg-transparent' : 'bg-brand-600')} />
                         <span className="min-w-0"><span className={clsx('block text-body', n.is_read ? 'text-ink-secondary' : 'font-semibold text-ink')}>{n.title}</span>
