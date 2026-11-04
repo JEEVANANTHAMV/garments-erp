@@ -338,9 +338,9 @@ yarnIssueDcRouter.get(`${BASE}/contractor/:partyId`, requirePermission('PRODUCTI
 
 async function checkHeader(req: Request, b: DcIn) {
   const cid = req.user!.companyId;
-  const party = await queryOne<any>('SELECT id, is_vendor, is_contractor FROM mst_party WHERE id = ? AND company_id = ? AND is_deleted = 0', [b.vendor_id, cid]);
+  const party = await queryOne<any>('SELECT id, is_vendor, is_contractor, is_supplier FROM mst_party WHERE id = ? AND company_id = ? AND is_deleted = 0', [b.vendor_id, cid]);
   if (!party) throw BadRequest('Contractor not found');
-  if (!Number(party.is_vendor) && !Number(party.is_contractor)) throw BadRequest('The party is not a job worker / contractor');
+  if (!Number(party.is_vendor) && !Number(party.is_contractor) && !Number(party.is_supplier)) throw BadRequest('The party is not a job worker / contractor');
   const wh = await queryOne<any>('SELECT id FROM mst_warehouse WHERE id = ? AND company_id = ?', [b.warehouse_id, cid]);
   if (!wh) throw BadRequest('Store (warehouse) not found');
   if (b.allow_override && !b.override_reason) throw BadRequest('An override reason is required to issue beyond available stock');
@@ -625,14 +625,14 @@ yarnIssueDcRouter.post(`${BASE}/:id/cancel`, requirePermission('KNIT_DC.CANCEL')
 
 async function pdfData(cid: number, id: number, printedBy: string | null, reprintNo: number): Promise<YarnIssueDcPdf> {
   const { h, lines } = await loadDc(cid, id);
-  const c = await queryOne<any>('SELECT legal_name, trade_name, company_name, gstin, address_line1, address_line2, city, state, pincode FROM mst_company WHERE id = ?', [cid]);
+  const c = await queryOne<any>('SELECT legal_name, trade_name, gstin, address_line1, address_line2, city, state, pincode FROM mst_company WHERE id = ?', [cid]);
   const e = await queryOne<any>('SELECT * FROM trx_knitting_dc_eway WHERE dc_id = ?', [id]);
   const v = ewbView(e, h.doc_status);
   const d = String(h.dc_date ?? '').slice(0, 10);
   const dt = d ? new Date(`${d}T00:00:00Z`) : null;
   const dcDate = dt ? `${String(dt.getUTCDate()).padStart(2, '0')}-${dt.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })}-${dt.getUTCFullYear()}` : '-';
   return {
-    company: { name: c?.legal_name || c?.company_name || c?.trade_name || '', address: [c?.address_line1, c?.address_line2, c?.city, c?.state, c?.pincode].filter(Boolean).join(', '), gstin: c?.gstin ?? null },
+    company: { name: c?.legal_name || c?.trade_name || '', address: [c?.address_line1, c?.address_line2, c?.city, c?.state, c?.pincode].filter(Boolean).join(', '), gstin: c?.gstin ?? null },
     dc: { dc_no: h.dc_no, dc_date: dcDate, doc_status: h.doc_status, contractor: h.contractor_name_snapshot ?? h.vendor_name ?? null,
       contractor_address: h.contractor_address_snapshot ?? null, contractor_gstin: h.contractor_gstin_snapshot ?? h.vendor_gstin ?? null,
       vehicle_no: h.vehicle_no ?? null, purpose: h.purpose ?? DEFAULT_PURPOSE, cancel_reason: h.cancel_reason ?? null },
