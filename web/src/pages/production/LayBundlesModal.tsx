@@ -106,7 +106,9 @@ export function LayBundlesModal({ lay, onClose, onDone }: { lay: any; onClose: (
 
   const statusText = st ? Object.entries(st.bundles.statuses || {}).map(([k, v]) => `${v} ${k}`).join(', ') : '';
 
+  // rendered inside a right-aligned, no-wrap grid cell — reset the inherited text layout
   return (
+    <div className="whitespace-normal text-left">
     <Modal open onClose={onClose} title={`Bundles — lay ${lay.lay_no}`} size="md"
       subtitle="Cut pieces are grouped into bundles for sewing. Enter the pieces per bundle and confirm."
       footer={<>
@@ -133,14 +135,14 @@ export function LayBundlesModal({ lay, onClose, onDone }: { lay: any; onClose: (
                 <span className="ml-2 text-small font-normal text-ink-muted">({statusText})</span>
               </p>
               <table className="mt-2 w-full text-small">
-                <thead><tr className="text-left text-ink-muted"><th className="py-1">Size</th><th className="py-1 text-right">Bundles</th><th className="py-1 text-right">PCS</th><th className="py-1 text-right">PCS / bundle</th></tr></thead>
+                <thead><tr className="text-left text-ink-muted"><th className="py-1">Size</th><th className="py-1 text-right">Bundles</th><th className="py-1 text-right">PCS</th><th className="py-1 text-right">Bundle sizes (PCS)</th></tr></thead>
                 <tbody>
                   {st.bundles.by_size.map((r: any) => (
                     <tr key={r.size_code} className="border-t border-surface-border">
                       <td className="py-1">{r.size_code}</td>
                       <td className="py-1 text-right tabular-nums">{r.bundles}</td>
                       <td className="py-1 text-right tabular-nums">{fmtNumber(r.pcs)}</td>
-                      <td className="py-1 text-right tabular-nums">{r.bundle_sizes.join(' / ')}</td>
+                      <td className="py-1 text-right tabular-nums">{r.bundle_sizes.join(', ')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -209,6 +211,7 @@ export function LayBundlesModal({ lay, onClose, onDone }: { lay: any; onClose: (
         </div>
       )}
     </Modal>
+    </div>
   );
 }
 

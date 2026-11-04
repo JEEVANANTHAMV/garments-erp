@@ -71,6 +71,7 @@ import { revisionRouter } from './modules/yarnProcess/revision.routes.js';
 import { fabricProcessingRouter } from './modules/fabricProcessing/fabricProcessing.routes.js';
 import { trimProcurementRouter } from './modules/procurement/trimProcurement.routes.js';
 import { purchaseReturnRouter } from './modules/procurement/purchaseReturn.routes.js';
+import { purchaseDocsRouter } from './modules/purchaseDocs/purchaseDocs.routes.js';
 import { tnaRouter } from './modules/tna/tna.routes.js';
 import { jobworkDivisionRouter } from './modules/production/jobworkDivision.js';
 import { lineAllocationPlanRouter } from './modules/production/lineAllocationPlan.routes.js';
@@ -195,6 +196,7 @@ export function createApp() {
   api.use('/', fabricProcessingRouter);       // /fabric-processing/orders, /fabric-processing/rolls, etc.
   api.use('/', trimProcurementRouter);        // /trim-pos, /trim-grns, /trim-stock
   api.use('/', purchaseReturnRouter);         // /purchase-returns, /purchase-returns/grn/:id, etc.
+  api.use('/', purchaseDocsRouter);           // /purchase-docs/:type/:id/pdf|email|mail-defaults|mail-log (PO print / PDF / mail), /settings/mail (SMTP)
   api.use('/tna', tnaRouter);                 // /tna, /tna/:id, /tna/dashboard, /tna/templates, etc.
   api.use('/', jobworkDivisionRouter);       // /jobwork-invoices/:id/print (division billing header)
   api.use('/', lineAllocationPlanRouter);    // /sewing/line-allocation, /checking/line-allocation, /sewing/daily-plan, /checking/daily-plan

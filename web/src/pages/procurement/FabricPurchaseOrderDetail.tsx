@@ -14,6 +14,8 @@ import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, StatusBadge, Modal } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
+import { RAW_COLOUR } from '../../lib/rawColour';
+import { PoLineCard, PoLineRow, PoLineField, PoLineAmounts } from './PoLineLayout';
 
 interface FabricLine {
   id?: number;
@@ -440,6 +442,9 @@ export default function FabricPurchaseOrderDetailPage() {
     });
   };
 
+  /** New line: takes the IO No / Style chosen in the order details (client 04-Nov-2026), still editable per line. */
+  const addLine = () => setLines((p) => [...p, { ...emptyFabricLine(), so_id: head.so_id || '', style_id: head.so_id ? head.style_id || '' : '' }]);
+
   const totals = useMemo(() => {
     const totalQty = lines.reduce((s, l) => s + (Number(l.qty) || 0), 0);
     const totalWeight = lines.reduce((s, l) => s + (Number(l.weight_kg) || 0), 0);
@@ -679,7 +684,7 @@ export default function FabricPurchaseOrderDetailPage() {
               )}
             </div>
              <p className="text-xs text-ink-secondary mt-0.5">
-              Grey / Dyed fabric purchase — Knitted / Woven specifications, roll targets, and rates
+              {RAW_COLOUR} / Dyed fabric purchase — Knitted / Woven specifications, roll targets, and rates
              </p>
           </div>
         </div>
@@ -984,101 +989,85 @@ export default function FabricPurchaseOrderDetailPage() {
         </div>
       </div>
 
-      {/* Fabric Lines Table */}
+      {/* Fabric line items — one card per line, labelled fields in rows (client 04-Nov-2026: the single long row was unreadable) */}
       <div className="rounded-xl border border-surface-border bg-white p-4 shadow-xs space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-surface-divider">
+          <div className="min-w-0">
             <h3 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <Layers size={14} className="text-emerald-600" />
               <span>Fabric Line Items ({lines.length})</span>
             </h3>
             <p className="text-caption text-ink-muted">
-              Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details
+              Multiple jobs supported: assign each line item to a Sales Order or Stock, with live tax and amount details.
+              {head.so_id && <> New lines take IO No {selectedJob?.job_no || head.internal_ir_no}{head.style_id ? ' and the style' : ''} from the order details above — change it per line if needed.</>}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => setLines([...lines, emptyFabricLine()])}
+            onClick={addLine}
             className="btn-secondary btn-xs flex items-center gap-1"
           >
             <Plus size={13} /> Add Fabric Line
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-surface-header/70 border-b border-surface-border text-caption font-semibold text-ink-secondary uppercase tracking-wider">
-              <tr>
-                <th className="py-2.5 px-2 w-8 text-center">#</th>
-                <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
-                <th className="py-2.5 px-2 min-w-[110px]">Style</th>
-                <th className="py-2.5 px-2 min-w-[150px]">Fabric</th>
-                <th className="py-2.5 px-2 w-24">Grey / Dyed</th>
-                <th className="py-2.5 px-2 w-20">Color</th>
-                <th className="py-2.5 px-2 w-24">Pantone / Spec</th>
-                <th className="py-2.5 px-2 w-28">Composition</th>
-                <th className="py-2.5 px-2 w-16">Counts</th>
-                <th className="py-2.5 px-2 w-16">GSM</th>
-                <th className="py-2.5 px-2 w-16">Dia</th>
-                <th className="py-2.5 px-2 w-20 text-right">Qty</th>
-                <th className="py-2.5 px-2 min-w-[84px] whitespace-nowrap">UOM</th>
-                <th className="py-2.5 px-2 w-20 text-right">Rate (₹)</th>
-                {head.is_interstate ? (
-                  <>
-                    <th className="py-2.5 px-2 w-16 text-center">IGST %</th>
-                    <th className="py-2.5 px-2 w-20 text-right">IGST (₹)</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="py-2.5 px-2 w-16 text-center">GST %</th>
-                    <th className="py-2.5 px-2 w-20 text-right">CGST+SGST (₹)</th>
-                  </>
-                )}
-                <th className="py-2.5 px-2 w-24 text-right">Amount (₹)</th>
-                <th className="py-2.5 px-2 w-8 text-center"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-divider">
-              {lines.map((l, idx) => {
-                const isDyed = l.fabric_category === 'Dyed Fabric';
-                const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['FABRIC']).filter((it) => it.fabric_id);
-                return (
-                <tr key={l._key} className="hover:bg-surface-muted/50">
-                  {/* # S NO */}
-                  <td className="py-2 px-2 text-center text-ink-muted tabular-nums text-caption">{idx + 1}</td>
-                  {/* I/O Num (Sales Order / Job) */}
-                  <td className="py-2 px-2">
+        <div className="space-y-3">
+          {lines.map((l, idx) => {
+            const isDyed = l.fabric_category === 'Dyed Fabric';
+            const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['FABRIC']).filter((it) => it.fabric_id);
+            const lineJob = jobs.find((j) => String(j.id) === String(l.so_id));
+            const fab: any = (fabrics.data || []).find((x: any) => String(x.id) === String(l.fabric_id));
+            const fabricLabel = fab?.fabric_name || fab?.label || l.fabric_name || '';
+            const uomCode = (uoms.data || []).find((u: any) => Number(u.id) === Number(l.uom_id))?.code || '';
+            const fid = (f: string) => `fpo-line-${idx}-${f}`;
+            return (
+              <PoLineCard
+                key={l._key}
+                index={idx}
+                testId={`fpo-line-${idx}`}
+                summary={<>
+                  <span className="font-semibold text-ink truncate max-w-full">{fabricLabel || 'Fabric not selected'}</span>
+                  <span>{lineJob ? `IO ${lineJob.job_no}` : 'Stock / General'}</span>
+                  <span className={isDyed ? 'text-purple-700 font-medium' : 'text-amber-800 font-medium'}>{isDyed ? `Dyed${l.color_name ? ` · ${l.color_name}` : ''}` : RAW_COLOUR}</span>
+                  <span className="tabular-nums">{fmtDecimal(l.qty)} {uomCode}</span>
+                  <span className="tabular-nums font-semibold text-ink">₹{fmtDecimal(l.net_amount)}</span>
+                </>}
+              >
+                {/* Row 1 — what and for whom */}
+                <PoLineRow>
+                  <PoLineField label="IO No / Job" htmlFor={fid('job')}>
                     <select
+                      id={fid('job')}
                       value={l.so_id || ''}
                       onChange={(e) => updateLine(idx, { so_id: e.target.value, _bom: undefined })}
-                      className="input py-1 text-xs w-full bg-white"
+                      className="input"
                     >
                       <option value="">Stock / General</option>
                       {jobs.map((j) => (
                         <option key={j.id} value={j.id}>{j.job_no}</option>
                       ))}
                     </select>
-                  </td>
-                  {/* Style */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="Style" htmlFor={fid('style')}>
                     <select
+                      id={fid('style')}
                       value={l.style_id || ''}
                       onChange={(e) => updateLine(idx, { style_id: e.target.value, _bom: undefined })}
-                      className="input py-1 text-xs w-full bg-white"
+                      className="input"
                     >
                       <option value="">—</option>
-                      {(() => {
-                        const job = jobs.find((j) => String(j.id) === String(l.so_id));
-                        return job
-                          ? job.styles.map((st) => <option key={st.style_id} value={st.style_id}>{st.style_code} — {st.style_name}</option>)
-                          : toOptions(styles.data).map((st) => <option key={st.value} value={st.value}>{st.label}</option>);
-                      })()}
+                      {lineJob
+                        ? lineJob.styles.map((st) => <option key={st.style_id} value={st.style_id}>{st.style_code} — {st.style_name}</option>)
+                        : toOptions(styles.data).map((st) => <option key={st.value} value={st.value}>{st.label}</option>)}
                     </select>
-                  </td>
-                  {/* Fabric */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="Fabric *" htmlFor={fid('fabric')} wide>
                     <select
+                      id={fid('fabric')}
                       value={l._bom && lineBom.some((it) => it.bom_line_id === l._bom) ? `bom:${l._bom}` : l.fabric_id}
+                      title={fabricLabel || undefined}
                       onChange={(e) => {
                         if (e.target.value.startsWith('bom:')) {
                           const it = lineBom.find((x) => `bom:${x.bom_line_id}` === e.target.value);
@@ -1089,20 +1078,20 @@ export default function FabricPurchaseOrderDetailPage() {
                         const inBom = lineBom.filter((x) => String(x.fabric_id) === e.target.value);
                         if (inBom.length === 1) { pickBomFabric(idx, l, inBom[0]); return; }
                         if (inBom.length > 1) toast(`${inBom.length} BOM lines use this fabric (colour wise) — pick the line from the BOM group to load its qty`, 'info');
-                        const fab: any = (fabrics.data || []).find((x: any) => String(x.id) === e.target.value);
+                        const picked: any = (fabrics.data || []).find((x: any) => String(x.id) === e.target.value);
                         updateLine(idx, {
                           _bom: undefined,
                           fabric_id: e.target.value,
-                          fabric_name: fab?.label || fab?.fabric_name || '',
-                          dia: fab?.dia_inch ? `${Number(fab.dia_inch)}"` : l.dia,
-                          uom_id: Number(fab?.base_uom) || l.uom_id,
+                          fabric_name: picked?.label || picked?.fabric_name || '',
+                          dia: picked?.dia_inch ? `${Number(picked.dia_inch)}"` : l.dia,
+                          uom_id: Number(picked?.base_uom) || l.uom_id,
                           ...(() => {
                             const q = matchQuote(quoted.data, { material_id: e.target.value, so_id: l.so_id });
-                            return q ? { rate: q.rate, gst_rate: q.gst_rate } : { rate: Number(l.rate) > 0 ? l.rate : (Number(fab?.std_rate) || 0) };
+                            return q ? { rate: q.rate, gst_rate: q.gst_rate } : { rate: Number(l.rate) > 0 ? l.rate : (Number(picked?.std_rate) || 0) };
                           })(),
                         });
                       }}
-                      className="input py-1 text-xs w-full bg-white"
+                      className="input"
                     >
                       <option value="">{jobBoms.statusFor(l.so_id, lineStyle(l)) === 'loading' ? 'Loading BOM…' : '— Select Fabric —'}</option>
                       {lineBom.length > 0 && (
@@ -1119,198 +1108,202 @@ export default function FabricPurchaseOrderDetailPage() {
                         ))}
                       </optgroup>
                     </select>
-                  </td>
-                  {/* Grey / Dyed Fabric Category */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  {/* Stored value stays 'Grey Fabric'; undyed fabric reads "Cora / Raw" (client 04-Nov-2026) */}
+                  <PoLineField label={`${RAW_COLOUR} / Dyed`} htmlFor={fid('type')}>
                     <select
+                      id={fid('type')}
                       value={l.fabric_category}
                       onChange={(e) => updateLine(idx, { fabric_category: e.target.value as 'Grey Fabric' | 'Dyed Fabric' })}
-                      className={`text-xs rounded border py-1 px-1.5 font-semibold w-full ${
-                        isDyed
-                          ? 'bg-purple-50 text-purple-700 border-purple-300'
-                          : 'bg-amber-50 text-amber-800 border-amber-300'
-                      }`}
+                      className={`input font-semibold ${isDyed ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-amber-50 text-amber-800 border-amber-300'}`}
                     >
-                      <option value="Grey Fabric">Grey Fabric</option>
+                      <option value="Grey Fabric">{RAW_COLOUR}</option>
                       <option value="Dyed Fabric">Dyed Fabric</option>
                     </select>
-                  </td>
-                  {/* Color */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="Colour" htmlFor={fid('colour')}>
                     <input
+                      id={fid('colour')}
                       type="text"
                       value={l.color_name}
                       onChange={(e) => updateLine(idx, { color_name: e.target.value })}
-                      placeholder="Navy"
-                      className="input py-1 text-xs w-full"
+                      placeholder={isDyed ? 'Navy' : RAW_COLOUR}
+                      className="input"
                     />
-                  </td>
-                  {/* Pantone / Spec — only for Dyed Fabric */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="Pantone / Spec" htmlFor={fid('pantone')}>
                     {isDyed ? (
                       <input
+                        id={fid('pantone')}
                         type="text"
                         value={l.pantone_spec}
                         onChange={(e) => updateLine(idx, { pantone_spec: e.target.value })}
                         placeholder="19-4052 TCX"
-                        className="input py-1 text-xs w-full tabular-nums text-purple-700 bg-purple-50/30"
+                        className="input tabular-nums text-purple-700 bg-purple-50/30"
                       />
                     ) : (
-                      <span className="text-ink-disabled text-caption block text-center">—</span>
+                      <input id={fid('pantone')} type="text" value="" placeholder="Dyed fabric only" disabled className="input" />
                     )}
-                  </td>
-                  {/* Composition */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+                </PoLineRow>
+
+                {/* Row 2 — specification, quantity and price */}
+                <PoLineRow>
+                  <PoLineField label="Composition" htmlFor={fid('composition')} wide>
                     <input
+                      id={fid('composition')}
                       type="text"
                       value={l.composition}
+                      title={l.composition || undefined}
                       onChange={(e) => updateLine(idx, { composition: e.target.value })}
                       placeholder="100% Cotton"
-                      className="input py-1 text-xs w-full"
+                      className="input"
                     />
-                  </td>
-                  {/* Counts (yarn count used in the fabric) */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="Counts" htmlFor={fid('counts')}>
                     <input
+                      id={fid('counts')}
                       type="text"
                       value={l.yarn_count_str}
                       onChange={(e) => updateLine(idx, { yarn_count_str: e.target.value })}
                       placeholder="30s"
-                      className="input py-1 text-xs w-full tabular-nums"
+                      className="input tabular-nums"
                     />
-                  </td>
-                  {/* GSM */}
-                  <td className="py-2 px-2">
-                    <select value={l.gsm ?? ''} id={`fpo-line-${idx}-gsm`} onChange={(e) => updateLine(idx, { gsm: e.target.value })} className="input py-1 text-xs w-full">
+                  </PoLineField>
+
+                  <PoLineField label="GSM" htmlFor={fid('gsm')}>
+                    <select value={l.gsm ?? ''} id={fid('gsm')} onChange={(e) => updateLine(idx, { gsm: e.target.value })} className="input tabular-nums">
                       <option value="">—</option>
                       {pickList(gsmList.data as any, l.gsm).map((g) => <option key={g} value={g}>{g}</option>)}
                     </select>
-                  </td>
-                  {/* DIA */}
-                  <td className="py-2 px-2">
-                    <select value={l.dia ?? ''} id={`fpo-line-${idx}-dia`} onChange={(e) => updateLine(idx, { dia: e.target.value })} className="input py-1 text-xs w-full">
+                  </PoLineField>
+
+                  <PoLineField label="Dia" htmlFor={fid('dia')}>
+                    <select value={l.dia ?? ''} id={fid('dia')} onChange={(e) => updateLine(idx, { dia: e.target.value })} className="input tabular-nums">
                       <option value="">—</option>
                       {pickList(diaList.data as any, l.dia).map((d) => <option key={d} value={d}>{d}</option>)}
                     </select>
-                  </td>
-                  {/* Qty */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="Qty *" htmlFor={fid('qty')}>
                     <input
+                      id={fid('qty')}
                       type="number"
                       step="0.01"
                       value={l.qty}
                       onChange={(e) => updateLine(idx, { qty: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full text-right tabular-nums font-bold"
+                      className="input font-bold"
                     />
-                  </td>
-                  {/* UOM */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="UOM" htmlFor={fid('uom')}>
                     <select
+                      id={fid('uom')}
                       value={l.uom_id}
                       onChange={(e) => updateLine(idx, { uom_id: Number(e.target.value) })}
-                      className="input py-1 !px-1.5 text-xs w-full min-w-[76px] bg-white font-semibold"
+                      className="input font-semibold"
                     >
                       {(uoms.data || []).map((u) => (
                         <option key={u.id} value={u.id}>{u.code || u.label}</option>
                       ))}
                     </select>
-                  </td>
-                  {/* Rate */}
-                  <td className="py-2 px-2">
+                  </PoLineField>
+
+                  <PoLineField label="Rate (₹)" htmlFor={fid('rate')}>
                     <input
+                      id={fid('rate')}
                       type="number"
                       step="0.01"
                       value={l.rate}
                       onChange={(e) => updateLine(idx, { rate: Number(e.target.value) })}
-                      className="input py-1 text-xs w-full text-right tabular-nums font-bold text-brand-700"
+                      className="input font-bold text-brand-700"
                     />
-                  </td>
-                  {/* GST / IGST */}
-                  {head.is_interstate ? (
-                    <>
-                      <td className="py-2 px-2 text-center">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={l.gst_rate}
-                          onChange={(e) => updateLine(idx, { gst_rate: Number(e.target.value) })}
-                          className="input py-1 text-xs w-full text-center bg-purple-50/50 text-purple-700 font-semibold"
-                        />
-                      </td>
-                      <td className="py-2 px-2 text-right tabular-nums font-semibold text-purple-700">
-                        ₹{fmtDecimal(l.igst_amount)}
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="py-2 px-2 text-center">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={l.gst_rate}
-                          onChange={(e) => updateLine(idx, { gst_rate: Number(e.target.value) })}
-                          className="input py-1 text-xs w-full text-center"
-                        />
-                      </td>
-                      <td className="py-2 px-2 text-right tabular-nums font-medium text-ink">
-                        ₹{fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}
-                      </td>
-                    </>
-                  )}
-                  {/* Amount */}
-                  <td className="py-2 px-2 text-right tabular-nums font-bold text-ink">
-                    ₹{fmtDecimal(l.net_amount)}
-                  </td>
-                  {/* Delete */}
-                  <td className="py-2 px-2 text-center">
+                  </PoLineField>
+
+                  <PoLineField label={head.is_interstate ? 'IGST %' : 'GST %'} htmlFor={fid('gst')}>
+                    <input
+                      id={fid('gst')}
+                      type="number"
+                      step="0.1"
+                      value={l.gst_rate}
+                      onChange={(e) => updateLine(idx, { gst_rate: Number(e.target.value) })}
+                      className={`input ${head.is_interstate ? 'bg-purple-50/50 text-purple-700 font-semibold' : ''}`}
+                    />
+                  </PoLineField>
+                </PoLineRow>
+
+                <PoLineAmounts
+                  items={[
+                    { label: 'Taxable', value: `₹${fmtDecimal(l.taxable_amount || l.amount)}` },
+                    head.is_interstate
+                      ? { label: 'IGST', value: `₹${fmtDecimal(l.igst_amount)}`, tone: 'text-purple-700' }
+                      : { label: 'CGST + SGST', value: `₹${fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}` },
+                    { label: 'Amount', value: `₹${fmtDecimal(l.net_amount)}`, strong: true },
+                  ]}
+                  actions={
                     <button
                       type="button"
+                      id={fid('remove')}
                       disabled={lines.length === 1}
                       onClick={() => setLines(lines.filter((_, i) => i !== idx))}
-                      className="text-ink-muted hover:text-rose-600 disabled:opacity-30"
+                      className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-small text-ink-secondary hover:border-rose-300 hover:text-rose-600 disabled:opacity-40 transition"
+                      title={lines.length === 1 ? 'At least one fabric line is required' : 'Remove this line'}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} /> Remove
                     </button>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-            <tfoot className="bg-surface-muted/80 border-t border-surface-border font-bold text-ink">
-              <tr>
-                <td colSpan={12} className="py-3 px-3 text-right text-ink-secondary">
-                  <span className="mr-4">Grey: <span className="tabular-nums text-amber-700">{fmtDecimal(totals.greyQty)}</span></span>
-                  <span className="mr-4">Dyed: <span className="tabular-nums text-purple-700">{fmtDecimal(totals.dyedQty)}</span></span>
-                  Total Qty:
-                </td>
-                <td className="py-3 px-2 text-right tabular-nums">{fmtDecimal(totals.totalQty, 2)}</td>
-                <td className="py-3 px-2 text-right tabular-nums text-xs text-ink-secondary">Taxable:</td>
-                {head.is_interstate ? (
-                  <>
-                    <td className="py-3 px-2 text-center text-xs text-ink-secondary">IGST:</td>
-                    <td className="py-3 px-2 text-right tabular-nums text-purple-700">
-                      ₹{fmtDecimal(totals.totalIgst, 2)}
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="py-3 px-2 text-center text-xs text-ink-secondary">CGST+SGST:</td>
-                    <td className="py-3 px-2 text-right tabular-nums text-purple-700">
-                      ₹{fmtDecimal(totals.totalCgst + totals.totalSgst, 2)}
-                    </td>
-                  </>
-                )}
-                <td className="py-3 px-2 text-right tabular-nums text-base font-bold text-ink">
-                  ₹{fmtDecimal(totals.grandTotal, 2)}
-                </td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
+                  }
+                />
+              </PoLineCard>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={addLine}
+          className="w-full inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-surface-input py-2 text-small font-medium text-ink-secondary hover:bg-surface-muted hover:text-ink transition"
+        >
+          <Plus size={13} /> Add another fabric line
+        </button>
+
+        {/* Line totals (was the table footer) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 rounded-xl border border-surface-border bg-surface-muted/70 p-4 text-xs">
+          <div>
+            <span className="text-ink-secondary block">Total Qty</span>
+            <span className="font-bold text-ink text-sm tabular-nums">{fmtDecimal(totals.totalQty, 2)}</span>
+          </div>
+          <div>
+            <span className="text-ink-secondary block">{RAW_COLOUR} / Dyed split</span>
+            <span className="font-medium tabular-nums">
+              <span className="text-amber-700">{fmtDecimal(totals.greyQty)}</span> / <span className="text-purple-700">{fmtDecimal(totals.dyedQty)}</span>
+            </span>
+          </div>
+          <div>
+            <span className="text-ink-secondary block">Taxable Amount</span>
+            <span className="font-bold text-ink text-sm tabular-nums">₹{fmtDecimal(totals.taxableAmount, 2)}</span>
+          </div>
+          <div>
+            <span className="text-ink-secondary block">{head.is_interstate ? 'IGST (Inter-state)' : 'CGST + SGST'}</span>
+            <span className="font-bold text-purple-700 text-sm tabular-nums">
+              ₹{fmtDecimal(head.is_interstate ? totals.totalIgst : totals.totalCgst + totals.totalSgst, 2)}
+            </span>
+          </div>
+          <div>
+            <span className="text-ink-secondary block">Lines Net</span>
+            <span className="font-bold text-ink text-sm tabular-nums">₹{fmtDecimal(totals.itemsNet, 2)}</span>
+          </div>
+          <div>
+            <span className="text-ink-secondary block">Net PO Value</span>
+            <span className="font-bold text-emerald-700 text-sm tabular-nums">₹{fmtDecimal(totals.grandTotal, 2)}</span>
+          </div>
         </div>
 
         {/* Footer Financial Adjustments & TCS */}
-        <div className="mt-4 border-t border-surface-border bg-surface-muted/70 p-4 rounded-xl">
+        <div className="border-t border-surface-border bg-surface-muted/70 p-4 rounded-xl">
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
             <div>
               <label className="label text-caption font-bold text-ink">Freight / Transport Charges (₹)</label>
