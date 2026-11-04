@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Save, Plus, Trash2, Scissors, Printer, Layers, Sparkles, RefreshCw, FileSpreadsheet
+  ArrowLeft, Save, Plus, Trash2, Scissors, Layers, Sparkles, RefreshCw, FileSpreadsheet
 } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
 import { useQuotedRates, matchQuote } from '../../lib/quotedRates';
@@ -11,6 +11,7 @@ import { fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup } from '../../hooks/useLookup';
 import { Badge, Input, Select, Modal } from '../../components/ui';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 
 interface TrimLine {
   id?: number;
@@ -98,7 +99,6 @@ export default function TrimPurchaseOrderDetailPage() {
   const toast = useToast();
 
   const [saving, setSaving] = useState(false);
-  const [showPrintPO, setShowPrintPO] = useState(false);
   const [showQuoteModal, setShowQuoteModal] = useState(false);
   const uoms = useLookup('uoms');
 
@@ -490,14 +490,8 @@ export default function TrimPurchaseOrderDetailPage() {
               <FileSpreadsheet size={15} /> Create from Quotation
             </button>
           )}
-          {!isNew && (
-            <button
-              type="button"
-              onClick={() => setShowPrintPO(true)}
-              className="btn-secondary text-xs flex items-center gap-1.5 shadow-sm border border-surface-input hover:bg-surface-muted"
-            >
-              <Printer size={15} /> Print PO
-            </button>
+          {!isNew && id && (
+            <PoDocumentActions type="trim" id={id} poNo={existingPo?.po_no ?? head.po_no} status={existingPo?.status ?? head.status} />
           )}
           <button
             type="button"
@@ -1076,145 +1070,6 @@ export default function TrimPurchaseOrderDetailPage() {
         </div>
       </Modal>
 
-      {/* PRINTABLE PURCHASE ORDER VOUCHER MODAL */}
-      {showPrintPO && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-surface-border my-auto flex flex-col max-h-[96vh]">
-            <div className="px-6 py-3 border-b border-surface-border flex items-center justify-between bg-surface-muted no-print">
-              <span className="font-bold text-sm text-ink flex items-center gap-2">
-                <Printer size={16} className="text-emerald-600" /> Print Trim Purchase Order
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5"
-                >
-                  <Printer size={14} /> Print Now
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowPrintPO(false)}
-                  className="btn-secondary text-xs py-1.5 px-3"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-            {/* Printable Document Sheet */}
-            <div className="p-8 overflow-y-auto print-container text-ink bg-white font-sans text-xs">
-              <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
-                <h1 className="text-xl font-bold uppercase tracking-wider text-ink">GARMENT MANUFACTURING ERP</h1>
-                <p className="text-xs text-ink-secondary font-medium">Trims & Accessories Procurement Division</p>
-                <div className="inline-block mt-2 px-4 py-1 rounded bg-emerald-100 text-emerald-900 font-bold text-sm tracking-wide">
-                  PURCHASE ORDER VOUCHER ({head.is_interstate ? 'INTER-STATE / IGST' : 'INTRA-STATE / GST'})
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 border border-surface-input rounded-lg p-3.5 mb-4 bg-surface-muted/50">
-                <div className="space-y-1.5">
-                  <div><span className="text-ink-secondary font-medium">PO Number:</span> <span className="font-bold text-ink tabular-nums text-sm">{head.po_no || id}</span></div>
-                  <div><span className="text-ink-secondary font-medium">PO Date:</span> <span className="font-semibold text-ink">{head.po_date}</span></div>
-                  <div><span className="text-ink-secondary font-medium">Expected Delivery:</span> <span className="font-semibold text-ink">{head.delivery_date || '-'}</span></div>
-                  <div><span className="text-ink-secondary font-medium">Payment Terms:</span> <span className="font-semibold text-ink">{head.payment_terms || '-'}</span></div>
-                </div>
-                <div className="space-y-1.5 border-l border-surface-border pl-4">
-                  <div><span className="text-ink-secondary font-medium">Supplier / Vendor:</span> <span className="font-bold text-ink">{suppliers.find((sp: any) => String(sp.id) === String(head.supplier_id))?.label || '-'}</span></div>
-                  <div><span className="text-ink-secondary font-medium">IO No (Internal Order):</span> <span className="font-bold text-sky-800 tabular-nums">{head.io_no}</span></div>
-                  <div><span className="text-ink-secondary font-medium">Style:</span> <span className="font-semibold text-ink">{styles.find((st: any) => String(st.id) === String(head.style_id))?.code || '-'}</span></div>
-                  <div><span className="text-ink-secondary font-medium">Taxation:</span> <span className="font-bold text-emerald-700">{head.is_interstate ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'}</span></div>
-                </div>
-              </div>
-
-              {/* Items Table */}
-              <div className="mb-6">
-                <table className="w-full border-collapse border border-surface-input text-caption">
-                  <thead>
-                    <tr className="bg-surface-header text-ink">
-                      <th className="border border-surface-input py-1.5 px-2 text-left">#</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-left">Trim Item</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-left">IO No (Internal Order)</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-left">Specification</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-center">Color / Size</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-right">Order Qty</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-right">Rate (₹)</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-right">{head.is_interstate ? 'IGST (%)' : 'GST (%)'}</th>
-                      <th className="border border-surface-input py-1.5 px-2 text-right">Total (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((l: any, idx: number) => {
-                      const trimObj = trims.find((t: any) => String(t.id) === String(l.trim_id));
-                      const jobObj = jobs.find((j) => String(j.id) === String(l.so_id));
-                      return (
-                        <tr key={l._key || idx}>
-                          <td className="border border-surface-input py-1 px-2 text-center text-ink-secondary">{idx + 1}</td>
-                          <td className="border border-surface-input py-1 px-2 font-semibold text-ink">{trimObj?.label || l.trim_name || 'Trim'}</td>
-                          <td className="border border-surface-input py-1 px-2 text-ink-secondary">{jobObj?.job_no || head.io_no || 'General'}</td>
-                          <td className="border border-surface-input py-1 px-2 text-ink-secondary">{l.specification || '-'}</td>
-                          <td className="border border-surface-input py-1 px-2 text-center">{l.color_name || '-'} / {l.trim_size || '-'}</td>
-                          <td className="border border-surface-input py-1 px-2 text-right font-bold">{fmtDecimal(l.order_qty)}</td>
-                          <td className="border border-surface-input py-1 px-2 text-right">₹{fmtDecimal(l.rate)}</td>
-                          <td className="border border-surface-input py-1 px-2 text-right">{l.gst_rate}%</td>
-                          <td className="border border-surface-input py-1 px-2 text-right font-bold">₹{fmtDecimal(l.net_amount)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-surface-muted">
-                      <td colSpan={8} className="border border-surface-input py-1 px-2 text-right font-semibold text-ink-secondary">Taxable Subtotal:</td>
-                      <td className="border border-surface-input py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.totalAmount)}</td>
-                    </tr>
-                    {head.is_interstate ? (
-                      <tr className="bg-surface-muted">
-                        <td colSpan={8} className="border border-surface-input py-1 px-2 text-right font-semibold text-purple-700">Total IGST:</td>
-                        <td className="border border-surface-input py-1 px-2 text-right font-bold text-purple-800">₹{fmtDecimal(totals.igstAmount)}</td>
-                      </tr>
-                    ) : (
-                      <>
-                        <tr className="bg-surface-muted">
-                          <td colSpan={8} className="border border-surface-input py-1 px-2 text-right font-semibold text-ink-secondary">CGST Amount:</td>
-                          <td className="border border-surface-input py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.cgstAmount)}</td>
-                        </tr>
-                        <tr className="bg-surface-muted">
-                          <td colSpan={8} className="border border-surface-input py-1 px-2 text-right font-semibold text-ink-secondary">SGST Amount:</td>
-                          <td className="border border-surface-input py-1 px-2 text-right font-bold">₹{fmtDecimal(totals.sgstAmount)}</td>
-                        </tr>
-                      </>
-                    )}
-                    <tr className="bg-surface-header font-bold">
-                      <td colSpan={8} className="border border-surface-input py-1.5 px-2 text-right text-ink">Grand Total:</td>
-                      <td className="border border-surface-input py-1.5 px-2 text-right font-bold text-emerald-800 text-sm">₹{fmtDecimal(totals.grandTotal)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Signatures */}
-              <div className="grid grid-cols-4 gap-4 pt-8 mt-6 border-t border-surface-input text-center text-micro">
-                <div>
-                  <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-ink">Prepared By</span>
-                </div>
-                <div>
-                  <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-ink">Merchandiser</span>
-                </div>
-                <div>
-                  <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-ink">Accounts Manager</span>
-                </div>
-                <div>
-                  <div className="border-b border-slate-400 h-8 mb-1"></div>
-                  <span className="font-semibold text-ink">Authorized Signatory</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

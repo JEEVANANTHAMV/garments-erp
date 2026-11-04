@@ -10,6 +10,7 @@ import { useAuth } from '../../lib/auth';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, Spinner, StatusBadge } from '../../components/ui';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 import { fmtDecimal, today } from '../../lib/format';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
@@ -559,7 +560,10 @@ export function GeneralPurchaseDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {!isNew && (
+          {!isNew && isPoMode && id && (
+            <PoDocumentActions type="general" id={id} poNo={purchaseQuery.data?.purchase_no ?? head.purchase_no} status={purchaseQuery.data?.approval_state ?? head.approval_state} />
+          )}
+          {!isNew && !isPoMode && (
             <button
               type="button"
               onClick={() => setShowPrintVoucher(true)}

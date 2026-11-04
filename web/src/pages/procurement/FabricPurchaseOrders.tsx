@@ -5,6 +5,7 @@ import { Plus, Search, Eye, Filter, Layers, PackageCheck } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 import { StatusBadge, Badge } from '../../components/ui';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 import { ReceiptStatusBadge } from '../../lib/poReceipt';
 
 export default function FabricPurchaseOrdersPage() {
@@ -198,6 +199,8 @@ export default function FabricPurchaseOrdersPage() {
                       <StatusBadge value={r.approval_state || 'DRAFT'} />
                     </td>
                     <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="inline-flex items-center gap-0.5">
+                      <PoDocumentActions compact type="fabric" id={r.id} poNo={r.po_no} status={r.approval_state} />
                       <button
                         type="button"
                         onClick={() => nav(`/procurement/fabric/orders/${r.id}`)}
@@ -206,6 +209,7 @@ export default function FabricPurchaseOrdersPage() {
                       >
                         <Eye size={14} />
                       </button>
+                      </div>
                     </td>
                   </tr>
                 ))

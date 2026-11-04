@@ -5,6 +5,7 @@ import { Plus, Search, Eye, Filter, Scissors, PackageCheck } from 'lucide-react'
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 import { Badge } from '../../components/ui';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 import { ReceiptStatusBadge } from '../../lib/poReceipt';
 
 export default function TrimPurchaseOrdersPage() {
@@ -196,12 +197,15 @@ export default function TrimPurchaseOrdersPage() {
                       </Badge>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => nav(`/procurement/trim/orders/${p.id}`)}
-                        className="btn-secondary text-caption py-1 px-2.5 flex items-center gap-1 mx-auto"
-                      >
-                        <Eye size={13} /> View
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        <PoDocumentActions compact type="trim" id={p.id} poNo={p.po_no} status={p.status} />
+                        <button
+                          onClick={() => nav(`/procurement/trim/orders/${p.id}`)}
+                          className="btn-secondary text-caption py-1 px-2.5 flex items-center gap-1"
+                        >
+                          <Eye size={13} /> View
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

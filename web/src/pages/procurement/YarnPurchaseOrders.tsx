@@ -6,6 +6,7 @@ import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, fmtNumber } from '../../lib/format';
 import { StatusBadge } from '../../components/ui';
 import { ReceiptStatusBadge } from '../../lib/poReceipt';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 
 export default function YarnPurchaseOrdersPage() {
   const nav = useNavigate();
@@ -190,6 +191,8 @@ export default function YarnPurchaseOrdersPage() {
                       <StatusBadge value={p.approval_state || 'APPROVED'} />
                     </td>
                     <td className="py-3 px-4 text-center">
+                      <div className="inline-flex items-center gap-0.5">
+                      <PoDocumentActions compact type="yarn" id={p.id} poNo={p.po_no} status={p.approval_state} />
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -200,6 +203,7 @@ export default function YarnPurchaseOrdersPage() {
                       >
                         <Eye size={15} />
                       </button>
+                      </div>
                     </td>
                   </tr>
                 ))

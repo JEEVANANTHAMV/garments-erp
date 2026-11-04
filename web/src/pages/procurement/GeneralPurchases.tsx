@@ -6,6 +6,7 @@ import { useList, useListState } from '../../hooks/useResource';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { DataTable } from '../../components/DataTable';
 import { PageHeader, SearchInput, Select, Badge, StatusBadge, useDebounced } from '../../components/ui';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
 
 export function GeneralPurchasesPage() {
@@ -258,13 +259,16 @@ export function GeneralPurchasesPage() {
             header: '',
             align: 'right',
             render: (r: any) => (
-              <button
-                type="button"
-                className="btn-secondary py-1 px-2.5 text-xs font-medium"
-                onClick={() => nav(isPoMode ? `/procurement/general-orders/${r.id}` : `/procurement/general-purchases/${r.id}`)}
-              >
-                View
-              </button>
+              <div className="inline-flex items-center gap-1">
+                {isPoMode && <PoDocumentActions compact type="general" id={r.id} poNo={r.purchase_no} status={r.approval_state} />}
+                <button
+                  type="button"
+                  className="btn-secondary py-1 px-2.5 text-xs font-medium"
+                  onClick={() => nav(isPoMode ? `/procurement/general-orders/${r.id}` : `/procurement/general-purchases/${r.id}`)}
+                >
+                  View
+                </button>
+              </div>
             ),
           },
         ]}

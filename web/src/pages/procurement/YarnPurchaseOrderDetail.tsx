@@ -1028,7 +1028,7 @@ export default function YarnPurchaseOrderDetailPage() {
                   <span className="tabular-nums font-semibold text-ink">₹{fmtDecimal(l.net_amount)}</span>
                 </>}
               >
-                {/* Row 1 — what and for whom */}
+                {/* Row 1 — for whom and which yarn item (base + count) */}
                 <PoLineRow>
                   <PoLineField label="IO No / Job" htmlFor={fid('job')}>
                     <select
@@ -1122,37 +1122,6 @@ export default function YarnPurchaseOrderDetailPage() {
                     </select>
                   </PoLineField>
 
-                  {/* Stored value stays 'Grey Yarn'; undyed yarn going to knitting reads "Cora / Raw" (client 04-Nov-2026) */}
-                  <PoLineField label={`${RAW_COLOUR} / Dyed`} htmlFor={fid('type')}>
-                    <select
-                      id={fid('type')}
-                      value={l.yarn_type}
-                      onChange={(e) => updateLine(idx, { yarn_type: e.target.value as 'Grey Yarn' | 'Dyed Yarn' })}
-                      className={`input font-semibold ${isDyed ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-amber-50 text-amber-800 border-amber-300'}`}
-                    >
-                      <option value="Grey Yarn">{RAW_COLOUR}</option>
-                      <option value="Dyed Yarn">Dyed Yarn</option>
-                    </select>
-                  </PoLineField>
-
-                  <PoLineField label="Colour / Shade" htmlFor={fid('shade')}>
-                    {isDyed ? (
-                      <input
-                        id={fid('shade')}
-                        type="text"
-                        value={l.shade_code || l.color_name || ''}
-                        onChange={(e) => updateLine(idx, { shade_code: e.target.value, color_name: e.target.value })}
-                        className="input border-purple-300 bg-purple-50/40"
-                        placeholder="Shade / Color"
-                      />
-                    ) : (
-                      <input id={fid('shade')} type="text" value={RAW_COLOUR} disabled className="input" title="Undyed yarn has no colour of its own" />
-                    )}
-                  </PoLineField>
-                </PoLineRow>
-
-                {/* Row 2 — specification, quantity and price */}
-                <PoLineRow>
                   <PoLineField label="Count" htmlFor={fid('count')}>
                     <select
                       value={countIdOf(l)}
@@ -1172,6 +1141,37 @@ export default function YarnPurchaseOrderDetailPage() {
                     </select>
                   </PoLineField>
 
+                  {/* Stored value stays 'Grey Yarn'; undyed yarn going to knitting reads "Cora / Raw" (client 04-Nov-2026) */}
+                  <PoLineField label={`${RAW_COLOUR} / Dyed`} htmlFor={fid('type')}>
+                    <select
+                      id={fid('type')}
+                      value={l.yarn_type}
+                      onChange={(e) => updateLine(idx, { yarn_type: e.target.value as 'Grey Yarn' | 'Dyed Yarn' })}
+                      className={`input font-semibold ${isDyed ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-amber-50 text-amber-800 border-amber-300'}`}
+                    >
+                      <option value="Grey Yarn">{RAW_COLOUR}</option>
+                      <option value="Dyed Yarn">Dyed Yarn</option>
+                    </select>
+                  </PoLineField>
+
+                </PoLineRow>
+
+                {/* Row 2 — colour (under Cora / Raw / Dyed), specification, quantity and price */}
+                <PoLineRow>
+                  <PoLineField label="Colour / Shade" htmlFor={fid('shade')} wide>
+                    {isDyed ? (
+                      <input
+                        id={fid('shade')}
+                        type="text"
+                        value={l.shade_code || l.color_name || ''}
+                        onChange={(e) => updateLine(idx, { shade_code: e.target.value, color_name: e.target.value })}
+                        className="input border-purple-300 bg-purple-50/40"
+                        placeholder="Shade / Color"
+                      />
+                    ) : (
+                      <input id={fid('shade')} type="text" value={RAW_COLOUR} disabled className="input" title="Undyed yarn has no colour of its own" />
+                    )}
+                  </PoLineField>
                   <PoLineField label="Composition" htmlFor={fid('composition')} wide>
                     <input
                       id={fid('composition')}
