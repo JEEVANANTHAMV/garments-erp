@@ -83,6 +83,10 @@ import { shippingBillRouter, exportIncentiveRouter } from './modules/invoice/shi
 import { sampleCostRouter } from './modules/sample/sampleCost.routes.js';
 import { sampleAllocRouter } from './modules/sample/sampleAlloc.routes.js';
 import { sampleReportsRouter } from './modules/sample/sampleReports.routes.js';
+import { transportMastersRouter } from './modules/transport/transportMasters.routes.js';
+import { transportRequestsRouter } from './modules/transport/transportRequests.routes.js';
+import { transportTripsRouter, driverRouter } from './modules/transport/transportTrips.routes.js';
+import { gateReportsRouter, transportDashboardRouter } from './modules/transport/gateReports.routes.js';
 
 export function createApp() {
   const app = express();
@@ -202,6 +206,13 @@ export function createApp() {
   api.use('/tna', tnaRouter);                 // /tna, /tna/:id, /tna/dashboard, /tna/templates, etc.
   api.use('/', jobworkDivisionRouter);       // /jobwork-invoices/:id/print (division billing header)
   api.use('/', lineAllocationPlanRouter);    // /sewing/line-allocation, /checking/line-allocation, /sewing/daily-plan, /checking/daily-plan
+  // Gate security · transport (db/150): vehicle requests → coordinator approval → trip with driver + vehicle → driver screen
+  api.use('/transport', transportMastersRouter);   // /transport/vehicles, /drivers, /request-types, /locations, /driver-candidates
+  api.use('/transport', transportRequestsRouter);  // /transport/requests (+ submit / approve / reject / clarification / cancel / amendment / attachments)
+  api.use('/transport', transportTripsRouter);     // /transport/trips (+ assign / reassign / cancel / close-exception), /transport/availability
+  api.use('/transport', transportDashboardRouter); // /transport/dashboard (coordinator KPIs)
+  api.use('/driver', driverRouter);                // /driver/trips (own trips only), /driver/stops/:id/arrive|complete
+  api.use('/gate-reports', gateReportsRouter);     // /gate-reports/visitors, transport-requests, trip-sheet, vehicle- / driver-utilisation …
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

@@ -924,9 +924,12 @@ export const transactionResources: ResourceConfig[] = [
     filters: ['visitor_type', 'status', 'party_id'],
     autoNumber: { column: 'entry_no', docType: 'GATE_VISITOR' },
     beforeWrite: (_req, data, before) => stampGateNow(data, before, 'visit_date', 'in_time'),
-    selectExtra: 'p.party_name',
-    joins: 'LEFT JOIN mst_party p ON p.id = t.party_id',
+    selectExtra: 'p.party_name, hd.dept_name AS host_department_name',
+    joins: 'LEFT JOIN mst_party p ON p.id = t.party_id LEFT JOIN mst_department hd ON hd.id = t.host_department_id',
     fields: [
+      // db/150: visitor photo (camera / file at the gate, stored under /uploads/attachments) and the host's department
+      f('photo_url', s.nullableStr(255).refine((v) => v == null || /^\/uploads\/(attachments|documents)\/[\w.-]+$/.test(v), 'Upload the photo first')),
+      f('host_department_id', s.id()),
       f('entry_no', s.nullableStr(40)), f('visit_date', s.date()), f('in_time', s.nullableStr(10)), f('out_time', s.nullableStr(10)),
       f('visitor_type', s.enum(['VISITOR','CONTRACTOR'])),
       f('person_name', s.strReq(120)), f('organisation', s.nullableStr(160)), f('party_id', s.id()),
