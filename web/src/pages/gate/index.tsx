@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
-import { ScanLine } from 'lucide-react';
+import { ScanLine, Printer } from 'lucide-react';
 import { CrudPage } from '../../components/CrudPage';
+import { PhotoCapture } from '../../components/PhotoCapture';
 import { EwayBillButton } from '../../components/EwayBillButton';
 import { useAuth } from '../../lib/auth';
-import { Badge } from '../../components/ui';
+import { Badge, ImageThumbnail } from '../../components/ui';
 import { http, ApiError } from '../../lib/api';
 import { fmtDecimal, fmtDate, humanize } from '../../lib/format';
 
@@ -416,6 +417,7 @@ export function GateVisitorsPage() {
       searchPlaceholder="Search entry no, name, company, phone or vehicle…"
       defaultSort={{ key: 'visit_date', dir: 'desc' }}
       columns={[
+        { key: 'photo_url', header: 'Photo', width: 'w-14', render: (r: any) => <span onClick={(e) => e.stopPropagation()}><ImageThumbnail url={r.photo_url} title={r.person_name} size="sm" /></span> },
         { key: 'entry_no', header: 'Entry No', sortable: true,
           render: (r: any) => <span className="tabular-nums text-small font-bold text-brand-700">{r.entry_no}</span> },
         { key: 'visit_date', header: 'Date & Time', sortable: true,
@@ -429,9 +431,12 @@ export function GateVisitorsPage() {
         { key: 'person_name', header: 'Name',
           render: (r: any) => <div><p className="font-medium">{r.person_name}{r.person_count > 1 ? ` +${r.person_count - 1}` : ''}</p><p className="text-caption text-ink-secondary">{r.organisation || r.party_name || ''}</p></div> },
         { key: 'purpose', header: 'Purpose', render: (r: any) => r.purpose || '—' },
-        { key: 'whom_to_meet', header: 'Meeting', render: (r: any) => r.whom_to_meet || '—' },
+        { key: 'whom_to_meet', header: 'Meeting', render: (r: any) => <div><p>{r.whom_to_meet || '—'}</p>{r.host_department_name && <p className="text-caption text-ink-secondary">{r.host_department_name}</p>}</div> },
         { key: 'status', header: 'Status',
           render: (r: any) => <Badge tone={r.status === 'IN' ? 'green' : r.status === 'OUT' ? 'slate' : 'red'}>{humanize(r.status)}</Badge> },
+        { key: 'pass', header: '', render: (r: any) => (
+          <button className="rounded-md p-1.5 text-ink-muted hover:bg-brand-50 hover:text-brand-700" title="Print visitor pass" data-action="print-pass"
+            onClick={(e) => { e.stopPropagation(); window.open(`/gate/visitors/${r.id}/pass`, '_blank'); }}><Printer size={14} /></button>) },
       ]}
       filters={[
         { name: 'visitor_type', label: 'Type', options: VISITOR_TYPES },
@@ -448,12 +453,16 @@ export function GateVisitorsPage() {
         { name: 'person_count', label: 'No. of Persons', type: 'number', defaultValue: 1 },
         { name: 'purpose', label: 'Purpose', placeholder: 'e.g. Buyer inline inspection / machine service' },
         { name: 'whom_to_meet', label: 'Whom to Meet' },
+        { name: 'host_department_id', label: 'Department (host)', lookup: 'departments' },
         { name: 'vehicle_no', label: 'Vehicle Number' },
         { name: 'id_proof', label: 'ID Proof', placeholder: 'e.g. Aadhaar / Driving licence' },
         { name: 'out_time', label: 'Out Time', type: 'time' },
         { name: 'status', label: 'Status', options: VISITOR_STATUSES, defaultValue: 'IN' },
         { name: 'security_guard', label: 'Security Officer Name' },
         { name: 'remarks', label: 'Remarks', type: 'textarea', span: 2 },
+        // client voice note 04-Nov-2026: capture the visitor's photo when needed (camera, or the phone camera / a file on http)
+        { name: 'photo_url', label: 'Visitor Photo', span: 2,
+          render: (v, set) => <PhotoCapture label="Visitor photo (optional)" value={(v as string) ?? null} onChange={set} filePrefix="visitor" /> },
       ]}
     />
   );
