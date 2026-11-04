@@ -150,6 +150,38 @@ function brandHeader(pdf: Doc, d: YarnIssueDcPdf, first: boolean, page: number) 
   return { y: y + 7, pageNoAt: null };
 }
 
+/* ---------- Code 128 (set B) barcode of the DC No. — same symbology as the app's printed DCs (web/src/lib/barcode.ts) ---------- */
+const C128 = [
+  '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+  '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+  '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+  '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+  '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+  '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+  '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+  '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+  '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+  '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+  '114131', '311141', '411131', '211412', '211214', '211232', '2331112',
+];
+const BAR_H = 24;
+function barcode(pdf: Doc, text: string, x: number, y: number, maxW: number) {
+  const codes = [104];
+  for (const ch of text) codes.push(ch.charCodeAt(0) - 32);
+  let sum = 104;
+  for (let i = 1; i < codes.length; i++) sum += codes[i] * i;
+  codes.push(sum % 103, 106);
+  const mods = codes.flatMap((c) => C128[c].split('').map(Number));
+  const total = mods.reduce((a, b) => a + b, 0);
+  const m = Math.min(1.1, (maxW - 90) / total);
+  let bx = x;
+  pdf.save().fillColor('#000000');
+  mods.forEach((w, i) => { if (i % 2 === 0) pdf.rect(bx, y, w * m, BAR_H).fill(); bx += w * m; });
+  pdf.restore();
+  pdf.font('Helvetica-Bold').fontSize(8).fillColor(INK).text(T(text), bx + 8, y + 3, { lineBreak: false });
+  pdf.font('Helvetica').fontSize(7.4).fillColor(MUTED).text('Scan at gate', bx + 8, y + 14, { lineBreak: false });
+}
+
 /* ---------- DC information panel ---------- */
 function infoPanel(pdf: Doc, d: YarnIssueDcPdf, y: number) {
   const split = X0 + W * 0.56;
@@ -174,7 +206,8 @@ function infoPanel(pdf: Doc, d: YarnIssueDcPdf, y: number) {
   const vehH = Math.max(18, pdf.heightOfString(T(d.dc.vehicle_no || '-'), { width: rightVW }) + 4);
   pdf.font('Helvetica-Bold').fontSize(10);
   const purH = pdf.heightOfString(T(d.dc.purpose || '-'), { width: X1 - 10 - rightLX - 12 }) + 10;
-  const hR = 8 + vehH + 8 + 14 + purH + 6;
+  const scan = d.dc.doc_status === 'APPROVED' && /^[\x20-\x7e]{1,40}$/.test(d.dc.dc_no);
+  const hR = 8 + vehH + 8 + 14 + purH + 6 + (scan ? BAR_H + 16 : 0);
   const h = Math.max(hL.reduce((a, b) => a + b, 0) + 10, hR);
   pdf.save().roundedRect(X0, y, W, h, 6).lineWidth(0.9).strokeColor(BORDER).stroke().restore();
   pdf.save().moveTo(split, y + 8).lineTo(split, y + h - 8).lineWidth(0.8).strokeColor(BORDER).stroke().restore();
@@ -199,6 +232,8 @@ function infoPanel(pdf: Doc, d: YarnIssueDcPdf, y: number) {
   pdf.save().roundedRect(rightLX - 4, yy - 2, X1 - 8 - rightLX + 4, purH, 4).fill(GOLD_L).restore();
   pdf.save().rect(rightLX - 4, yy - 2, 2.2, purH).fill(GOLD).restore();
   pdf.font('Helvetica-Bold').fontSize(10).fillColor(NAVY_D).text(T(d.dc.purpose || '-'), rightLX + 4, yy + 3, { width: X1 - 10 - rightLX - 12 });
+  // DC No. as a Code 128 barcode: the gate scans it to load the DC (gate pass)
+  if (scan) barcode(pdf, d.dc.dc_no, rightLX - 4, yy + purH + 6, X1 - 8 - (rightLX - 4));
   return y + h + 8;
 }
 

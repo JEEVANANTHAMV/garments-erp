@@ -325,6 +325,13 @@ yarnIssueDcRouter.get(`${BASE}/job-defaults/:programId`, requirePermission('PROD
   } });
 }));
 
+/** DC id from its number (the program screens know the DC by number). */
+yarnIssueDcRouter.get(`${BASE}/by-no/:dcNo`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const r = await queryOne<any>('SELECT id, dc_no, doc_status FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [req.user!.companyId, String(req.params.dcNo)]);
+  if (!r) throw NotFound('Knitting DC not found');
+  res.json({ success: true, data: r });
+}));
+
 /** Contractor name / address / GSTIN for the header auto-fill. */
 yarnIssueDcRouter.get(`${BASE}/contractor/:partyId`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const c = await contractorSnapshot(req.user!.companyId, Number(req.params.partyId));
