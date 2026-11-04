@@ -48,3 +48,26 @@ CREATE TABLE IF NOT EXISTS trx_document_mail_log (
   KEY ix_dml_doc (company_id, doc_type, doc_id, sent_at),
   KEY ix_dml_company_date (company_id, sent_at)
 ) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
+-- PO billing + shipping (delivery) address on every PO type (client 04-Nov-2026, clip 5):
+-- "Shipping address same as billing" tick → shipping = billing; untick → the user types / picks the delivery address.
+-- trx_purchase_order (yarn / fabric) already has billing_address / shipping_address; trim and general POs get them.
+-- ---------------------------------------------------------------------
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_purchase_order' AND COLUMN_NAME='ship_same_as_billing');
+SET @s = IF(@x=0, 'ALTER TABLE trx_purchase_order ADD COLUMN ship_same_as_billing TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''1 = shipping address is the billing address''', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_trim_po' AND COLUMN_NAME='billing_address');
+SET @s = IF(@x=0, 'ALTER TABLE trx_trim_po
+  ADD COLUMN billing_address TEXT NULL COMMENT ''Bill to (default: our company address)'',
+  ADD COLUMN shipping_address TEXT NULL COMMENT ''Deliver to'',
+  ADD COLUMN ship_same_as_billing TINYINT(1) NOT NULL DEFAULT 1', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+
+SET @x = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='trx_general_purchase' AND COLUMN_NAME='billing_address');
+SET @s = IF(@x=0, 'ALTER TABLE trx_general_purchase
+  ADD COLUMN billing_address TEXT NULL COMMENT ''Bill to (default: our company address)'',
+  ADD COLUMN shipping_address TEXT NULL COMMENT ''Deliver to'',
+  ADD COLUMN ship_same_as_billing TINYINT(1) NOT NULL DEFAULT 1', 'SELECT 1');
+PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;

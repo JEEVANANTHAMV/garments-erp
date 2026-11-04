@@ -149,8 +149,8 @@ async function logSend(row: {
 }) {
   const r = await execute(
     `INSERT INTO trx_document_mail_log
-       (company_id, doc_type, doc_id, doc_no, to_emails, cc_emails, subject, attachment, status, error_message, message_id, sent_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+       (company_id, doc_type, doc_id, doc_no, to_emails, cc_emails, subject, attachment, status, error_message, message_id, sent_by, sent_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?, UTC_TIMESTAMP())`,   // UTC like the pool (timezone 'Z'), whatever the DB server's zone
     [row.companyId, row.docType, row.docId, row.docNo, row.to.join(', ').slice(0, 2000), row.cc.join(', ').slice(0, 2000) || null,
       row.subject.slice(0, 300), row.attachment, row.status, row.error?.slice(0, 1000) ?? null, row.messageId?.slice(0, 300) ?? null, row.userId]);
   return Number(r.insertId);

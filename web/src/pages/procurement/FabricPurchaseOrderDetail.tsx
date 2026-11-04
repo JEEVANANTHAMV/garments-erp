@@ -1134,6 +1134,10 @@ export default function FabricPurchaseOrderDetailPage() {
                     />
                   </PoLineField>
 
+                </PoLineRow>
+
+                {/* Row 2 — Pantone (dyed), specification, quantity and price */}
+                <PoLineRow>
                   <PoLineField label="Pantone / Spec" htmlFor={fid('pantone')}>
                     {isDyed ? (
                       <input
@@ -1148,10 +1152,6 @@ export default function FabricPurchaseOrderDetailPage() {
                       <input id={fid('pantone')} type="text" value="" placeholder="Dyed fabric only" disabled className="input" />
                     )}
                   </PoLineField>
-                </PoLineRow>
-
-                {/* Row 2 — specification, quantity and price */}
-                <PoLineRow>
                   <PoLineField label="Composition" htmlFor={fid('composition')} wide>
                     <input
                       id={fid('composition')}

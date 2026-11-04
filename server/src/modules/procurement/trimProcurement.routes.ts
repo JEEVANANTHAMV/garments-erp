@@ -57,6 +57,10 @@ const trimPoSchema = z.object({
   grand_total: z.coerce.number().min(0).default(0),
   status: z.enum(['DRAFT', 'APPROVED', 'PARTIAL', 'CLOSED', 'CANCELLED']).default('APPROVED'),
   remarks: s.text(),
+  // bill to / deliver to on the PO print (client 04-Nov-2026); undefined on update = keep what is stored
+  billing_address: z.string().max(2000).nullable().optional(),
+  shipping_address: z.string().max(2000).nullable().optional(),
+  ship_same_as_billing: z.union([z.boolean(), z.coerce.number()]).transform((v) => (v ? 1 : 0)).optional(),
   lines: z.array(trimPoLineSchema).min(1),
 });
 
@@ -117,6 +121,17 @@ const trimGrnSchema = z.object({
   remarks: s.text(),
   lines: z.array(trimGrnLineSchema).min(1),
 });
+
+/** Bill to / deliver to: kept when not sent; "same as billing" copies the billing address (client 04-Nov-2026). */
+function trimPoAddress(body: z.infer<typeof trimPoSchema>, before: any) {
+  const out = {
+    billing_address: body.billing_address !== undefined ? (body.billing_address || null) : (before?.billing_address ?? null),
+    shipping_address: body.shipping_address !== undefined ? (body.shipping_address || null) : (before?.shipping_address ?? null),
+    ship_same_as_billing: body.ship_same_as_billing !== undefined ? body.ship_same_as_billing : Number(before?.ship_same_as_billing ?? 1),
+  };
+  if (out.ship_same_as_billing) out.shipping_address = out.billing_address;
+  return out;
+}
 
 // ============================================================
 // TRIM PURCHASE ORDER ROUTES
@@ -208,6 +223,7 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
   const cid = req.user!.companyId;
   const uid = req.user!.id;
   const body = trimPoSchema.parse(req.body);
+  const addr = trimPoAddress(body, null);
 
   const result = await transaction(async (tx) => {
     const poNo = body.po_no || await nextDocNumber(tx, cid, 'TPO');
@@ -216,13 +232,15 @@ trimProcurementRouter.post('/trim-pos', requirePermission('PROCUREMENT.CREATE'),
       tx,
       `INSERT INTO trx_trim_po
          (company_id, po_no, po_date, io_no, style_id, supplier_id, currency_id, exchange_rate, delivery_date,
-          payment_terms, is_interstate, total_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, grand_total, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          payment_terms, is_interstate, total_amount, tax_amount, cgst_amount, sgst_amount, igst_amount, grand_total, status, remarks, created_by,
+          billing_address, shipping_address, ship_same_as_billing)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cid, poNo, body.po_date, body.io_no, body.style_id || null, body.supplier_id, body.currency_id || 1, body.exchange_rate || 1.0, body.delivery_date || null,
         body.payment_terms || null, body.is_interstate ? 1 : 0, body.total_amount || 0, body.tax_amount || 0,
         body.cgst_amount || 0, body.sgst_amount || 0, body.igst_amount || 0,
-        body.grand_total || 0, body.status || 'APPROVED', body.remarks || null, uid
+        body.grand_total || 0, body.status || 'APPROVED', body.remarks || null, uid,
+        addr.billing_address, addr.shipping_address, addr.ship_same_as_billing
       ]
     );
 
@@ -257,11 +275,12 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
   const cid = req.user!.companyId;
   const body = trimPoSchema.parse(req.body);
 
-  const existing = await queryOne('SELECT id, status FROM trx_trim_po WHERE id = ? AND company_id = ?', [req.params.id, cid]);
+  const existing = await queryOne('SELECT id, status, billing_address, shipping_address, ship_same_as_billing FROM trx_trim_po WHERE id = ? AND company_id = ?', [req.params.id, cid]);
   if (!existing) throw NotFound('Trim PO not found');
   if (existing.status === 'CLOSED' || existing.status === 'CANCELLED') {
     throw BadRequest(`Cannot update PO in ${existing.status} status`);
   }
+  const addr = trimPoAddress(body, existing);
 
   const warnings = await transaction(async (tx) => {
     await txExecute(
@@ -270,13 +289,13 @@ trimProcurementRouter.put('/trim-pos/:id', requirePermission('PROCUREMENT.UPDATE
           SET po_date = ?, io_no = ?, style_id = ?, supplier_id = ?, currency_id = ?, exchange_rate = ?, delivery_date = ?,
               payment_terms = ?, is_interstate = ?, total_amount = ?, tax_amount = ?,
               cgst_amount = ?, sgst_amount = ?, igst_amount = ?, grand_total = ?,
-              status = ?, remarks = ?
+              status = ?, remarks = ?, billing_address = ?, shipping_address = ?, ship_same_as_billing = ?
         WHERE id = ? AND company_id = ?`,
       [
         body.po_date, body.io_no, body.style_id, body.supplier_id, body.currency_id || 1, body.exchange_rate || 1.0, body.delivery_date,
         body.payment_terms, body.is_interstate || 0, body.total_amount, body.tax_amount,
         body.cgst_amount || 0, body.sgst_amount || 0, body.igst_amount || 0, body.grand_total,
-        body.status, body.remarks, req.params.id, cid
+        body.status, body.remarks, addr.billing_address, addr.shipping_address, addr.ship_same_as_billing, req.params.id, cid
       ]
     );
 

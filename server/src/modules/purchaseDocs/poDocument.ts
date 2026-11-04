@@ -30,6 +30,9 @@ export interface PoLine {
   taxable: number;
   gstRate: number;
   tax: number;
+  /** Trim POs print colour and size in their own columns. */
+  color?: string | null;
+  size?: string | null;
 }
 
 export interface PoDocument {
@@ -54,8 +57,11 @@ export interface PoDocument {
     phone: string | null; email: string | null; website: string | null; stateCode: string | null; logoFile: string | null;
   };
   supplier: { id: number; name: string; address: string[]; gstin: string | null; phone: string | null; email: string | null; stateCode: string | null };
-  billingAddress: string | null;
-  shippingAddress: string | null;
+  /** Bill to — the PO's billing address, else our company address block. */
+  billingAddress: string;
+  /** Deliver to — "same as billing" / blank → the billing address. */
+  shippingAddress: string;
+  shipSameAsBilling: boolean;
   lines: PoLine[];
   totals: {
     taxable: number; cgst: number; sgst: number; igst: number; gst: number;
@@ -103,6 +109,16 @@ async function loadCompany(companyId: number, branchId: number | null) {
     stateCode: str(c.state_gst_code) ?? (str(c.gstin)?.slice(0, 2) ?? null),
     logoFile: logoFile(str(c.logo_path)),
   };
+}
+
+type Company = Awaited<ReturnType<typeof loadCompany>>;
+/** "Bill to" default: our company name, address and GSTIN (as the PO entry screens prefill it). */
+export const companyBlock = (c: Company) => [c.name, ...c.address, c.gstin ? `GSTIN: ${c.gstin}` : null].filter(Boolean).join('\n');
+function resolveAddresses(company: Company, row: any) {
+  const billing = str(row.billing_address) ?? companyBlock(company);
+  const same = Number(row.ship_same_as_billing ?? 0) === 1;
+  const shipping = same ? billing : (str(row.shipping_address) ?? billing);
+  return { billingAddress: billing, shippingAddress: shipping, shipSameAsBilling: same || shipping === billing };
 }
 
 async function loadSupplier(supplierId: number, companyId: number) {
@@ -260,6 +276,7 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
   if (str(po.quotation_no)) meta.push(['Quotation', String(po.quotation_no)]);
   if (str(po.order_type)) meta.push(['Order type', String(po.order_type)]);
 
+  const company = await loadCompany(cid, po.branch_id ? Number(po.branch_id) : null);
   return {
     type, docType: PO_DOC_TYPE[type], title, id, companyId: cid,
     no: String(po.po_no || `PO-${id}`), date: dateStr(po.po_date), deliveryDate: dateStr(po.delivery_date),
@@ -267,9 +284,8 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
     isDraft: ['DRAFT', 'PENDING'].includes(status), isCancelled: ['CANCELLED', 'REJECTED'].includes(status),
     currency: { code: String(po.currency_code || 'INR'), symbol: str(po.currency_symbol) },
     exchangeRate: num(po.exchange_rate) || 1, isInterstate: interstate, meta,
-    company: await loadCompany(cid, po.branch_id ? Number(po.branch_id) : null),
+    company, ...resolveAddresses(company, po),
     supplier: await loadSupplier(Number(po.supplier_id), cid),
-    billingAddress: str(po.billing_address), shippingAddress: str(po.shipping_address),
     lines,
     totals: totalsFrom(lines, interstate, {
       freight: num(po.freight_charges), other: num(po.other_charges), otherSign: num(po.other_charges) < 0 ? -1 : 1,
@@ -300,8 +316,6 @@ async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
     const details: string[] = [];
     if (str(l.trim_code) && l.trim_code !== l.trim_name) details.push(`Code: ${l.trim_code}`);
     if (str(l.specification)) details.push(String(l.specification));
-    const cs = [l.color_name ? `Colour: ${l.color_name}` : null, l.trim_size ? `Size: ${l.trim_size}` : null].filter(Boolean);
-    if (cs.length) details.push(cs.join(' | '));
     const taxable = r2(num(l.amount) || num(l.order_qty) * num(l.rate));
     const gstRate = interstate ? (num(l.igst_rate) || num(l.gst_rate)) : num(l.gst_rate);
     return {
@@ -309,12 +323,14 @@ async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
       job: jobs.get(Number(l.so_id)) ?? str(po.io_no),
       hsn: str(l.trim_hsn), qty: num(l.order_qty), uom: String(l.uom_code ?? ''), rate: num(l.rate),
       taxable, gstRate, tax: lineTax(taxable, gstRate, num(l.tax_amount) || num(l.igst_amount)),
+      color: str(l.color_name), size: str(l.trim_size),
     };
   });
   const status = String(po.status || 'APPROVED').toUpperCase();
   const meta: [string, string][] = [];
   if (str(po.io_no)) meta.push(['IO / Job No', String(po.io_no)]);
   if (str(po.style_code)) meta.push(['Style', `${po.style_code}${po.style_name ? ` - ${po.style_name}` : ''}`]);
+  const company = await loadCompany(cid, null);
   return {
     type: 'trim', docType: PO_DOC_TYPE.trim, title: 'TRIMS & ACCESSORIES PURCHASE ORDER', id, companyId: cid,
     no: String(po.po_no || `TPO-${id}`), date: dateStr(po.po_date), deliveryDate: dateStr(po.delivery_date),
@@ -322,8 +338,8 @@ async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
     isDraft: status === 'DRAFT', isCancelled: status === 'CANCELLED',
     currency: { code: String(po.currency_code || 'INR'), symbol: str(po.currency_symbol) },
     exchangeRate: num(po.exchange_rate) || 1, isInterstate: interstate, meta,
-    company: await loadCompany(cid, null), supplier: await loadSupplier(Number(po.supplier_id), cid),
-    billingAddress: null, shippingAddress: null, lines,
+    company, ...resolveAddresses(company, po), supplier: await loadSupplier(Number(po.supplier_id), cid),
+    lines,
     totals: totalsFrom(lines, interstate, {}),
     remarks: str(po.remarks), preparedBy: await userName(po.created_by),
   };
@@ -374,6 +390,7 @@ async function loadGeneralPo(id: number, cid: number): Promise<PoDocument> {
   const status = String(po.status_code === 'CANCELLED' ? 'CANCELLED' : (po.approval_state || 'DRAFT')).toUpperCase();
   const meta: [string, string][] = [];
   if (str(po.purchase_type)) meta.push(['Purchase type', String(po.purchase_type).replace(/_/g, ' ')]);
+  const company = await loadCompany(cid, po.branch_id ? Number(po.branch_id) : null);
   return {
     type: 'general', docType: PO_DOC_TYPE.general, title: 'GENERAL PURCHASE ORDER', id, companyId: cid,
     no: String(po.purchase_no || `GP-${id}`), date: dateStr(po.purchase_date), deliveryDate: null,
@@ -381,9 +398,9 @@ async function loadGeneralPo(id: number, cid: number): Promise<PoDocument> {
     isDraft: ['DRAFT', 'PENDING'].includes(status), isCancelled: ['CANCELLED', 'REJECTED'].includes(status),
     currency: { code: String(po.currency_code || 'INR'), symbol: str(po.currency_symbol) },
     exchangeRate: num(po.exchange_rate) || 1, isInterstate: interstate, meta,
-    company: await loadCompany(cid, po.branch_id ? Number(po.branch_id) : null),
+    company, ...resolveAddresses(company, po),
     supplier: await loadSupplier(Number(po.supplier_id), cid),
-    billingAddress: null, shippingAddress: null, lines,
+    lines,
     totals: totalsFrom(lines, interstate, {
       freight: num(po.freight_charges), insurance: num(po.insurance), customs: num(po.customs_duty), clearing: num(po.clearing_charges),
       other: Math.abs(num(po.other_charges)), otherSign: num(po.other_charges_sign) < 0 ? -1 : 1, otherLabel: str(po.other_charges_label),
