@@ -111,6 +111,7 @@ export const NAV: NavSection[] = [
     label: '4 · Yarn & Knitting', group: 'PRODUCTION', menu: 'Yarn & Knitting', icon: Workflow,
     items: [
       { label: 'Knitting Programs',            to: '/production/knitting-programs', icon: Layers, perms: ['PRODUCTION.VIEW'] },
+      { label: 'Knitting Yarn Issue DC',       to: '/production/knitting-yarn-dcs', icon: Truck, perms: ['PRODUCTION.VIEW'] },
       { label: 'Yarn Process – Outward DC',    to: '/production/yarn-process/outward', icon: Truck, perms: ['YARN_PROCESS.VIEW'] },
       { label: 'Yarn Process – Inward / GRN',  to: '/production/yarn-process/inward', icon: PackageCheck, perms: ['YARN_PROCESS.VIEW'] },
       { label: 'Yarn Process – Return',        to: '/production/yarn-process/returns', icon: ShieldAlert, perms: ['YARN_PROCESS.VIEW'] },

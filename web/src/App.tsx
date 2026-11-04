@@ -70,6 +70,7 @@ import TrimGRNDetailPage from './pages/procurement/TrimGRNDetail';
 
 import KnittingPage from './pages/production/KnittingPage';
 import KnittingProgramPage from './pages/production/KnittingProgramPage';
+import KnittingYarnIssueDcPage from './pages/production/KnittingYarnIssueDcPage';
 import ProcessRoutePage from './pages/production/ProcessRoutePage';
 import { ProcessMasterPage, ContractorBillsPage } from './pages/production/ProcessMasterPage';
 import { JobRateCardPage, ContractorAdvancesPage, ContractorDebitNotesPage } from './pages/production/ContractorPages';
@@ -341,6 +342,8 @@ export default function App() {
                   <Route path="traceability" element={<TraceabilitySearchPage />} />
                   <Route path="knitting" element={<KnittingPage />} />
                   <Route path="knitting-programs" element={<KnittingProgramPage />} />
+                  <Route path="knitting-yarn-dcs" element={<KnittingYarnIssueDcPage />} />
+                  <Route path="knitting-yarn-dcs/:id" element={<KnittingYarnIssueDcPage />} />
                   <Route path="process-routes" element={<ProcessRoutePage />} />
                   <Route path="yarn-processes" element={<YarnProcessPage />} />
                   <Route path="collar-knitting" element={<CollarKnittingPage />} />

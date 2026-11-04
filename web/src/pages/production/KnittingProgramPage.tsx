@@ -1,6 +1,7 @@
 import { RAW_COLOUR, showRawColour } from '../../lib/rawColour';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Eye, Trash2, X, Save, Layers,
   RefreshCw, AlertCircle, FileText, Boxes, ShieldCheck, PackageCheck, Truck, PackagePlus,
@@ -12,7 +13,7 @@ import { useToast } from '../../hooks/useToast';
 import { Modal, FormSection, PageHeader, Input, Spinner, LoadingBlock } from '../../components/ui';
 import { useQuery as useQ } from '@tanstack/react-query';
 import {
-  KNIT_DC_READY, KnittingDcModal, KnittingDcPrint, KnittingInwardModal, KnittingDcInwardTab,
+  KNIT_DC_READY, KnittingDcPrint, KnittingInwardModal, KnittingDcInwardTab,
 } from './KnittingDcInward';
 
 /* ─────────────────────────────────────────────────────────────────
@@ -131,7 +132,8 @@ export default function KnittingProgramPage() {
   const [activeTab, setActiveTab] = useState<'yarns' | 'stripes' | 'issues'>('yarns');
 
   // Knitting DC (yarn outward) and grey fabric inward, per released program.
-  const [dcProgId, setDcProgId] = useState<number | null>(null);
+  // the knitting DC is the yarn issue DC screen (draft → approve, A4 print)
+  const nav = useNavigate();
   const [inwardProgId, setInwardProgId] = useState<number | null>(null);
   const [printDc, setPrintDc] = useState<string | null>(null);
 
@@ -664,7 +666,7 @@ export default function KnittingProgramPage() {
                             id={`btn-knit-dc-kp-${p.id}`}
                             className="rounded p-1.5 text-orange-500 hover:bg-orange-50 hover:text-orange-700"
                             title="Knitting DC (yarn outward to knitter)"
-                            onClick={() => setDcProgId(p.id)}
+                            onClick={() => nav(`/production/knitting-yarn-dcs/new?program_id=${p.id}`)}
                           >
                             <Truck size={14} />
                           </button>
@@ -1120,8 +1122,6 @@ export default function KnittingProgramPage() {
         ) : null}
       </Modal>
 
-      <KnittingDcModal programId={dcProgId} open={!!dcProgId} onClose={() => setDcProgId(null)}
-        onPrint={setPrintDc} />
       <KnittingInwardModal programId={inwardProgId} open={!!inwardProgId} onClose={() => setInwardProgId(null)} />
       <KnittingDcPrint dcNo={printDc} onClose={() => setPrintDc(null)} />
     </>
