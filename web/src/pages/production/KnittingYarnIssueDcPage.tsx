@@ -282,7 +282,7 @@ function DcEditor({ id }: { id: number | null }) {
     if (!v) return;
     try {
       const c = (await http.get<{ data: any }>(`${BASE}/contractor/${v}`)).data;
-      setH((x: any) => ({ ...x, vendor_id: v, contractor_address: c?.address ?? '' }));
+      setH((x: any) => ({ ...x, vendor_id: v, vendor_name: c?.name ?? '', contractor_address: c?.address ?? '' }));
     } catch { /* address stays as typed */ }
   }
 
@@ -394,6 +394,8 @@ function DcEditor({ id }: { id: number | null }) {
           <Select label="Contractor (knitter)" required value={h.vendor_id} placeholder="— Select —" disabled={!isDraft || !headerEditable}
             onChange={(e) => void pickContractor(e.target.value)} id="kyd-contractor">
             {contractors.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            {/* the program's / DC's knitter even when the party is not flagged job worker in the master */}
+            {h.vendor_id && !contractors.some((p) => String(p.id) === String(h.vendor_id)) && <option value={h.vendor_id}>{h.vendor_name || dc?.contractor_name_snapshot || `Party #${h.vendor_id}`}</option>}
           </Select>
           <Select label="From Store" required value={h.warehouse_id} placeholder="— Select —" disabled={!isDraft || !headerEditable}
             onChange={(e) => { setH({ ...h, warehouse_id: e.target.value }); setDirty(true); }} id="kyd-store">
