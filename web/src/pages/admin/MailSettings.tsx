@@ -82,8 +82,8 @@ export function MailSettingsPanel() {
           <Mail size={18} className="text-brand-600" />
           <h2 className="text-title font-semibold text-ink">Outgoing mail (SMTP)</h2>
           {f.configured
-            ? <Badge variant="success">Set up</Badge>
-            : <Badge variant="warning">Not set up</Badge>}
+            ? <Badge tone="green">Set up</Badge>
+            : <Badge tone="amber">Not set up</Badge>}
           <p className="w-full text-small text-ink-secondary">
             Purchase orders are e-mailed to suppliers from this mail account, with the PO PDF attached. Each company has its own settings.
           </p>

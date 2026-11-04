@@ -12,6 +12,8 @@ import { http, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../lib/auth';
 import { NAV } from '../../lib/nav';
+import { useSearchParams } from 'react-router-dom';
+import { MailSettingsPanel } from './MailSettings';
 
 /* ---------------------------------------------------------------- Users */
 export function UsersPage() {
@@ -896,6 +898,13 @@ export function SettingsPage() {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
   const [find, setFind] = useState('');
+  // Settings tabs: system keys | Mail (SMTP) for e-mailing POs (client 04-Nov-2026) — /admin/settings?tab=mail
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'mail' ? 'mail' : 'system';
+  const tabs = (
+    <Tabs tabs={[{ key: 'system', label: 'System settings' }, { key: 'mail', label: 'Mail (SMTP)' }]} active={tab}
+      onChange={(k) => setParams(k === 'mail' ? { tab: 'mail' } : {}, { replace: true })} />
+  );
 
   if (settings.data && !loaded) {
     const m: Record<string, string> = {};
@@ -914,6 +923,16 @@ export function SettingsPage() {
     } finally { setBusy(false); }
   };
 
+  if (tab === 'mail') {
+    return (
+      <>
+        <PageHeader title="Mail (SMTP)" subtitle="Outgoing mail server for e-mailing purchase orders to suppliers" />
+        {tabs}
+        <MailSettingsPanel />
+      </>
+    );
+  }
+
   if (settings.isLoading) return <div className="card"><LoadingBlock rows={5} /></div>;
 
   return (
@@ -922,6 +941,7 @@ export function SettingsPage() {
         actions={<button className="btn-primary" onClick={() => void save()} disabled={busy}>
           {busy && <Spinner size={14} />}<Save size={15} /> Save all
         </button>} />
+      {tabs}
 
       <SearchInput value={find} onChange={setFind} placeholder="Find a setting (key or description)…" className="mb-3 w-full max-w-md" />
       <div className="card p-5">

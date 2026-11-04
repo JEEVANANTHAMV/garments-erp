@@ -6,7 +6,7 @@ import {
   BarChart3, Shield, Settings, Warehouse, GitBranch, CalendarClock, FileCheck2,
   History, Wallet, TrendingUp, Container, Coins, SlidersHorizontal, Search,
   Activity, RefreshCw, ShieldAlert, Workflow, ListChecks, HandCoins, ClipboardList, Gauge,
-  Settings2,
+  Settings2, Mail,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -295,6 +295,7 @@ export const NAV: NavSection[] = [
       { label: 'Roles',    to: '/admin/roles', icon: Shield, perms: ['ROLE.VIEW'] },
       { label: 'Company',  to: '/admin/company', icon: Building2, perms: ['COMPANY.VIEW'] },
       { label: 'Settings', to: '/admin/settings', icon: Settings, perms: ['SETTINGS.VIEW'] },
+      { label: 'Mail (SMTP)', to: '/admin/settings?tab=mail', icon: Mail, perms: ['SETTINGS.VIEW', 'COMPANY.VIEW'] },
       { label: 'Menu Access', to: '/admin/menu-access', icon: SlidersHorizontal, perms: ['ROLE.VIEW', 'SETTINGS.VIEW'] },
     ],
   },
