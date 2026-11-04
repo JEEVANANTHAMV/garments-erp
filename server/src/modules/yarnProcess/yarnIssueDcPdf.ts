@@ -402,14 +402,12 @@ export async function renderYarnIssueDcPdf(d: YarnIssueDcPdf): Promise<Buffer> {
   const newPage = () => {
     pdf.addPage({ size: 'A4', layout: 'portrait', margin: 0 });
     page += 1;
-    if (stamp) watermark(pdf, stamp);
     footer(pdf);
     const hd = brandHeader(pdf, d, false, page);
     contPageNo.push({ page, y: hd.pageNoAt!.y });
     return hd.y;
   };
 
-  if (stamp) watermark(pdf, stamp);
   footer(pdf);
   let y = brandHeader(pdf, d, true, 1).y;
   if (d.dc.doc_status === 'CANCELLED' && d.dc.cancel_reason) {
@@ -446,6 +444,8 @@ export async function renderYarnIssueDcPdf(d: YarnIssueDcPdf): Promise<Buffer> {
   const total = range.count;
   for (let i = 0; i < total; i++) {
     pdf.switchToPage(range.start + i);
+    // DRAFT / CANCELLED drawn over the content (light, so the text stays readable)
+    if (stamp) watermark(pdf, stamp);
     const info = `DC No. ${d.dc.dc_no}  ·  Page ${i + 1} of ${total}` +
       (d.print.reprint_no > 1 ? `  ·  Reprint ${d.print.reprint_no}` : '') + `  ·  Printed ${d.print.printed_at}${d.print.printed_by ? ` by ${d.print.printed_by}` : ''}`;
     pdf.font('Helvetica').fontSize(7.2).fillColor(MUTED).text(T(info), X0, A4_H - M - 27, { width: W, align: 'right', lineBreak: false });

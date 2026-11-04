@@ -83,6 +83,7 @@ import { shippingBillRouter, exportIncentiveRouter } from './modules/invoice/shi
 import { sampleCostRouter } from './modules/sample/sampleCost.routes.js';
 import { sampleAllocRouter } from './modules/sample/sampleAlloc.routes.js';
 import { sampleReportsRouter } from './modules/sample/sampleReports.routes.js';
+import { labRouter } from './modules/lab/lab.routes.js';
 import { transportMastersRouter } from './modules/transport/transportMasters.routes.js';
 import { transportRequestsRouter } from './modules/transport/transportRequests.routes.js';
 import { transportTripsRouter, driverRouter } from './modules/transport/transportTrips.routes.js';
@@ -108,6 +109,8 @@ export function createApp() {
   app.use('/uploads/export-benefits', (_req, res) => { res.status(404).end(); });
   // Bill tracker documents are private: only GET /api/stores/bill-docs/attachments/:id/download (authenticated, company-scoped).
   app.use('/uploads/bill-docs', (_req, res) => { res.status(404).end(); });
+  // Lab photos / certificates / released reports: only through /api/lab/attachments/:id/file and /api/lab/reports/:id/pdf.
+  app.use('/uploads/lab-files', (_req, res) => { res.status(404).end(); });
   // Knitting DC e-way bill documents: only GET /api/knitting/yarn-issue-dcs/:id/eway-bill/attachment (authenticated, company-scoped).
   app.use('/uploads/knit-dc-ewb', (_req, res) => { res.status(404).end(); });
   app.use('/uploads', express.static(uploadsDir));
@@ -160,7 +163,8 @@ export function createApp() {
   api.use('/', fgReceiptRouter);              // /fg-receipts — the gate into packing (16-Oct-2026)
   api.use('/', cuttingPlanRouter);            // /cutting-plans, /bundles, /fg-receipts
   api.use('/', shipmentRouter);               // /packing-lists, /shipments, /dispatches, /available-packages
-  api.use('/', sampleReportsRouter);          // /samples (register), /samples-dashboard, /sample-reports/* (sample-to-order profitability, 23-Oct-2026)
+  api.use('/lab', labRouter);                 // lab management: washing / garment / textile testing, dual approval (spec 02-Nov-2026)
+  api.use('/', sampleReportsRouter);         // /samples (register), /samples-dashboard, /sample-reports/* (sample-to-order profitability, 23-Oct-2026)
   api.use('/', sampleRouter);                 // /sample-types, /samples/:id (request, stages, QC, approvals, revisions, attachments)
   api.use('/', sampleCostRouter);             // /samples/:id/costs, /samples/:id/cost-sources (sample cost ledger)
   api.use('/', sampleAllocRouter);            // /samples/:id/allocations, /sample-allocations (sample cost → confirmed orders)
