@@ -658,11 +658,33 @@ export function MaterialIssuePage() {
   );
 }
 
+interface JobIssueItem {
+  item_id: number; item_name: string; item_code: string | null; uom_id: number | null; uom_code: string | null;
+  on_requirement: boolean; required: number | null; allowed: number | null; issued: number; balance_to_issue: number | null;
+  job_stock: number; general_stock: number; other_job_stock: number; store_stock: number; available_for_job: number;
+}
+interface JobIssueItems { source: 'REQUIREMENT' | 'JOB_STOCK' | 'ALL'; control: string; work_order: any; items: JobIssueItem[] }
+const ISSUE_TYPES = ['YARN', 'FABRIC', 'TRIM'] as const;
+const q3 = (n: number | null | undefined) => fmtDecimal(Number(n ?? 0), 3).replace(/\.?0+$/, '');
+
+/** Items a work order's job requires (else holds) per material, with balances (client clip 04-Nov-2026). */
+function useJobIssueItems(prodOrderId: string, type: string, warehouseId: string, all: boolean) {
+  return useQuery({
+    queryKey: ['issue-job-items', prodOrderId, type, warehouseId, all],
+    queryFn: async () => (await http.get<{ data: JobIssueItems }>('/inventory/issues/job-items', {
+      prod_order_id: prodOrderId, material_type: type, warehouse_id: warehouseId || undefined, all: all ? 1 : undefined,
+    })).data,
+    enabled: !!prodOrderId,
+  });
+}
+
 function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [head, setHead] = useState<Record<string, any>>({ issue_date: today() });
   const [lines, setLines] = useState<GrnLine[]>([emptyGrnLine()]);
   const [busy, setBusy] = useState(false);
+  // exceptional: issue an item outside the job's requirement (server needs the flag + remarks)
+  const [showAll, setShowAll] = useState(false);
 
   const warehouses = useLookup('warehouses');
   const prodOrders = useLookup('production-orders');
@@ -672,14 +694,26 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
   const trims = useLookup('trims');
   const uoms = useLookup('uoms');
 
+  const wo = String(head.prod_order_id ?? '');
+  const wh = String(head.warehouse_id ?? '');
+  const jobYarn = useJobIssueItems(wo, 'YARN', wh, showAll);
+  const jobFabric = useJobIssueItems(wo, 'FABRIC', wh, showAll);
+  const jobTrim = useJobIssueItems(wo, 'TRIM', wh, showAll);
+  const jobFor = (t: string) => (t === 'YARN' ? jobYarn : t === 'FABRIC' ? jobFabric : jobTrim);
+  const woRow = (prodOrders.data ?? []).find((x: any) => String(x.id) === wo) as any;
+
   const setLine = (k: string, patch: Partial<GrnLine>) =>
     setLines((s) => s.map((l) => (l._key === k ? { ...l, ...patch } : l)));
 
+  const reset = () => { setHead({ issue_date: today() }); setLines([emptyGrnLine()]); setShowAll(false); };
+
   const submit = async () => {
+    if (showAll && wo && !String(head.remarks ?? '').trim()) { toast('Give the reason in remarks for issuing outside the requirement', 'error'); return; }
     setBusy(true);
     try {
       const payload = {
         ...head,
+        allow_off_requirement: !!(wo && showAll),
         lines: lines.filter((l) => l.material_id && l.received_qty).map((l) => ({
           material_type: l.material_type,
           yarn_id: l.material_type === 'YARN' ? Number(l.material_id) : null,
@@ -691,19 +725,18 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
       if (!payload.lines.length) { toast('Add at least one issue line', 'error'); setBusy(false); return; }
       const res = await http.post<{ data: any }>('/inventory/issues', payload);
       toast(`Material issue ${res.data.issue_no} posted`);
-      onDone(); onClose();
-      setHead({ issue_date: today() }); setLines([emptyGrnLine()]);
+      onDone(); onClose(); reset();
     } catch (e) {
       toast(e instanceof ApiError ? e.message : 'Could not post issue', 'error');
     } finally { setBusy(false); }
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="New material issue" size="lg" icon={<PackageMinus size={16} />}
-      footerStart="The issue is rejected if any line exceeds the available balance in that warehouse."
+    <Modal open={open} onClose={onClose} title="New material issue" size="xl" icon={<PackageMinus size={16} />}
+      footerStart="The issue is rejected if a line exceeds the stock in that warehouse, the job's stock, or the job's requirement + allowed excess."
       footer={<>
         <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-        <button className="btn-primary" onClick={() => void submit()} disabled={busy}>
+        <button className="btn-primary" id="mi-post" onClick={() => void submit()} disabled={busy}>
           {busy && <Spinner size={14} />}Post issue
         </button>
       </>}>
@@ -712,13 +745,38 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
           onChange={(e) => setHead((s) => ({ ...s, issue_no: e.target.value }))} />
         <Input label="Issue date" type="date" required value={head.issue_date ?? ''}
           onChange={(e) => setHead((s) => ({ ...s, issue_date: e.target.value }))} />
-        <Select label="From warehouse" required options={toOptions(warehouses.data)} placeholder="— Select —"
+        <Select id="mi-warehouse" label="From warehouse" required options={toOptions(warehouses.data)} placeholder="— Select —"
           value={head.warehouse_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, warehouse_id: e.target.value }))} />
-        <Select label="Work order" options={toOptions(prodOrders.data)} placeholder="— None —"
-          value={head.prod_order_id ?? ''} onChange={(e) => setHead((s) => ({ ...s, prod_order_id: e.target.value }))} />
+        <Select id="mi-wo" label="Work order" options={toOptions(prodOrders.data)} placeholder="— None —"
+          hint={wo ? 'Items list only what this job requires (else what it holds)' : 'Pick the work order to list only its job\'s items'}
+          value={head.prod_order_id ?? ''} onChange={(e) => {
+            setHead((s) => ({ ...s, prod_order_id: e.target.value }));
+            setLines((s) => s.map((l) => ({ ...l, material_id: '' })));   // items depend on the job
+          }} />
         <Select label="Issue to unit" options={toOptions(units.data)} placeholder="— None —"
           value={head.issued_to_unit ?? ''} onChange={(e) => setHead((s) => ({ ...s, issued_to_unit: e.target.value }))} />
+        <Input id="mi-remarks" label="Remarks" hint={showAll && wo ? 'Required: why an item outside the requirement is issued' : undefined}
+          value={head.remarks ?? ''} onChange={(e) => setHead((s) => ({ ...s, remarks: e.target.value }))} />
       </FormSection>
+
+      {wo && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-surface-border bg-surface-muted px-3 py-2 text-small" id="mi-job-strip">
+          <span>Job <strong>{woRow?.job_no ?? '—'}</strong></span>
+          {ISSUE_TYPES.map((t) => {
+            const d = jobFor(t).data;
+            return <span key={t} className="text-ink-secondary">{humanize(t)}: {d ? `${d.items.length} item${d.items.length === 1 ? '' : 's'} (${d.source === 'REQUIREMENT' ? 'requirement' : d.source === 'JOB_STOCK' ? 'job stock — no requirement' : 'all in stock'})` : '…'}</span>;
+          })}
+          <label className="ml-auto inline-flex items-center gap-1.5 font-medium text-amber-800">
+            <input type="checkbox" id="mi-show-all" checked={showAll}
+              onChange={(e) => {
+                if (e.target.checked && !window.confirm('Show all items in stock, not only this job\'s requirement? Issuing an item outside the requirement needs a reason in remarks and is recorded.')) return;
+                setShowAll(e.target.checked);
+              }} />
+            Show all items (exception)
+          </label>
+        </div>
+      )}
+      {wo && !wh && <p className="mt-1 text-small text-ink-muted">Pick the From warehouse to see the stock of each item.</p>}
 
       <div className="mb-2.5 mt-5 flex flex-wrap items-end gap-2 border-b border-surface-divider pb-1.5">
         <h3 className="mr-auto text-small font-semibold uppercase tracking-wider text-ink-secondary">Issue lines</h3>
@@ -729,48 +787,66 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
       <div className="overflow-x-auto rounded-lg border border-surface-border">
         <table className="w-full">
           <thead><tr>
-            <th className="th w-[100px]">Type</th><th className="th min-w-[200px]">Material</th>
+            <th className="th w-[100px]">Type</th><th className="th min-w-[320px]">Material</th>
             <th className="th w-[120px] text-right">Quantity</th><th className="th w-[90px]">UOM</th>
             <th className="th w-10" />
           </tr></thead>
           <tbody>
-            {lines.map((l) => {
-              const src = l.material_type === 'YARN' ? yarns.data
+            {lines.map((l, idx) => {
+              const master = l.material_type === 'YARN' ? yarns.data
                         : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
+              const job = wo ? jobFor(l.material_type).data : undefined;
+              const picked: JobIssueItem | undefined = job?.items.find((x) => x.item_id === Number(l.material_id));
+              const label = (x: JobIssueItem) => `${x.item_name}${x.on_requirement
+                ? ` — req ${q3(x.required)} · issued ${q3(x.issued)} · bal ${q3(x.balance_to_issue)}`
+                : ' — not on requirement'}${wh ? ` · avail ${q3(x.available_for_job)}` : ''} ${x.uom_code ?? ''}`;
               return (
                 <tr key={l._key}>
-                  <td className="td p-1.5">
-                    <select className="input py-1.5 text-body" value={l.material_type}
+                  <td className="td p-1.5 align-top">
+                    <select className="input py-1.5 text-body" value={l.material_type} id={`mi-type-${idx}`}
                       onChange={(e) => setLine(l._key, {
                         material_type: e.target.value as GrnLine['material_type'], material_id: '' })}>
-                      {['YARN','FABRIC','TRIM'].map((m) => <option key={m} value={m}>{m}</option>)}
+                      {ISSUE_TYPES.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </td>
-                  <td className="td p-1.5">
-                    <select className="input py-1.5 text-body" value={l.material_id}
+                  <td className="td p-1.5 align-top">
+                    <select className="input py-1.5 text-body" value={l.material_id} id={`mi-item-${idx}`}
                       onChange={(e) => {
-                        const picked = (src ?? []).find((x: any) => x.id === Number(e.target.value));
+                        const id = Number(e.target.value);
+                        const ji = job?.items.find((x) => x.item_id === id);
+                        const m = (master ?? []).find((x: any) => x.id === id);
                         setLine(l._key, {
-                          material_id: e.target.value ? Number(e.target.value) : '',
-                          uom_id: (picked?.base_uom as number) ?? l.uom_id });
+                          material_id: e.target.value ? id : '',
+                          uom_id: (ji?.uom_id ?? (m?.base_uom as number)) ?? l.uom_id });
                       }}>
-                      <option value="">— Select —</option>
-                      {toOptions(src).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      <option value="">{wo && job && !job.items.length ? '— nothing required / held by this job —' : '— Select —'}</option>
+                      {wo
+                        ? (job?.items ?? []).map((x) => <option key={x.item_id} value={x.item_id}>{label(x)}</option>)
+                        : toOptions(master).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
+                    {picked && (
+                      <div className="mt-1 text-caption text-ink-secondary" id={`mi-info-${idx}`}>
+                        {picked.on_requirement
+                          ? <>Required {q3(picked.required)} (allowed {q3(picked.allowed)}) · issued {q3(picked.issued)} · <strong>balance {q3(picked.balance_to_issue)}</strong></>
+                          : <span className="text-amber-700">Not on the job's requirement</span>}
+                        {wh && <> · stock: job {q3(picked.job_stock)} + general {q3(picked.general_stock)}{picked.other_job_stock > 0 ? ` (other jobs ${q3(picked.other_job_stock)})` : ''} · store {q3(picked.store_stock)} · <strong>can issue {q3(picked.available_for_job)}</strong></>}
+                        {' '}{picked.uom_code}
+                      </div>
+                    )}
                   </td>
-                  <td className="td p-1.5">
-                    <input type="number" step="0.001" className="input py-1.5 text-right text-body"
+                  <td className="td p-1.5 align-top">
+                    <input type="number" step="0.001" className="input py-1.5 text-right text-body" id={`mi-qty-${idx}`}
                       value={l.received_qty}
                       onChange={(e) => setLine(l._key, { received_qty: e.target.value === '' ? '' : Number(e.target.value) })} />
                   </td>
-                  <td className="td p-1.5">
+                  <td className="td p-1.5 align-top">
                     <select className="input py-1.5 text-body" value={l.uom_id}
                       onChange={(e) => setLine(l._key, { uom_id: e.target.value ? Number(e.target.value) : '' })}>
                       <option value="">—</option>
                       {(uoms.data ?? []).map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
                     </select>
                   </td>
-                  <td className="td p-1.5 text-right">
+                  <td className="td p-1.5 text-right align-top">
                     <button onClick={() => setLines((s) => s.filter((x) => x._key !== l._key))}
                       disabled={lines.length === 1}
                       className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600 disabled:opacity-30">

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { valueGrnAtRate } from '../../core/grnValue.js';
 import { calcRollFor, fabricSpec, rollTolerances, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRollCalc.js';
@@ -12,7 +12,8 @@ import { s } from '../resources/schemas.js';
 import { assertEditable, postLedger, UOM_KG } from '../../core/processEngine.js';
 import { assertIssuable, insertProcessIssue } from './processFlow.routes.js';
 import { assertJobLots, resolveSoId } from '../stock/jobStock.routes.js';
-import { checkDcQuotation, useGateEntry } from '../../core/inwardControls.js';
+import { checkDcQuotation, processQuotations, settingFlag, useGateEntry } from '../../core/inwardControls.js';
+import { backfillDcLines, contractorSnapshot, dcAudit } from './knitDcSnapshots.js';
 import { substituteOpen, bookSubstituteIssue } from '../stock/yarnSubstitution.routes.js';
 
 /**
@@ -135,12 +136,32 @@ const dcSchema = z.object({
   rate_per_kg: z.coerce.number().min(0).nullish(),
 });
 
-knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(async (req, res) => {
+export type KnitDcBody = z.infer<typeof dcSchema>;
+type KnitDcLine = z.infer<typeof dcLine> & { /** draft DC line this issue line comes from (yarn issue DC approval) */ dc_line_id?: number | null };
+
+/**
+ * The approved knitting quotation of the knitter for a job on a date (C-ONE spec §12: the rate is taken
+ * from the approved quotation by contractor, job and effective date — never typed on the outward DC).
+ */
+export async function resolveKnitQuote(cid: number, vendorId: number, job: { io_no?: string | null; so_id?: number | null }, on: string | null) {
+  const qs = await processQuotations(cid, { vendor_id: vendorId, material: 'YARN', process: 'Knitting', on, io_no: job.io_no ?? null, so_id: job.so_id ?? null });
+  const q = qs.find((x: any) => /knit/i.test(String(x.process_name ?? ''))) ?? qs[0];
+  if (!q) return null;
+  return checkDcQuotation(cid, { vendor_id: vendorId, quotation_id: Number(q.id), quotation_line_id: null, rate: null, label: `Knitting quotation ${q.quotation_no}`, job, required: false });
+}
+
+/**
+ * Post a knitting DC: checks (released programs, one knitter, lots of the job, stock / reservation,
+ * substitutions), then one stock issue per line, the DC header and one row per job.
+ * Used by the one-step knitting DC (POST /knitting-dcs) and by the approval of a yarn issue DC draft
+ * (`draft`: the header + lines already exist; the rate is not fixed here but at fabric inward).
+ */
+export async function postKnittingDc(req: Request, body: KnitDcBody & { jobs?: { program_id: number; lines: KnitDcLine[]; quotation_id?: number | null; quotation_line_id?: number | null; rate_per_kg?: number | null }[] },
+  draft?: { id: number; dc_no: string }) {
   const cid = req.user!.companyId;
   const uid = req.user!.id;
-  const body = dcSchema.parse(req.body);
   const jobs = (body.jobs?.length ? body.jobs : (body.program_id ? [{ program_id: body.program_id, lines: body.lines ?? [] }] : []))
-    .map((j) => ({ ...j, lines: j.lines.filter((l) => l.issued_qty_kg > 0) })).filter((j) => j.lines.length);
+    .map((j) => ({ ...j, lines: (j.lines as KnitDcLine[]).filter((l) => l.issued_qty_kg > 0) })).filter((j) => j.lines.length);
   if (!jobs.length) throw BadRequest('Enter the KG to send on at least one yarn line');
   if (new Set(jobs.map((j) => j.program_id)).size !== jobs.length) throw BadRequest('A job / program is on the DC twice');
 
@@ -157,15 +178,24 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
   }
   const vendorId = body.vendor_id ?? progs.get(jobs[0].program_id)?.vendor_id;
   if (!vendorId) throw BadRequest('Select the knitting vendor (supplier) the yarn is going to');
-  // each job goes out on its own approved quotation (job-wise rate), else on the DC-level one
   const quotes = new Map<number, Awaited<ReturnType<typeof checkDcQuotation>>>();
   for (const j of jobs) {
     const prog = progs.get(j.program_id);
+    const label = `Knitting DC — ${prog.program_no} (${prog.io_no ?? 'stock'})`;
+    const job = { io_no: prog.io_no ?? null, so_id: prog.so_id ?? null };
+    if (draft) {
+      // yarn issue DC: no rate on the DC — only check an approved quotation exists when the company requires one
+      if (await settingFlag(cid, 'PROCESS_QUOTATION_REQUIRED', false) && !(await resolveKnitQuote(cid, Number(vendorId), job, body.dc_date))) {
+        throw BadRequest(`${label}: the knitter has no approved knitting quotation for this job — accept the process quotation first (its rate is applied at fabric inward)`);
+      }
+      quotes.set(j.program_id, { quotation_id: null, quotation_line_id: null, rate: null });
+      continue;
+    }
+    // each job goes out on its own approved quotation (job-wise rate), else on the DC-level one
     const own = (j as any).quotation_id ? j as any : null;
     quotes.set(j.program_id, await checkDcQuotation(cid, {
       vendor_id: Number(vendorId), quotation_id: own?.quotation_id ?? body.quotation_id, quotation_line_id: own ? own.quotation_line_id : body.quotation_line_id,
-      rate: (own ? own.rate_per_kg : body.rate_per_kg) ?? null, label: `Knitting DC — ${prog.program_no} (${prog.io_no ?? 'stock'})`,
-      job: { io_no: prog.io_no ?? null, so_id: prog.so_id ?? null },
+      rate: (own ? own.rate_per_kg : body.rate_per_kg) ?? null, label, job,
     }));
   }
   const qs = [...quotes.values()];
@@ -199,7 +229,7 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
 
   // Stock check per line, counting earlier lines of this DC on the same yarn,
   // and letting the program's own reservation cover its own issue.
-  const plan: { prog: any; line: z.infer<typeof dcLine>; reservationId: number | null; exceeds: boolean }[] = [];
+  const plan: { prog: any; line: KnitDcLine; reservationId: number | null; exceeds: boolean }[] = [];
   const taken = new Map<number, number>();
   for (const j of jobs) {
     for (const l of j.lines) {
@@ -220,11 +250,18 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
     }
   }
 
-  const result = await transaction(async (tx) => {
-    const dcNo = body.dc_no || await nextDocNumber(tx, cid, 'KNIT_DC');
+  return transaction(async (tx) => {
+    const dcNo = draft ? draft.dc_no : body.dc_no || await nextDocNumber(tx, cid, 'KNIT_DC');
     const dup = await txQueryOne<any>(tx,
       `SELECT id FROM trx_process_issue WHERE company_id = ? AND dc_no = ? LIMIT 1`, [cid, dcNo]);
     if (dup) throw BadRequest(`DC number ${dcNo} is already used`);
+    if (draft) {
+      // approval: the draft must still be a draft (two approvers at once → one wins)
+      const h = await txQueryOne<any>(tx, 'SELECT doc_status FROM trx_knitting_dc WHERE id = ? AND company_id = ? FOR UPDATE', [draft.id, cid]);
+      if (!h || h.doc_status !== 'DRAFT') throw BadRequest(`DC ${dcNo} is not a draft any more (${String(h?.doc_status ?? 'missing').toLowerCase()})`);
+    } else if (await txQueryOne<any>(tx, 'SELECT id FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [cid, dcNo])) {
+      throw BadRequest(`DC number ${dcNo} is already used`);
+    }
 
     const issues = [];
     for (const p of plan) {
@@ -232,7 +269,7 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
       const lot = p.line.grn_line_id ? await txQueryOne<any>(tx,
         `SELECT gl.lot_no, po.po_no FROM trx_grn_line gl JOIN trx_grn g ON g.id = gl.grn_id
            LEFT JOIN trx_purchase_order po ON po.id = COALESCE(gl.po_id, g.po_id) WHERE gl.id = ?`, [p.line.grn_line_id]) : null;
-      issues.push(await insertProcessIssue(tx, cid, uid, {
+      const issue = await insertProcessIssue(tx, cid, uid, {
         src_type: 'KNITTING_PROGRAM', src_id: p.prog.id,
         src_line_id: p.line.program_yarn_id ?? null, reservation_id: p.reservationId,
         issue_no: null, issue_date: body.dc_date, yarn_id: p.line.yarn_id, batch_id: null,
@@ -243,7 +280,12 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
         dc_no: dcNo, vendor_id: vendorId, vehicle_no: body.vehicle_no ?? null,
         no_of_cones: p.line.no_of_cones,
         grn_line_id: p.line.grn_line_id ?? null, so_id: p.prog.so_id ?? null, io_no: p.prog.io_no ?? null,
-      }, p.exceeds));
+      }, p.exceeds);
+      issues.push(issue);
+      if (draft && p.line.dc_line_id) {
+        await txExecute(tx, 'UPDATE trx_knitting_dc_line SET process_issue_id = ?, so_id = COALESCE(so_id, ?), lot_no = COALESCE(?, lot_no) WHERE id = ? AND dc_id = ?',
+          [issue.id, p.prog.so_id ?? null, lot?.lot_no ?? null, p.line.dc_line_id, draft.id]);
+      }
     }
     for (const [k, kg] of subUse) {
       const [pyid, yid] = k.split('|').map(Number);
@@ -259,11 +301,32 @@ knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(as
         `INSERT INTO trx_knitting_dc_job (company_id, dc_no, program_id, so_id, io_no, quotation_id, quotation_line_id, rate_per_kg, status, status_backfilled) VALUES (?,?,?,?,?,?,?,?, 'OPEN', 1)`,
         [cid, dcNo, j.program_id, prog.so_id ?? null, prog.io_no ?? null, jq.quotation_id, jq.quotation_line_id, jq.rate]);
     }
-    return { dc_no: dcNo, jobs: jobs.length, issues, rate_per_kg: quote.rate,
+    // document fields + printable snapshots (one-step DC: header snapshot and DC lines made here)
+    const kd = await txQueryOne<any>(tx, 'SELECT id, contractor_name_snapshot FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [cid, dcNo]);
+    if (!draft) {
+      const c = await contractorSnapshot(cid, Number(vendorId));
+      await txExecute(tx,
+        `UPDATE trx_knitting_dc SET doc_status = 'APPROVED', purpose = COALESCE(purpose, 'Yarn Issue for Knitting'), vehicle_no = ?, warehouse_id = ?, remarks = ?,
+                contractor_name_snapshot = ?, contractor_address_snapshot = ?, contractor_gstin_snapshot = ?, allow_override = ?, override_reason = ?,
+                created_by = COALESCE(created_by, ?), approved_by = ?, approved_at = NOW() WHERE id = ?`,
+        [body.vehicle_no ?? null, body.warehouse_id, body.remarks ?? null, c?.name ?? null, c?.address ?? null, c?.gstin ?? null,
+         body.allow_override ? 1 : 0, body.override_reason ?? null, uid, uid, kd.id]);
+      await backfillDcLines(tx, cid, dcNo);
+      await dcAudit(tx, { cid, dcId: Number(kd.id), dcNo, action: 'CREATE', new: { one_step: true, jobs: jobs.map((j) => j.program_id), lines: plan.length }, uid });
+    } else {
+      await txExecute(tx, `UPDATE trx_knitting_dc SET doc_status = 'APPROVED', approved_by = ?, approved_at = NOW() WHERE id = ?`, [uid, draft.id]);
+      await dcAudit(tx, { cid, dcId: draft.id, dcNo, action: 'APPROVE', old: { doc_status: 'DRAFT' },
+        new: { doc_status: 'APPROVED', issues: issues.map((x) => x.issue_no), over_issue: plan.some((p) => p.exceeds) }, uid });
+    }
+    return { dc_id: Number(kd.id), dc_no: dcNo, jobs: jobs.length, issues, rate_per_kg: quote.rate,
       job_rates: jobs.map((j) => ({ program_id: j.program_id, program_no: progs.get(j.program_id).program_no, quotation_id: quotes.get(j.program_id)!.quotation_id, rate_per_kg: quotes.get(j.program_id)!.rate })) };
   });
+}
 
-  await audit(req, 'trx_process_issue', jobs[0].program_id, 'INSERT', undefined,
+knittingDcRouter.post('/knitting-dcs', requirePermission('PROCESS.ISSUE'), ah(async (req, res) => {
+  const body = dcSchema.parse(req.body);
+  const result = await postKnittingDc(req, body);
+  await audit(req, 'trx_process_issue', result.issues[0]?.id ?? 0, 'INSERT', undefined,
     { action: 'KNITTING_DC', ...result });
   res.status(201).json({ success: true, data: result });
 }));
@@ -650,7 +713,18 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
     // the grey GRN carries the job's knitting rate from its DC (the job's approved knitting quotation)
     const jr = dcNos.length ? await txQueryOne<any>(tx, 'SELECT rate_per_kg FROM trx_knitting_dc_job WHERE company_id = ? AND dc_no = ? AND program_id = ?', [cid, dcNos[0], body.program_id]) : null;
     const dr = !jr?.rate_per_kg && dcNos.length ? await txQueryOne<any>(tx, 'SELECT rate_per_kg FROM trx_knitting_dc WHERE company_id = ? AND dc_no = ?', [cid, dcNos[0]]) : null;
-    await valueGrnAtRate(tx, Number(grnId), jr?.rate_per_kg ?? dr?.rate_per_kg ?? null);
+    let rate: number | null = jr?.rate_per_kg ?? dr?.rate_per_kg ?? null;
+    if (rate == null && dcNos.length) {
+      // yarn issue DC (no rate on the outward DC, C-ONE spec §12): the knitter's approved knitting quotation for
+      // the job on the receipt date; kept on the DC job so the knitting bill and later inwards use the same rate
+      const q = await resolveKnitQuote(cid, Number(vendorId), { io_no: prog.io_no ?? null, so_id: prog.so_id ?? null }, body.receipt_date);
+      if (q?.rate != null) {
+        rate = q.rate;
+        await txExecute(tx, `UPDATE trx_knitting_dc_job SET quotation_id = ?, quotation_line_id = ?, rate_per_kg = ? WHERE company_id = ? AND dc_no IN (?) AND program_id = ? AND rate_per_kg IS NULL`,
+          [q.quotation_id, q.quotation_line_id, q.rate, cid, dcNos, body.program_id]);
+      }
+    }
+    await valueGrnAtRate(tx, Number(grnId), rate);
     return { id: receiptId, receipt_no: receiptNo, grn_id: grnId, lot_no: lotNo, receipt_type: body.receipt_type, dcs: split,
              fabric_kg: fabricKg, yarn_consumed_kg: consumed, loss_kg: loss, rolls, gate_entry_no: gate?.entry_no ?? null,
              hold_rolls: rolls.filter((x) => x.qc_status === 'HOLD').length };

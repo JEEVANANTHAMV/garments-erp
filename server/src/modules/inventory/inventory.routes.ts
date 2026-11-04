@@ -8,6 +8,7 @@ import { requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
+import { jobIssueItems, checkIssueAgainstJob } from './materialIssueJob.js';
 
 export const inventoryRouter = Router();
 
@@ -230,6 +231,8 @@ const issueSchema = z.object({
   remarks: s.nullableStr(500),
   /** Block the issue when it would drive stock negative. */
   allow_negative: z.boolean().default(false),
+  /** "Show all items": issue an item that is not on the work order's job requirement (needs remarks). */
+  allow_off_requirement: z.boolean().default(false),
   lines: z.array(issueLineSchema).min(1, 'A material issue needs at least one line'),
 });
 
@@ -282,6 +285,20 @@ inventoryRouter.get('/issues', requirePermission('ISSUE.VIEW'), ah(async (req, r
     total: total?.total ?? 0, totalPages: Math.ceil((total?.total ?? 0) / q.pageSize) } });
 }));
 
+/**
+ * GET /inventory/issues/job-items?prod_order_id=&material_type=YARN|FABRIC|TRIM&warehouse_id=&all=1 — the items a work
+ * order's job requires (else holds), with required / issued / balance and job / general / store stock (04-Nov-2026).
+ */
+inventoryRouter.get('/issues/job-items', requirePermission('ISSUE.VIEW'), ah(async (req, res) => {
+  const q = z.object({
+    prod_order_id: z.coerce.number().int().positive(),
+    material_type: z.enum(MATERIAL),
+    warehouse_id: z.coerce.number().int().positive().optional(),
+    all: z.coerce.number().int().optional(),
+  }).parse(req.query);
+  res.json({ data: await jobIssueItems(req.user!.companyId, { ...q, all: q.all === 1 }) });
+}));
+
 inventoryRouter.get('/issues/:id', requirePermission('ISSUE.VIEW'), ah(async (req, res) => {
   const id = Number(req.params.id);
   const issue = await queryOne(
@@ -309,6 +326,8 @@ inventoryRouter.get('/issues/:id', requirePermission('ISSUE.VIEW'), ah(async (re
 
 inventoryRouter.post('/issues', requirePermission('ISSUE.CREATE'), ah(async (req, res) => {
   const body = issueSchema.parse(req.body);
+  // against a work order: requirement, job-wise stock and over-issue limits (the item dropdown is only a help)
+  const notices = await checkIssueAgainstJob(req.user!.companyId, body);
 
   const created = await transaction(async (tx) => {
     // Validate availability before writing anything.
@@ -353,7 +372,7 @@ inventoryRouter.post('/issues', requirePermission('ISSUE.CREATE'), ah(async (req
   });
 
   await audit(req, 'trx_material_issue', (created as any).id, 'INSERT', undefined, created);
-  res.status(201).json({ data: created });
+  res.status(201).json({ data: created, ...(notices.length ? { notices } : {}) });
 }));
 
 // ================================================== STOCK ENQUIRY
