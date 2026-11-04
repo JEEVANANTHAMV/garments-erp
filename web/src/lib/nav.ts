@@ -208,6 +208,25 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    // client spec 02-Nov-2026: lab management — washing, garment sample & textile testing, dual approval
+    label: 'Lab · Washing & Testing', group: 'PRODUCTION', menu: 'Lab (Washing & Testing)', icon: Beaker,
+    items: [
+      { label: 'Lab Dashboard',          to: '/lab/dashboard', icon: Gauge, perms: ['LAB.VIEW'] },
+      { label: 'Lab Requests',           to: '/lab/requests', icon: ClipboardList, perms: ['LAB.VIEW'] },
+      { label: 'Samples & Inward',       to: '/lab/samples', icon: PackageCheck, perms: ['LAB.VIEW'] },
+      { label: 'Trials',                 to: '/lab/trials', icon: Beaker, perms: ['LAB.VIEW'] },
+      { label: 'Lab Review',             to: '/lab/review', icon: ClipboardCheck, perms: ['LAB.APPROVE'] },
+      { label: 'QA Approval',            to: '/lab/qa-approval', icon: ShieldCheck, perms: ['LAB.QA_APPROVE'] },
+      { label: 'Lab Reports',            to: '/lab/reports', icon: FileCheck2, perms: ['LAB.VIEW'] },
+      { label: 'Test Plans',             to: '/lab/masters/test-plans', icon: ListChecks, perms: ['LAB.VIEW'] },
+      { label: 'Test Parameters',        to: '/lab/masters/parameters', icon: SlidersHorizontal, perms: ['LAB.VIEW'] },
+      { label: 'Lab Machines',           to: '/lab/masters/machines', icon: Settings2, perms: ['LAB.VIEW'] },
+      { label: 'New Lab Request',        to: '/lab/requests/create', icon: ClipboardList, perms: ['LAB.CREATE'], hidden: true, parent: '/lab/requests' },
+      { label: 'Sample Inward',          to: '/lab/samples/inward', icon: PackageCheck, perms: ['LAB.UPDATE'], hidden: true, parent: '/lab/samples' },
+      { label: 'New Trial',              to: '/lab/trials/create', icon: Beaker, perms: ['LAB.UPDATE'], hidden: true, parent: '/lab/trials' },
+    ],
+  },
+  {
     label: '9 · Embroidery & Printing', group: 'PRODUCTION', menu: 'Embroidery & Printing', icon: Palette,
     items: [
       { label: 'Embroidery – Machine Output & Cost', to: '/production/embroidery', icon: Palette, perms: ['EMBROIDERY.VIEW'] },

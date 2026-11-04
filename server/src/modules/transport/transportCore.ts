@@ -112,12 +112,22 @@ export async function nextTransportNo(tx: Tx, companyId: number, kind: 'REQ' | '
   const yyyy = istYear();
   const docType = kind === 'REQ' ? `TRANSPORT_REQ_${yyyy}` : `TRANSPORT_TRIP_${yyyy}`;
   const prefix = kind === 'REQ' ? `TRN-${yyyy}-` : `TRIP-${yyyy}-`;
-  await txExecute(tx,
-    `INSERT INTO cfg_number_series (company_id, branch_id, doc_type, fy_id, prefix, next_number, padding)
-     SELECT ?, NULL, ?, NULL, ?, 1, 6 FROM DUAL
-      WHERE NOT EXISTS (SELECT 1 FROM cfg_number_series WHERE company_id = ? AND doc_type = ? AND branch_id IS NULL AND fy_id IS NULL)`,
-    [companyId, docType, prefix, companyId, docType]);
+  // plain (non-locking) read first: an INSERT … WHERE NOT EXISTS would take shared locks that deadlock two creators
+  const have = await txQueryOne(tx, `SELECT id FROM cfg_number_series WHERE company_id = ? AND doc_type = ? AND branch_id IS NULL AND fy_id IS NULL LIMIT 1`, [companyId, docType]);
+  if (!have) {
+    await txExecute(tx, `INSERT INTO cfg_number_series (company_id, branch_id, doc_type, fy_id, prefix, next_number, padding) VALUES (?, NULL, ?, NULL, ?, 1, 6)`, [companyId, docType, prefix]);
+  }
   return nextDocNumber(tx, companyId, docType);
+}
+
+/** Run a transaction again (up to 3 times) when MySQL picks it as a deadlock victim — concurrent coordinators. */
+export async function retryDeadlock<T>(fn: () => Promise<T>): Promise<T> {
+  for (let i = 0; ; i++) {
+    try { return await fn(); } catch (e: any) {
+      if (i < 2 && (e?.code === 'ER_LOCK_DEADLOCK' || e?.code === 'ER_LOCK_WAIT_TIMEOUT')) { await new Promise((r) => setTimeout(r, 30 + Math.random() * 70)); continue; }
+      throw e;
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ status log */

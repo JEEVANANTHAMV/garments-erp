@@ -16,7 +16,7 @@ import { audit } from '../../core/audit.js';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../core/errors.js';
 import {
   P, has, must, assertFrom, assertVersion, zBizTime, nextTransportNo, logStatus, notify, planners, lockTrip, overlapping,
-  expiryWarnings, refreshRequestFromLines, tripRequesters, istDayStart, istDayEnd, istText, humanStatus, ACTIVE_TRIP, type TripStatus,
+  expiryWarnings, refreshRequestFromLines, retryDeadlock, tripRequesters, istDayStart, istDayEnd, istText, humanStatus, ACTIVE_TRIP, type TripStatus,
 } from './transportCore.js';
 
 export const transportTripsRouter = Router();
@@ -306,7 +306,7 @@ transportTripsRouter.post('/trips', ah(async (req, res) => {
   const plan = assign ? planSchema.parse(req.body) : null;
   const header = plan ?? draftSchema.parse(req.body);
   let notices: string[] = [];
-  const out = await transaction(async (tx) => {
+  const out = await retryDeadlock(() => transaction(async (tx) => {
     const tripNo = await nextTransportNo(tx, req.user!.companyId, 'TRIP');
     const ins = await txExecute(tx, `INSERT INTO trx_transport_trip (company_id, trip_no, status, planned_start_at, planned_end_at, origin, destination, purpose, remarks, created_by, updated_by)
         VALUES (?,?, 'DRAFT', ?,?,?,?,?,?,?,?)`, [req.user!.companyId, tripNo, header.planned_start_at, header.planned_end_at, header.origin ?? null, header.destination ?? null, header.purpose ?? null, header.remarks ?? null, req.user!.id, req.user!.id]);
@@ -317,7 +317,7 @@ transportTripsRouter.post('/trips', ah(async (req, res) => {
       notices = await assignPlan(tx, req, trip, plan);
     }
     return txQueryOne<any>(tx, `SELECT * FROM trx_transport_trip WHERE id = ?`, [ins.insertId]);
-  });
+  }));
   res.status(201).json({ data: out, message: `Trip ${out.trip_no} ${out.status === 'ASSIGNED' ? 'assigned — the driver has been notified' : 'saved as draft'}`, ...(notices.length ? { notices } : {}) });
 }));
 
@@ -343,13 +343,13 @@ transportTripsRouter.post('/trips/:id/assign', ah(async (req, res) => {
   const plan = planSchema.parse(req.body);
   const id = idOf(req.params.id);
   let notices: string[] = [];
-  const out = await transaction(async (tx) => {
+  const out = await retryDeadlock(() => transaction(async (tx) => {
     const t = await lockTrip(tx, req.user!.companyId, id);
     if (!t) throw NotFound('Trip not found');
     assertVersion(t, plan.row_version);
     notices = await assignPlan(tx, req, t, plan);
     return txQueryOne(tx, `SELECT * FROM trx_transport_trip WHERE id = ?`, [id]);
-  });
+  }));
   res.json({ data: out, ...(notices.length ? { notices } : {}) });
 }));
 

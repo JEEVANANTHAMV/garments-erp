@@ -157,6 +157,12 @@ import {
 
 /* Quality */
 import { QcInspectionsPage, DefectsPage } from './pages/quality';
+import { LabDashboardPage } from './pages/lab/LabDashboard';
+import { LabRequestsPage, LabRequestFormPage, LabRequestDetailPage } from './pages/lab/LabRequests';
+import { LabSamplesPage, LabSampleInwardPage, LabSampleDetailPage } from './pages/lab/LabSamples';
+import { LabTrialsPage, LabTrialCreatePage, LabTrialWorkspacePage } from './pages/lab/LabTrials';
+import { LabReportsPage, LabReviewQueuePage, LabReportViewerPage } from './pages/lab/LabReports';
+import { LabMachinesPage, LabParametersPage, LabTestPlansPage } from './pages/lab/LabMasters';
 
 /* Logistics & Export */
 import {
@@ -482,6 +488,29 @@ export default function App() {
                 <Route path="quality">
                   <Route path="inspections" element={<QcInspectionsPage />} />
                   <Route path="defects" element={<DefectsPage />} />
+                </Route>
+                <Route path="lab">
+                  <Route index element={<LabDashboardPage />} />
+                  <Route path="dashboard" element={<LabDashboardPage />} />
+                  <Route path="requests" element={<LabRequestsPage />} />
+                  <Route path="requests/create" element={<LabRequestFormPage />} />
+                  <Route path="requests/:id/edit" element={<LabRequestFormPage />} />
+                  <Route path="requests/:id" element={<LabRequestDetailPage />} />
+                  <Route path="samples" element={<LabSamplesPage />} />
+                  <Route path="samples/inward" element={<LabSampleInwardPage />} />
+                  <Route path="samples/:id" element={<LabSampleDetailPage />} />
+                  <Route path="trials" element={<LabTrialsPage />} />
+                  <Route path="trials/create" element={<LabTrialCreatePage />} />
+                  <Route path="trials/:id" element={<LabTrialWorkspacePage />} />
+                  <Route path="trials/:id/recipe" element={<LabTrialWorkspacePage />} />
+                  <Route path="trials/:id/testing" element={<LabTrialWorkspacePage />} />
+                  <Route path="review" element={<LabReviewQueuePage level="LAB" />} />
+                  <Route path="qa-approval" element={<LabReviewQueuePage level="QA" />} />
+                  <Route path="reports" element={<LabReportsPage />} />
+                  <Route path="reports/:id" element={<LabReportViewerPage />} />
+                  <Route path="masters/test-plans" element={<LabTestPlansPage />} />
+                  <Route path="masters/parameters" element={<LabParametersPage />} />
+                  <Route path="masters/machines" element={<LabMachinesPage />} />
                 </Route>
 
                 {/* Logistics & Export */}
