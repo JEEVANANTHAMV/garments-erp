@@ -140,6 +140,8 @@ export function TransportRequestForm() {
       passenger_count: s(r.passenger_count), remarks: s(r.remarks), clarification_response: s(r.clarification_response),
     });
   }, [existing.data]);
+  // the login may load after the form opened (direct link / reload): default the contact to the requester then
+  useEffect(() => { if (!editing && user?.fullName) setV((p) => (p.contact_name ? p : { ...p, contact_name: user.fullName })); }, [user?.fullName, editing]);
   useEffect(() => { if (last.data?.department_id && !v.department_id) setV((p) => ({ ...p, department_id: String(last.data.department_id) })); }, [last.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const type = useMemo(() => (types.data ?? []).find((t) => String(t.id) === v.request_type_id), [types.data, v.request_type_id]);
