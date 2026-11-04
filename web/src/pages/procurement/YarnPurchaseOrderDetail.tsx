@@ -16,6 +16,7 @@ import { Input, Select, StatusBadge, Modal, Button } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
 import { RAW_COLOUR } from '../../lib/rawColour';
 import { PoLineCard, PoLineRow, PoLineField, PoLineAmounts } from './PoLineLayout';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 
 interface YarnLine {
   id?: number;
@@ -185,6 +186,7 @@ export default function YarnPurchaseOrderDetailPage() {
     approval_state: 'APPROVED',
     billing_address: COMPANY_DEFAULT_ADDRESS,
     shipping_address: '',
+    ship_same_as_billing: false,
     shipping_to_party_id: '',
     is_interstate: false,
     freight_charges: 0,
@@ -350,6 +352,7 @@ export default function YarnPurchaseOrderDetailPage() {
         approval_state: existingPo.approval_state || 'APPROVED',
         billing_address: existingPo.billing_address || COMPANY_DEFAULT_ADDRESS,
         shipping_address: existingPo.shipping_address || '',
+        ship_same_as_billing: Boolean(Number(existingPo.ship_same_as_billing)),
         shipping_to_party_id: existingPo.shipping_to_party_id ? String(existingPo.shipping_to_party_id) : '',
         is_interstate: !!existingPo.is_interstate,
         freight_charges: Number(existingPo.freight_charges) || 0,
@@ -592,8 +595,9 @@ export default function YarnPurchaseOrderDetailPage() {
         remarks: header.remarks,
         approval_state: header.approval_state,
         billing_address: header.billing_address || null,
-        shipping_address: header.shipping_address || null,
-        shipping_to_party_id: header.shipping_to_party_id ? Number(header.shipping_to_party_id) : null,
+        shipping_address: (header.ship_same_as_billing ? header.billing_address : header.shipping_address) || null,
+        ship_same_as_billing: header.ship_same_as_billing ? 1 : 0,
+        shipping_to_party_id: header.ship_same_as_billing ? null : header.shipping_to_party_id ? Number(header.shipping_to_party_id) : null,
         currency_id: Number(header.currency_id || 1),
         exchange_rate: Number(header.exchange_rate || 1.0),
         is_interstate: header.is_interstate ? 1 : 0,
@@ -701,7 +705,8 @@ export default function YarnPurchaseOrderDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {!isNew && id && <PoDocumentActions type="yarn" id={Number(id)} poNo={header.po_no} status={header.approval_state} />}
           {isNew && (
             <button
               onClick={() => setQuoteModalOpen(true)}
@@ -938,8 +943,9 @@ export default function YarnPurchaseOrderDetailPage() {
           <textarea
             rows={4}
             className="input w-full tabular-nums text-xs leading-relaxed resize-y"
+            id="po-billing-address"
             value={header.billing_address}
-            onChange={(e) => setHeader({ ...header, billing_address: e.target.value })}
+            onChange={(e) => setHeader({ ...header, billing_address: e.target.value, ...(header.ship_same_as_billing ? { shipping_address: e.target.value } : {}) })}
             placeholder="Enter company billing address with GSTIN..."
           />
         </div>
@@ -954,14 +960,11 @@ export default function YarnPurchaseOrderDetailPage() {
                 </span>
                 <span>Shipping Address (Direct Delivery to Knitting Unit / Mill)</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setHeader((h) => ({ ...h, shipping_to_party_id: '', shipping_address: header.billing_address }))}
-                className="text-caption text-ink-secondary hover:text-ink font-medium flex items-center gap-1"
-                title="Copy from Billing Address"
-              >
-                Same as Billing
-              </button>
+              <label className="flex cursor-pointer items-center gap-1.5 text-caption font-medium text-ink" title="Tick when the yarn is delivered to the billing address">
+                <input type="checkbox" id="po-ship-same" checked={header.ship_same_as_billing}
+                  onChange={(e) => { const on = e.target.checked; setHeader((h) => ({ ...h, ship_same_as_billing: on, ...(on ? { shipping_to_party_id: '', shipping_address: h.billing_address } : {}) })); }} />
+                Same as billing
+              </label>
             </div>
             <div className="mb-2">
               <Select
@@ -969,6 +972,7 @@ export default function YarnPurchaseOrderDetailPage() {
                 placeholder="Select knitting unit to auto-populate delivery address..."
                 options={toOptions(parties.data)}
                 value={header.shipping_to_party_id}
+                disabled={header.ship_same_as_billing}
                 onChange={(e) => handleShipToPartyChange(e.target.value)}
               />
             </div>
@@ -976,7 +980,9 @@ export default function YarnPurchaseOrderDetailPage() {
           <textarea
             rows={3}
             className="input w-full tabular-nums text-xs leading-relaxed resize-y"
-            value={header.shipping_address}
+            id="po-shipping-address"
+            value={header.ship_same_as_billing ? header.billing_address : header.shipping_address}
+            readOnly={header.ship_same_as_billing}
             onChange={(e) => setHeader({ ...header, shipping_address: e.target.value })}
             placeholder="Enter destination delivery address (Knitting unit, dyeing plant, or company warehouse)..."
           />

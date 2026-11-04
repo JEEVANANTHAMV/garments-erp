@@ -16,6 +16,7 @@ import { Input, Select, StatusBadge, Modal } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
 import { RAW_COLOUR } from '../../lib/rawColour';
 import { PoLineCard, PoLineRow, PoLineField, PoLineAmounts } from './PoLineLayout';
+import { PoDocumentActions } from '../../components/PoDocumentActions';
 
 interface FabricLine {
   id?: number;
@@ -180,6 +181,7 @@ export default function FabricPurchaseOrderDetailPage() {
     remarks: '',
     billing_address: COMPANY_DEFAULT_ADDRESS,
     shipping_address: '',
+    ship_same_as_billing: false,
     shipping_to_party_id: '',
     is_interstate: false,
     freight_charges: 0,
@@ -344,6 +346,7 @@ export default function FabricPurchaseOrderDetailPage() {
         remarks: d.remarks || '',
         billing_address: d.billing_address || COMPANY_DEFAULT_ADDRESS,
         shipping_address: d.shipping_address || '',
+        ship_same_as_billing: Boolean(Number(d.ship_same_as_billing)),
         shipping_to_party_id: d.shipping_to_party_id ? String(d.shipping_to_party_id) : '',
         is_interstate: !!d.is_interstate,
         freight_charges: Number(d.freight_charges) || 0,
@@ -559,8 +562,9 @@ export default function FabricPurchaseOrderDetailPage() {
         approval_state: stateOverride || head.approval_state,
         remarks: head.remarks,
         billing_address: head.billing_address || null,
-        shipping_address: head.shipping_address || null,
-        shipping_to_party_id: head.shipping_to_party_id ? Number(head.shipping_to_party_id) : null,
+        shipping_address: (head.ship_same_as_billing ? head.billing_address : head.shipping_address) || null,
+        ship_same_as_billing: head.ship_same_as_billing ? 1 : 0,
+        shipping_to_party_id: head.ship_same_as_billing ? null : head.shipping_to_party_id ? Number(head.shipping_to_party_id) : null,
         lines: lines.map((l) => {
           const isDyed = l.fabric_category === 'Dyed Fabric';
           return {
@@ -689,7 +693,8 @@ export default function FabricPurchaseOrderDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {!isNew && id && <PoDocumentActions type="fabric" id={Number(id)} poNo={head.po_no} status={head.approval_state} />}
           {isNew && (
             <button
               type="button"
@@ -944,8 +949,9 @@ export default function FabricPurchaseOrderDetailPage() {
           <textarea
             rows={4}
             className="input w-full tabular-nums text-xs leading-relaxed resize-y"
+            id="po-billing-address"
             value={head.billing_address}
-            onChange={(e) => setHead({ ...head, billing_address: e.target.value })}
+            onChange={(e) => setHead({ ...head, billing_address: e.target.value, ...(head.ship_same_as_billing ? { shipping_address: e.target.value } : {}) })}
             placeholder="Company billing address with GSTIN..."
           />
         </div>
@@ -960,14 +966,11 @@ export default function FabricPurchaseOrderDetailPage() {
                 </span>
                 <span>Shipping Address (Delivery Location)</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setHead((h) => ({ ...h, shipping_to_party_id: '', shipping_address: head.billing_address }))}
-                className="text-caption text-ink-secondary hover:text-ink font-medium flex items-center gap-1"
-                title="Copy from Billing Address"
-              >
-                Same as Billing
-              </button>
+              <label className="flex cursor-pointer items-center gap-1.5 text-caption font-medium text-ink" title="Tick when the goods are delivered to the billing address">
+                <input type="checkbox" id="po-ship-same" checked={head.ship_same_as_billing}
+                  onChange={(e) => { const on = e.target.checked; setHead((h) => ({ ...h, ship_same_as_billing: on, ...(on ? { shipping_to_party_id: '', shipping_address: h.billing_address } : {}) })); }} />
+                Same as billing
+              </label>
             </div>
             <div className="mb-2">
               <Select
@@ -975,6 +978,7 @@ export default function FabricPurchaseOrderDetailPage() {
                 placeholder="Select unit to auto-fill address..."
                 options={toOptions(parties.data)}
                 value={head.shipping_to_party_id}
+                disabled={head.ship_same_as_billing}
                 onChange={(e) => handleShipToPartyChange(e.target.value)}
               />
             </div>
@@ -982,7 +986,9 @@ export default function FabricPurchaseOrderDetailPage() {
           <textarea
             rows={3}
             className="input w-full tabular-nums text-xs leading-relaxed resize-y"
-            value={head.shipping_address}
+            id="po-shipping-address"
+            value={head.ship_same_as_billing ? head.billing_address : head.shipping_address}
+            readOnly={head.ship_same_as_billing}
             onChange={(e) => setHead({ ...head, shipping_address: e.target.value })}
             placeholder="Delivery address (Dyeing mill, garment unit, or warehouse)..."
           />
