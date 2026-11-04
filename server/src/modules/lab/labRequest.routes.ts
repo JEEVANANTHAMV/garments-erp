@@ -233,7 +233,7 @@ labRequestRouter.put('/requests/:id', requirePermission(P.CREATE), ah(async (req
     const b = z.object({
       amendment_reason: reasonReq, row_version: z.coerce.number().int().nullish(), required_date: dateStr.optional(), priority: z.enum(['NORMAL', 'URGENT']).optional(),
       remarks: s.nullableStr(500), buyer_standard: s.nullableStr(255), fabric_lot: s.nullableStr(60), color_id: s.id(), size_id: s.id(), item_description: s.nullableStr(200),
-    }).strict('After submission only required date, priority, remarks, buyer standard, lot, colour, size and descriptor can be amended').parse(req.body ?? {});
+    }).strict().parse(req.body ?? {});
     if (b.color_id && !(await queryOne(`SELECT id FROM mst_color WHERE id = ? AND company_id = ?`, [b.color_id, cid]))) throw BadRequest('Colour not found');
     await transaction(async (tx) => {
       const lock = await getRequest(cid, id, tx, true);
@@ -534,4 +534,4 @@ labRequestRouter.post('/attachments/:id/remove', requireAny(P.CREATE, P.UPDATE),
   res.json({ data: { id, removed: true } });
 }));
 
-export { hasPerm };
+

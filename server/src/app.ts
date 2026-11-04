@@ -104,6 +104,8 @@ export function createApp() {
   app.use('/uploads/export-benefits', (_req, res) => { res.status(404).end(); });
   // Bill tracker documents are private: only GET /api/stores/bill-docs/attachments/:id/download (authenticated, company-scoped).
   app.use('/uploads/bill-docs', (_req, res) => { res.status(404).end(); });
+  // Knitting DC e-way bill documents: only GET /api/knitting/yarn-issue-dcs/:id/eway-bill/attachment (authenticated, company-scoped).
+  app.use('/uploads/knit-dc-ewb', (_req, res) => { res.status(404).end(); });
   app.use('/uploads', express.static(uploadsDir));
 
   // ---------------------------------------------------------- health
