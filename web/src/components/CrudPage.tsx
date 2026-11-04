@@ -42,6 +42,8 @@ export interface FormField {
    * (e.g. the DC barcode on a gate pass). A warning is shown under the box; the values still fill.
    */
   scan?: (code: string) => Promise<{ values: Record<string, unknown>; warning?: string }>;
+  /** Custom control for the field (e.g. the visitor photo capture); gets the value and a setter. */
+  render?: (value: unknown, onChange: (v: unknown) => void) => ReactNode;
 }
 
 /** A filter control rendered above the table. */
@@ -379,6 +381,7 @@ function FormControl({ field, value, error, onChange, onScanned }: {
     options = [...field.options, { value: value as string | number, label: `${value} (current)` }];
   }
 
+  if (field.render) return <div className={span}>{field.render(value, (v) => onChange(v))}</div>;
   if (field.scan) return <ScanControl field={field} span={span} value={value} error={error} onChange={onChange} onScanned={onScanned} />;
 
   if (field.type === 'checkbox') {
