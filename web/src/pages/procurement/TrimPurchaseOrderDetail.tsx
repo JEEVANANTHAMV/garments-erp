@@ -12,6 +12,7 @@ import { useToast } from '../../hooks/useToast';
 import { useLookup } from '../../hooks/useLookup';
 import { Badge, Input, Select, Modal } from '../../components/ui';
 import { PoDocumentActions } from '../../components/PoDocumentActions';
+import { PoAddressFields } from '../../components/PoAddressFields';
 
 interface TrimLine {
   id?: number;
@@ -145,6 +146,9 @@ export default function TrimPurchaseOrderDetailPage() {
     status: 'APPROVED',
     is_interstate: false,
     remarks: '',
+    billing_address: '',
+    shipping_address: '',
+    ship_same_as_billing: true,
   });
 
   const [filterBomOnly, setFilterBomOnly] = useState(true);
@@ -193,6 +197,9 @@ export default function TrimPurchaseOrderDetailPage() {
         status: existingPo.status || 'APPROVED',
         is_interstate: Boolean(existingPo.is_interstate),
         remarks: existingPo.remarks || '',
+        billing_address: existingPo.billing_address || '',
+        shipping_address: existingPo.shipping_address || '',
+        ship_same_as_billing: existingPo.ship_same_as_billing === undefined || existingPo.ship_same_as_billing === null ? true : Boolean(Number(existingPo.ship_same_as_billing)),
       });
 
       if (existingPo.lines?.length) {
@@ -715,6 +722,12 @@ export default function TrimPurchaseOrderDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Billing + shipping (delivery) address — printed on the PO (client 04-Nov-2026) */}
+      <PoAddressFields
+        value={{ billing_address: head.billing_address, shipping_address: head.shipping_address, ship_same_as_billing: head.ship_same_as_billing }}
+        onChange={(v) => setHead((h) => ({ ...h, ...v }))}
+      />
 
       {/* Lines Table */}
       <div className="card overflow-hidden">

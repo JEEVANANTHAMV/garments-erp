@@ -229,7 +229,9 @@ function PoMailModal({ type, id, label, onClose }: { type: PoDocType; id: number
       q.set('subject', subject);
       q.set('body', `${body}\n\n(Attach the downloaded file ${name})`);
       const href = `mailto:${to.map(encodeURIComponent).join(',')}?${q.toString().replace(/\+/g, '%20')}`;
-      window.location.href = href;
+      const a = document.createElement('a');
+      a.href = href; a.id = 'po-mailto-link';
+      document.body.appendChild(a); a.click(); a.remove();
       toast(`${name} downloaded — attach it to the mail that opened`, 'info');
     } catch (e) { setError(errMsg(e)); } finally { setFallbackBusy(false); }
   };

@@ -72,6 +72,15 @@ export interface CrudConfig<T> {
   onNew?: () => void;
   /** Row click handler — omit to open the edit modal. */
   onRowClick?: (row: T) => void;
+  /**
+   * Edit (pencil) handler for screens with their own editor. When omitted, a screen without `fields`
+   * edits through `onRowClick` (the generic popup would be empty — Bills Inward, 04-Nov-2026).
+   */
+  onEdit?: (row: T) => void;
+  /** Row may be edited (pencil shown) — e.g. only DRAFT documents. Default: always. */
+  canEditRow?: (row: T) => boolean;
+  /** Row may be deleted (bin shown). Default: always. */
+  canDeleteRow?: (row: T) => boolean;
   /** Extra header buttons. */
   headerActions?: ReactNode;
   /** Shown between the page header and the search bar (e.g. role tabs). */
@@ -158,19 +167,21 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
     }
   };
 
+  // A screen with its own editor (no generic fields) never opens the generic popup — it would be empty
+  const editRow: ((row: T) => void) | undefined = cfg.onEdit ?? (cfg.fields.length ? openEdit : cfg.onRowClick);
   const columns: Column<T>[] = [
     ...cfg.columns,
-    ...(can(`${cfg.permission}.UPDATE`) || can(`${cfg.permission}.DELETE`) ? [{
+    ...((can(`${cfg.permission}.UPDATE`) && editRow) || can(`${cfg.permission}.DELETE`) ? [{
       key: '__actions', header: '', align: 'right' as const, width: 'w-24',
       render: (row: T) => (
         <div className="flex justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
-          {can(`${cfg.permission}.UPDATE`) && (
-            <button onClick={() => openEdit(row)} title="Edit"
+          {can(`${cfg.permission}.UPDATE`) && editRow && (cfg.canEditRow?.(row) ?? true) && (
+            <button onClick={() => editRow(row)} title="Edit"
               className="rounded-md p-1.5 text-ink-muted hover:bg-brand-50 hover:text-brand-700 transition-colors">
               <Pencil size={14} />
             </button>
           )}
-          {can(`${cfg.permission}.DELETE`) && (
+          {can(`${cfg.permission}.DELETE`) && (cfg.canDeleteRow?.(row) ?? true) && (
             <button onClick={() => setDeleting(row)} title="Delete"
               className="rounded-md p-1.5 text-ink-muted hover:bg-red-50 hover:text-red-600 transition-colors">
               <Trash2 size={14} />
@@ -232,7 +243,7 @@ export function CrudPage<T extends { id: number }>(cfg: CrudConfig<T>) {
         error={query.error}
         onRetry={() => void query.refetch()}
         rowKey={(r) => r.id}
-        onRowClick={cfg.onRowClick ?? (can(`${cfg.permission}.UPDATE`) ? openEdit : undefined)}
+        onRowClick={cfg.onRowClick ?? (can(`${cfg.permission}.UPDATE`) && cfg.fields.length ? openEdit : undefined)}
         sort={sort} onSort={onSort}
         pagination={query.data?.pagination}
         onPage={setPage}

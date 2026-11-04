@@ -74,3 +74,41 @@ export async function checkSupplierBill(req: Request, data: Record<string, unkno
   }
   if (grnIds.length || trimIds.length) data.grn_matched = 1;
 }
+
+/**
+ * Edit lock by status (client 04-Nov-2026 — "Edit" on Bills Inward):
+ *  - DRAFT / VERIFIED / DISPUTED bills are edited in full
+ *  - an APPROVED bill only moves on (Paid / Disputed / Cancelled) with remarks / payment details —
+ *    set it to Disputed to correct it
+ *  - PAID bills only take remarks / payment details; CANCELLED bills are final
+ * Returns true for an allowed status-only change of a locked bill (the GRN / totals checks are skipped).
+ */
+export const BILL_EDITABLE_STATUSES = ['DRAFT', 'VERIFIED', 'DISPUTED'];
+const LOCKED_NEXT: Record<string, string[]> = {
+  APPROVED: ['APPROVED', 'PAID', 'DISPUTED', 'CANCELLED'],
+  PAID: ['PAID'],
+};
+const LOCKED_KEYS = new Set(['status', 'remarks', 'payment_due_date', 'voucher_id']);
+
+export function assertSupplierBillEditable(req: Request, data: Record<string, unknown>, before?: any): boolean {
+  if (!before) return false;
+  const st = String(before.status ?? 'DRAFT');
+  if (BILL_EDITABLE_STATUSES.includes(st)) return false;
+  const no = before.bill_no || `Bill #${before.id}`;
+  if (st === 'CANCELLED') throw BadRequest(`${no} is cancelled — a cancelled bill cannot be edited`);
+  const extra = Object.keys(data).filter((k) => !LOCKED_KEYS.has(k));
+  if (Array.isArray(req.body?.lines) || extra.length) {
+    throw BadRequest(`${no} is ${st.toLowerCase()} — its lines and amounts are locked. Only the status, remarks and payment details can change${st === 'APPROVED' ? ' (set it to Disputed to correct the bill)' : ''}`);
+  }
+  const next = data.status != null ? String(data.status) : st;
+  if (!(LOCKED_NEXT[st] ?? [st]).includes(next)) {
+    throw BadRequest(`${no} is ${st.toLowerCase()} — it cannot go back to ${next.toLowerCase()}`);
+  }
+  return true;
+}
+
+/** Only a draft bill is deleted; anything further along is cancelled instead (its GRNs are then free to bill again). */
+export function assertSupplierBillDeletable(before: any) {
+  const st = String(before?.status ?? 'DRAFT');
+  if (st !== 'DRAFT') throw BadRequest(`${before?.bill_no || 'This bill'} is ${st.toLowerCase()} — only a draft bill can be deleted; set it to Cancelled instead`);
+}

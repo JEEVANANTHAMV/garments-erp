@@ -11,6 +11,7 @@ import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, Spinner, StatusBadge } from '../../components/ui';
 import { PoDocumentActions } from '../../components/PoDocumentActions';
+import { PoAddressFields } from '../../components/PoAddressFields';
 import { fmtDecimal, today } from '../../lib/format';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
 import { computeInvoice, chargesFromRow, chargesPayload, EMPTY_CHARGES, type InvoiceCharges } from '../../lib/invoiceCalc';
@@ -104,6 +105,9 @@ export function GeneralPurchaseDetailPage() {
     remarks: '',
     approval_state: 'DRAFT',
     status_id: '',
+    billing_address: '',
+    shipping_address: '',
+    ship_same_as_billing: true,
   });
 
   // Selected Currency Info
@@ -171,6 +175,9 @@ export function GeneralPurchaseDetailPage() {
         remarks: p.remarks || '',
         approval_state: p.approval_state || 'DRAFT',
         status_id: p.status_id || '',
+        billing_address: p.billing_address || '',
+        shipping_address: p.shipping_address || '',
+        ship_same_as_billing: p.ship_same_as_billing === undefined || p.ship_same_as_billing === null ? true : Boolean(Number(p.ship_same_as_billing)),
       });
       setCharges(chargesFromRow(p));
 
@@ -468,6 +475,8 @@ export function GeneralPurchaseDetailPage() {
         ...chargesPayload(charges, totals.inv),
         approval_state: submitState,
         status_id: head.status_id ? Number(head.status_id) : null,
+        // bill to / deliver to on the PO print (client 04-Nov-2026) — PO only; a GRN keeps what it has
+        ...(isPoMode ? { billing_address: head.billing_address || null, shipping_address: head.shipping_address || null, ship_same_as_billing: head.ship_same_as_billing ? 1 : 0 } : {}),
         remarks: head.remarks || null,
         lines: lines.map((l) => ({
           item_description: l.item_description.trim(),
@@ -786,6 +795,15 @@ export function GeneralPurchaseDetailPage() {
           Purchased material remains in inventory until issued. Enable <span className="font-bold text-emerald-700 bg-emerald-100 px-1 rounded">⚡ Direct Issue</span> on a line to immediately issue emergency purchases (e.g. 1 urgent thread cone, 10 sample buttons) into Actual Order Costing with 0 remaining in unissued stock.
         </div>
       </div>
+
+      {/* Billing + shipping (delivery) address — printed on the PO (client 04-Nov-2026) */}
+      {isPoMode && (
+        <PoAddressFields
+          value={{ billing_address: head.billing_address ?? '', shipping_address: head.shipping_address ?? '', ship_same_as_billing: head.ship_same_as_billing ?? true }}
+          onChange={(v) => setHead((h) => ({ ...h, ...v }))}
+          disabled={!editable}
+        />
+      )}
 
       {/* Item Lines Grid */}
       <div className="rounded-xl border border-surface-border bg-white p-5 shadow-xs">

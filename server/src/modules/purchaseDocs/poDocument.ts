@@ -374,7 +374,8 @@ async function loadGeneralPo(id: number, cid: number): Promise<PoDocument> {
   const lines: PoLine[] = rows.map((l) => {
     const details: string[] = [];
     if (str(l.remarks)) details.push(String(l.remarks));
-    const alloc = [str(l.department_name), str(l.cost_centre), str(l.expense_head), str(l.machine_id) ? `Machine ${l.machine_id}` : null].filter(Boolean);
+    const allocLabel = !jobs.get(Number(l.so_id)) && l.allocation_type && l.allocation_type !== 'GENERAL_STOCK' ? ALLOCATION_LABEL[String(l.allocation_type)] ?? null : null;
+    const alloc = [allocLabel ? `For: ${allocLabel}` : null, str(l.department_name), str(l.cost_centre), str(l.expense_head), str(l.machine_id) ? `Machine ${l.machine_id}` : null].filter(Boolean);
     if (alloc.length) details.push(alloc.join(' | '));
     const raw = num(l.qty) * num(l.rate);
     const taxable = r2(raw - (raw * num(l.discount_pct)) / 100);
@@ -382,7 +383,7 @@ async function loadGeneralPo(id: number, cid: number): Promise<PoDocument> {
     const gstRate = interstate ? (num(l.igst_rate) || num(l.gst_rate)) : num(l.gst_rate);
     return {
       description: String(l.item_description || 'Item'), details,
-      job: jobs.get(Number(l.so_id)) ?? ALLOCATION_LABEL[String(l.allocation_type)] ?? null,
+      job: jobs.get(Number(l.so_id)) ?? null,
       hsn: str(l.master_hsn), qty: num(l.qty), uom: String(l.uom_code ?? ''), rate: num(l.rate),
       taxable, gstRate, tax: lineTax(taxable, gstRate, l.tax_amount),
     };

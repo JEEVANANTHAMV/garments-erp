@@ -17,7 +17,7 @@ const invoiceSummaryFields = () => [
 import { jobworkInBeforeCreate, jobworkInvoiceBeforeCreate } from '../production/jobworkDivision.js';
 import { computePreCosting, PRE_COST_HEADS, certSummary } from '../costing/preCostingCalc.js';
 import { assertPurchaseExcess, poItemKeys } from '../../core/purchaseExcess.js';
-import { checkSupplierBill } from '../../core/supplierBillRules.js';
+import { checkSupplierBill, assertSupplierBillEditable, assertSupplierBillDeletable } from '../../core/supplierBillRules.js';
 import { quotationAfterWriteTx } from '../stock/genealogy.routes.js';
 import { PO_RECEIPT_STATUS_SQL } from '../../core/poReceipt.js';
 import { syncShipToBilling } from '../../core/poAddress.js';
@@ -1198,7 +1198,10 @@ export const transactionResources: ResourceConfig[] = [
       ...invoiceSummaryFields(),
     ],
     // Totals are recomputed from the lines whenever lines are saved (common invoice summary).
+    // edit / delete lock by status (04-Nov-2026): approved bills only move on, paid / cancelled are final
+    beforeDelete: async (_req, _id, before) => assertSupplierBillDeletable(before),
     beforeWrite: async (req, data, before) => {
+      if (assertSupplierBillEditable(req, data, before)) return;
       await checkSupplierBill(req, data, before);
       const lines = req.body?.lines;
       if (!Array.isArray(lines)) return;

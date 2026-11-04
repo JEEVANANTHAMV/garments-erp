@@ -28,6 +28,10 @@ export const BILL_TYPES = [
 /** Yarn / fabric process bills are booked in their own Bills Inward tabs (from the process GRNs);
  *  the old categories stay only to show bills booked earlier. */
 const OWN_TAB_TYPES = ['YARN_PROCESS', 'FABRIC_PROCESS'];
+/** Edited in full; APPROVED only moves on (Paid / Disputed / Cancelled), PAID / CANCELLED are final (server: supplierBillRules.ts). */
+const BILL_EDITABLE_STATUSES = ['DRAFT', 'VERIFIED', 'DISPUTED'];
+const LOCKED_NEXT: Record<string, string[]> = { APPROVED: ['APPROVED', 'PAID', 'DISPUTED', 'CANCELLED'], PAID: ['PAID'], CANCELLED: ['CANCELLED'] };
+const BILL_STATUS_OPTIONS = ['DRAFT', 'VERIFIED', 'APPROVED', 'PAID', 'DISPUTED', 'CANCELLED'];
 const NEW_BILL_TYPES = BILL_TYPES.filter((b) => !OWN_TAB_TYPES.includes(b.value));
 
 interface BillLineItem {
@@ -120,6 +124,9 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
   useEffect(() => { setBillSupplier(String(header.supplier_id || '')); }, [header.supplier_id]);
 
   const [lines, setLines] = useState<BillLineItem[]>([]);
+  // Status the bill was saved with — APPROVED / PAID / CANCELLED bills are locked (server rule, 04-Nov-2026)
+  const [savedStatus, setSavedStatus] = useState('DRAFT');
+  const locked = !!billId && !BILL_EDITABLE_STATUSES.includes(savedStatus);
   // Common invoice summary heads (TDS / TCS / other charges / landed cost / round off)
   const [charges, setCharges] = useState<InvoiceCharges>(EMPTY_CHARGES);
 
@@ -156,6 +163,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             status: b.status || 'DRAFT',
             remarks: b.remarks || '',
           });
+          setSavedStatus(b.status || 'DRAFT');
           setCharges(chargesFromRow(b));
           setBillType(b.bill_type || 'YARN_PURCHASE');
           let gids: number[] = [];
@@ -198,6 +206,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       const bType = initialType && initialType !== 'ALL' ? initialType : 'YARN_PURCHASE';
       setBillType(bType);
       setSelectedGrnIds([]); setTrimGrnIds([]);
+      setSavedStatus('DRAFT');
       setCharges(EMPTY_CHARGES);
       setHeader({
         bill_no: '',
@@ -513,6 +522,18 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
 
   // Save handler
   const handleSave = async () => {
+    if (locked) {
+      // a locked bill only moves on: status + remarks / payment details (lines and amounts stay)
+      setSaving(true);
+      try {
+        await http.put(`/supplier-bills/${billId}`, { status: header.status, remarks: header.remarks || null, payment_due_date: header.payment_due_date || null });
+        toast('Bill status updated', 'success');
+        onSaved();
+      } catch (err: any) {
+        toast(err instanceof ApiError ? err.message : 'Failed to update the bill', 'error');
+      } finally { setSaving(false); }
+      return;
+    }
     if (!header.supplier_id) {
       toast('Please select a Supplier / Mill', 'error');
       return;
@@ -610,8 +631,10 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
     <Modal
       open={open}
       onClose={onClose}
-      title={billId ? `Edit inward bill #${billId}` : 'New inward bill'}
-      subtitle="Pick the bill type and supplier, link the GRN(s) to pull lines, then check the match and totals"
+      title={billId ? `${locked ? 'Inward bill' : 'Edit inward bill'} ${header.bill_no || `#${billId}`}${locked ? ` — ${humanize(savedStatus)} (locked)` : ''}` : 'New inward bill'}
+      subtitle={locked
+        ? (savedStatus === 'CANCELLED' ? 'A cancelled bill is final — view only' : 'Lines and amounts are locked; only the status, remarks and payment due date can change' + (savedStatus === 'APPROVED' ? ' (set it to Disputed to correct the bill)' : ''))
+        : 'Pick the bill type and supplier, link the GRN(s) to pull lines, then check the match and totals'}
       icon={<Receipt size={16} />}
       size="full"
       footerStart={
@@ -627,22 +650,32 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       }
       footer={<>
         <Button variant="secondary" onClick={onClose}>
-          Cancel
+          {locked && savedStatus === 'CANCELLED' ? 'Close' : 'Cancel'}
         </Button>
+        {!(locked && savedStatus === 'CANCELLED') && (
         <Button
+          id="sb-save"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || loading}
           className="inline-flex items-center gap-1.5"
         >
           {saving ? <Spinner size={14} /> : <CheckCircle2 size={15} />}
-          <span>{saving ? 'Saving...' : 'Save Inward Bill'}</span>
+          <span>{saving ? 'Saving...' : locked ? 'Update status' : billId ? 'Save changes' : 'Save Inward Bill'}</span>
         </Button>
+        )}
       </>}
     >
       {loading ? (
         <LoadingBlock label="Loading bill details…" rows={6} />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4" id="sb-editor" data-locked={locked ? '1' : '0'}>
+          {locked && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" id="sb-locked-note">
+              This bill is <strong>{humanize(savedStatus)}</strong> — its lines and amounts are locked.
+              {savedStatus !== 'CANCELLED' && ' Change the Bill Status / remarks below and press Update status.'}
+            </div>
+          )}
+          <fieldset disabled={locked} className="min-w-0 space-y-4">
           {/* Bill Category Selector Tabs */}
           <div className="p-2 bg-surface-muted rounded-xl border border-surface-border/80 flex items-center gap-1.5 overflow-x-auto">
             {BILL_TYPES.filter((bt) => !OWN_TAB_TYPES.includes(bt.value) || billType === bt.value).map((bt) => {
@@ -1196,11 +1229,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     onChange={(e) => setHeader((p) => ({ ...p, status: e.target.value }))}
                     className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white font-medium mt-0.5"
                   >
-                    <option value="DRAFT">Draft</option>
-                    <option value="VERIFIED">Verified</option>
-                    <option value="APPROVED">Approved</option>
-                    <option value="PAID">Paid</option>
-                    <option value="DISPUTED">Disputed</option>
+                    {BILL_STATUS_OPTIONS.map((v) => <option key={v} value={v}>{humanize(v)}</option>)}
                   </select>
                 </div>
               </div>
@@ -1229,6 +1258,33 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
               exchangeRate={exRate}
             />
           </div>
+          </fieldset>
+          {locked && savedStatus !== 'CANCELLED' && (
+            <FormSection title="Status & payment">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="block text-caption font-semibold text-ink-secondary" htmlFor="sb-locked-status">Bill Status</label>
+                  <select id="sb-locked-status" value={header.status}
+                    onChange={(e) => setHeader((p) => ({ ...p, status: e.target.value }))}
+                    className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white font-medium mt-0.5">
+                    {(LOCKED_NEXT[savedStatus] ?? [savedStatus]).map((v) => <option key={v} value={v}>{humanize(v)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-caption font-semibold text-ink-secondary" htmlFor="sb-locked-due">Payment due date</label>
+                  <input id="sb-locked-due" type="date" value={header.payment_due_date}
+                    onChange={(e) => setHeader((p) => ({ ...p, payment_due_date: e.target.value }))}
+                    className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white mt-0.5" />
+                </div>
+                <div>
+                  <label className="block text-caption font-semibold text-ink-secondary" htmlFor="sb-locked-remarks">Remarks</label>
+                  <input id="sb-locked-remarks" value={header.remarks}
+                    onChange={(e) => setHeader((p) => ({ ...p, remarks: e.target.value }))}
+                    className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white mt-0.5" />
+                </div>
+              </div>
+            </FormSection>
+          )}
         </div>
       )}
     </Modal>
@@ -1301,6 +1357,10 @@ export function SupplierBillsPage() {
         baseParams={activeTab !== 'ALL' ? { bill_type: activeTab } : undefined}
         onNew={() => setModalState({ open: true, billId: null })}
         onRowClick={(row: any) => setModalState({ open: true, billId: row.id })}
+        // the pencil opens the bill's own editor (header + lines) — it used to open CrudPage's empty generic form
+        onEdit={(row: any) => setModalState({ open: true, billId: row.id })}
+        canEditRow={(row: any) => BILL_EDITABLE_STATUSES.includes(String(row.status || 'DRAFT'))}
+        canDeleteRow={(row: any) => String(row.status || 'DRAFT') === 'DRAFT'}
         columns={[
           {
             key: 'bill_no',
