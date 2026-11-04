@@ -568,6 +568,7 @@ export default function FabricPurchaseOrderDetailPage() {
         lines: lines.map((l) => {
           const isDyed = l.fabric_category === 'Dyed Fabric';
           return {
+            id: l.id || undefined,
             fabric_id: Number(l.fabric_id),
             so_id: l.so_id ? Number(l.so_id) : undefined,
             style_id: l.style_id ? Number(l.style_id) : undefined,

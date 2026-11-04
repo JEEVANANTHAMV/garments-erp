@@ -87,7 +87,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
   const currencies = useLookup('currencies');
   const uoms = useLookup('uoms');
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!billId);   // an existing bill shows the loader, never an empty form, until it is read
   const [saving, setSaving] = useState(false);
   const [fetchingGrn, setFetchingGrn] = useState(false);
   const [selectedGrnIds, setSelectedGrnIds] = useState<number[]>([]);

@@ -612,6 +612,7 @@ export default function YarnPurchaseOrderDetailPage() {
         other_charges: totals.other,
         round_off: totals.roundOff,
         lines: lines.map((l) => ({
+          id: l.id || undefined,
           material_type: 'YARN',
           yarn_id: Number(l.yarn_id) || null,
           so_id: l.so_id ? Number(l.so_id) : null,

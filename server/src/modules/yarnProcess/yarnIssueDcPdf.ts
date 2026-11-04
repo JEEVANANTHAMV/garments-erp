@@ -157,7 +157,7 @@ function infoPanel(pdf: Doc, d: YarnIssueDcPdf, y: number) {
   const leftVX = X0 + 26 + lw + 8;
   const leftVW = split - 10 - leftVX;
   const rightLX = split + 34;
-  const rightVX = rightLX + 52;
+  const rightVX = rightLX + 66;
   const rightVW = X1 - 8 - rightVX;
   const rowsL: [string, string, string, boolean][] = [
     ['doc', 'DC No.', d.dc.dc_no, true],
@@ -189,8 +189,8 @@ function infoPanel(pdf: Doc, d: YarnIssueDcPdf, y: number) {
   // right: vehicle + purpose
   let yy = y + 8;
   icon(pdf, 'truck', split + 12, yy);
-  pdf.font('Helvetica-Bold').fontSize(8.6).fillColor(NAVY_D).text('Vehicle No.', rightLX, yy + 3, { width: 48, lineBreak: false });
-  pdf.text(':', rightLX + 46, yy + 3, { lineBreak: false });
+  pdf.font('Helvetica-Bold').fontSize(8.6).fillColor(NAVY_D).text('Vehicle No.', rightLX, yy + 3, { width: 56, lineBreak: false });
+  pdf.text(':', rightLX + 58, yy + 3, { lineBreak: false });
   pdf.font('Helvetica-Bold').fontSize(9).fillColor(INK).text(T(d.dc.vehicle_no || '-'), rightVX, yy + 3, { width: rightVW });
   yy += vehH + 8;
   icon(pdf, 'target', split + 12, yy);
@@ -220,7 +220,7 @@ async function ewayPanel(pdf: Doc, e: NonNullable<YarnIssueDcPdf['eway']>, y: nu
     ['Transporter GSTIN', e.transporter_gstin || '-'],
     ['Vehicle No.', e.vehicle_no || '-'],
   ];
-  const lab = 78; const vw = zoneW - lab - 8;
+  const lab = 88; const vw = zoneW - lab - 8;
   const rowH = (k: string, v: string, bold: boolean) => { pdf.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.6); return Math.max(13, pdf.heightOfString(T(v), { width: vw }) + 3); };
   const hs = left.map(([k, v], i) => Math.max(rowH(k, v, i === 0), rowH(mid[i][0], mid[i][1], false)));
   const bodyH = Math.max(hs.reduce((a, b) => a + b, 0), qr ? qrW + 12 : 0);

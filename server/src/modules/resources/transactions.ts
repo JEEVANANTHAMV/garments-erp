@@ -316,7 +316,9 @@ export const transactionResources: ResourceConfig[] = [
             LEFT JOIN mst_style st ON st.id = t.style_id
             LEFT JOIN mst_party ship_to ON ship_to.id = t.shipping_to_party_id`,
     children: [
-      { key: 'lines', table: 'trx_purchase_order_line', fk: 'po_id', fields: [
+      // upsert: lines keep their ids on edit, so a PO that already has GRNs (trx_grn_line.po_line_id) can still be
+      // re-saved (address, terms…) instead of failing on the FK (client 04-Nov-2026).
+      { key: 'lines', table: 'trx_purchase_order_line', fk: 'po_id', upsert: {}, fields: [
         f('so_id', s.id()), f('style_id', s.id()), f('hsn_code', s.nullableStr(30)),
         f('material_type', s.enumReq(['YARN','FABRIC','TRIM','SERVICE'])),
         f('yarn_id', s.id()), f('fabric_id', s.id()), f('trim_id', s.id()), f('color_id', s.id()),
