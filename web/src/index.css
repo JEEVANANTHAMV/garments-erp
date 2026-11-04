@@ -137,7 +137,9 @@
   /* Names wrap so long fabric / supplier names never push the quantity columns out of view. */
   .dashboard-panel th, .dashboard-panel td.text-right { white-space: nowrap; }
   .dashboard-panel td:not(.text-right) { min-width: 4.5rem; overflow-wrap: anywhere; }
-  .dashboard-kpi-value { font-size: clamp(1.25rem, 1.7vw, 1.6875rem); font-variant-numeric: tabular-nums; overflow-x: auto; white-space: nowrap; }
+  /* No overflow scrolling here: on Windows a classic scrollbar was drawn over the digits (client 04-Nov-2026).
+     Long values (fabric stock "1,234.50 / 980.00") wrap at the spaces instead; a single number never breaks. */
+  .dashboard-kpi-value { font-size: clamp(1.25rem, 1.7vw, 1.6875rem); font-variant-numeric: tabular-nums; overflow: visible; white-space: normal; overflow-wrap: break-word; }
   @media (min-width: 768px) { .dashboard-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (min-width: 1200px) {
     .dashboard-charts { grid-template-columns: 1.5fr 1fr 1fr; }

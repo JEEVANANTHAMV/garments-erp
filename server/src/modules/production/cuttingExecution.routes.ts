@@ -17,7 +17,8 @@ import { audit } from '../../core/audit.js';
 import { s } from '../resources/schemas.js';
 import { resolveSoId } from '../stock/jobStock.routes.js';
 import {
-  KG_EPS, assertPlanCuttable, assertPlanOpen, checkOverCut, generateBundlesFromOutput, hasPerm, lockPlan,
+  KG_EPS, assertPlanCuttable, assertPlanOpen, cancelLayBundlesForRegenerate, checkOverCut, findBundleBlockers,
+  generateBundlesFromOutput, hasPerm, lockPlan,
   markerSizeKg, nextUniqueDocNo, num, parseJson, refreshDcRollStatus, refreshPlanStatus, resolveKgPerPc, round,
 } from './cuttingEngine.js';
 
@@ -1040,3 +1041,107 @@ const layBundlesHandler = ah(async (req, res) => {
 });
 cuttingExecutionRouter.post('/lay-plans/:id/bundles', requirePermission('PRODUCTION.CREATE'), layBundlesHandler);
 cuttingExecutionRouter.post('/cutting/:id/bundles', requirePermission('PRODUCTION.CREATE'), layBundlesHandler);
+
+/**
+ * GET /lay-plans/:id/bundle-status — what the lay's "Bundles" dialog needs:
+ * open good PCS left to bundle (per output), its live bundles (by size) and
+ * whether they can still be regenerated (all GENERATED, nothing moved).
+ */
+cuttingExecutionRouter.get('/lay-plans/:id/bundle-status', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const layId = Number(req.params.id);
+  const lay = await queryOne<any>(`SELECT id, lay_no, status, cutting_plan_id FROM trx_lay_plan WHERE id = ? AND company_id = ?`, [layId, cid]);
+  if (!lay) throw NotFound('Lay not found');
+  const outputs = await query<any>(
+    `SELECT co.id, co.output_no, co.status, co.good_qty, co.bundled_qty, (co.good_qty - co.bundled_qty) AS remaining_qty,
+            sz.size_code, cp.part_name
+       FROM trx_cut_output co
+       LEFT JOIN mst_size sz ON sz.id = co.size_id
+       LEFT JOIN trx_cutting_plan cp ON cp.id = co.cutting_plan_id
+      WHERE co.lay_id = ? AND co.company_id = ? AND co.status <> 'REVERSED'
+      ORDER BY sz.sort_order, sz.size_code, co.id`, [layId, cid]);
+  const bundles = await query<any>(
+    `SELECT cb.*, sz.size_code, sz.sort_order FROM trx_cutting_bundle cb LEFT JOIN mst_size sz ON sz.id = cb.size_id
+      WHERE cb.lay_id = ? AND cb.company_id = ? AND cb.status <> 'CANCELLED' ORDER BY sz.sort_order, sz.size_code, cb.bundle_seq, cb.id`,
+    [layId, cid]);
+  const blockers = bundles.length ? await findBundleBlockers(null, bundles) : [];
+  const sizes = new Map<string, { size_code: string; bundles: number; pcs: number; bundle_sizes: Set<number> }>();
+  for (const b of bundles) {
+    const k = String(b.size_code ?? '—');
+    const r = sizes.get(k) ?? { size_code: k, bundles: 0, pcs: 0, bundle_sizes: new Set<number>() };
+    r.bundles++; r.pcs += num(b.qty); r.bundle_sizes.add(num(b.qty));
+    sizes.set(k, r);
+  }
+  const open = outputs.filter((o) => o.status === 'OPEN' && num(o.remaining_qty) > 0);
+  const lastPart = bundles.length ? bundles[bundles.length - 1] : null;
+  res.json({
+    data: {
+      lay_id: lay.id, lay_no: lay.lay_no, lay_status: lay.status,
+      can_generate: ['CUT', 'APPROVED'].includes(lay.status),
+      good_qty: outputs.reduce((a, o) => a + num(o.good_qty), 0),
+      bundled_qty: outputs.reduce((a, o) => a + num(o.bundled_qty), 0),
+      remaining_qty: open.reduce((a, o) => a + num(o.remaining_qty), 0),
+      outputs: outputs.map((o) => ({ ...o, good_qty: num(o.good_qty), bundled_qty: num(o.bundled_qty), remaining_qty: num(o.remaining_qty) })),
+      bundles: {
+        count: bundles.length,
+        pcs: bundles.reduce((a, b) => a + num(b.qty), 0),
+        statuses: bundles.reduce((a: Record<string, number>, b) => { a[b.status] = (a[b.status] ?? 0) + 1; return a; }, {}),
+        by_size: [...sizes.values()].map((r) => ({ ...r, bundle_sizes: [...r.bundle_sizes].sort((a, b) => b - a) })),
+        part_name: lastPart?.part_name ?? null,
+        components: lastPart?.component ? String(lastPart.component).split(',').filter(Boolean) : [],
+      },
+      can_regenerate: bundles.length > 0 && blockers.length === 0 && ['CUT', 'APPROVED'].includes(lay.status),
+      blockers: blockers.slice(0, 50),
+      blocker_count: blockers.length,
+    },
+  });
+}));
+
+/**
+ * POST /lay-plans/:id/bundles/regenerate { bundle_size, part_name?, components?, line_destination?, reason? }
+ * Undo a lay's bundles (e.g. made with the wrong pieces-per-bundle) and
+ * bundle the same PCS again. Allowed only while every live bundle of the lay
+ * is GENERATED with no movement / downstream reference. Old bundles are
+ * CANCELLED (kept for audit, BUNDLE_REGENERATE movement), cut output
+ * bundled_qty is reduced, then the generator runs — all in one transaction.
+ * Needs PRODUCTION.CREATE + PRODUCTION.UPDATE (it cancels records).
+ */
+cuttingExecutionRouter.post('/lay-plans/:id/bundles/regenerate', requirePermission('PRODUCTION.CREATE', 'PRODUCTION.UPDATE'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const layId = Number(req.params.id);
+  const body = bundleGenSchema.omit({ qty: true }).extend({ reason: s.nullableStr(255) }).parse(req.body);
+  const result = await transaction(async (tx) => {
+    const lay = await txQueryOne<any>(tx, `SELECT * FROM trx_lay_plan WHERE id = ? AND company_id = ? FOR UPDATE`, [layId, cid]);
+    if (!lay) throw NotFound('Lay not found');
+    if (!['CUT', 'APPROVED'].includes(lay.status)) throw BadRequest(`Lay ${lay.lay_no} is ${lay.status} — bundles can only be regenerated on an executed lay`);
+    const plan = lay.cutting_plan_id ? await lockPlan(tx, cid, lay.cutting_plan_id) : null;
+    if (plan) assertPlanOpen(plan, 'regenerate bundles');
+    const undone = await cancelLayBundlesForRegenerate(tx, {
+      cid, userId: req.user!.id, layId, layNo: lay.lay_no,
+      reason: body.reason || `Regenerated with ${body.bundle_size} PCS per bundle`,
+    });
+    if (!undone.cancelled.length) throw BadRequest(`Lay ${lay.lay_no} has no bundles to regenerate — use Generate`);
+    const outs = await txQuery<any>(tx,
+      `SELECT id FROM trx_cut_output WHERE lay_id = ? AND company_id = ? AND status = 'OPEN' AND good_qty > bundled_qty ORDER BY id`, [layId, cid]);
+    const generated: any[] = [];
+    for (const o of outs) {
+      generated.push(await generateBundlesFromOutput(tx, o.id, {
+        cid, userId: req.user!.id, bundleSize: body.bundle_size, qty: null,
+        partName: body.part_name ?? null, components: body.components, lineDestination: body.line_destination ?? null,
+      }));
+    }
+    return { lay_no: lay.lay_no, cancelled: undone.cancelled, outputs: generated };
+  });
+  await audit(req, 'trx_lay_plan', layId, 'UPDATE',
+    { bundles: result.cancelled.map((b) => b.bundle_no) },
+    { action: 'BUNDLE_REGENERATE', bundle_size: body.bundle_size, bundles_generated: result.outputs.flatMap((r) => r.bundles.map((b: any) => b.bundle_no)) });
+  res.status(201).json({
+    data: {
+      lay_no: result.lay_no,
+      cancelled_count: result.cancelled.length,
+      cancelled_pcs: result.cancelled.reduce((a, b) => a + b.qty, 0),
+      outputs: result.outputs,
+      count: result.outputs.reduce((a, r) => a + r.bundles.length, 0),
+    },
+  });
+}));

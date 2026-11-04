@@ -22,7 +22,9 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.11.0",
     "mysql2": "^3.23.4",
+    "nodemailer": "^10.3.1",
     "pdfjs-dist": "^3.11.174",
+    "pdfkit": "^0.20.2",
     "qrcode": "^1.5.4",
     "xlsx": "^0.18.5",
     "zod": "^4.4.3"
@@ -35,6 +37,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.2.0",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfkit": "^0.17.7",
     "@types/qrcode": "^1.5.5",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"

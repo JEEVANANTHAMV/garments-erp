@@ -326,7 +326,7 @@ export async function generateBundlesFromOutput(tx: Tx, cutOutputId: number, p: 
       [co.style_id, co.color_id, co.size_id])
     : null;
   const seqRow = await q1<any>(tx,
-    `SELECT COALESCE(MAX(bundle_seq),0) AS s FROM trx_cutting_bundle WHERE cut_output_id = ?`, [co.id]);
+    `SELECT COALESCE(MAX(bundle_seq),0) AS s FROM trx_cutting_bundle WHERE cut_output_id = ? AND status <> 'CANCELLED'`, [co.id]);
   const startSeq = num(seqRow?.s);
   const count = Math.ceil(qty / p.bundleSize);
   const components = (p.components ?? []).map((c) => c.trim()).filter(Boolean);
@@ -368,6 +368,112 @@ export async function generateBundlesFromOutput(tx: Tx, cutOutputId: number, p: 
   await tx.execute(`UPDATE trx_cut_output SET bundled_qty = ?, status = ? WHERE id = ?`,
     [bundled, bundled >= num(co.good_qty) ? 'COMPLETED' : 'OPEN', co.id]);
   return { cut_output_id: co.id, output_no: co.output_no, bundles: created, basis, remaining_after: remaining - qty };
+}
+
+/* ------------------------------------------------- bundle regeneration */
+
+/** Tables whose bundle reference is not "use" of a bundle — never block a regenerate. */
+const BUNDLE_REF_IGNORE = new Set(['trx_cutting_bundle_detail', 'trx_bundle_scan_log', 'trx_bundle_movement']);
+let bundleRefTablesCache: { table: string; column: string }[] | null = null;
+
+/** Every table/column in this schema that points at a bundle (found once, then cached). */
+async function bundleRefTables(tx: Tx | null | undefined) {
+  if (bundleRefTablesCache) return bundleRefTablesCache;
+  const rows = await q<any>(tx,
+    `SELECT TABLE_NAME AS t, COLUMN_NAME AS c FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN ('bundle_id','source_bundle_id','merged_bundle_id','parent_bundle_id')
+      ORDER BY TABLE_NAME, COLUMN_NAME`);
+  bundleRefTablesCache = rows
+    .map((r) => ({ table: String(r.t ?? r.TABLE_NAME), column: String(r.c ?? r.COLUMN_NAME) }))
+    .filter((r) => /^[a-z0-9_]+$/i.test(r.table) && !BUNDLE_REF_IGNORE.has(r.table));
+  return bundleRefTablesCache;
+}
+
+export interface BundleBlocker { bundle_id: number; bundle_no: string; reason: string }
+
+/**
+ * Why each of these (non-cancelled) bundles can no longer be undone: status
+ * beyond GENERATED, any floor movement other than BUNDLE_CREATE, any stage
+ * counter, or a reference from any other document (line allocation, daily
+ * plans, DCs, cartons, FG receipt, split/merge …). Empty = safe to cancel.
+ */
+export async function findBundleBlockers(tx: Tx | null | undefined, bundles: any[]): Promise<BundleBlocker[]> {
+  const out: BundleBlocker[] = [];
+  const seen = new Set<number>();
+  const add = (b: any, reason: string) => {
+    if (seen.has(Number(b.id))) return;
+    seen.add(Number(b.id));
+    out.push({ bundle_id: Number(b.id), bundle_no: String(b.bundle_no), reason });
+  };
+  const COUNTERS = ['sew_in_qty', 'sew_good_qty', 'fin_in_qty', 'fin_good_qty', 'qc_pass_qty', 'packed_qty', 'out_cut_qty',
+    'out_sewn_qty', 'out_pack_qty', 'chk_pass_qty', 'chk_reject_qty', 'out_wip_qty', 'fg_qty', 'cut_loss_qty'];
+  for (const b of bundles) {
+    if (b.status !== 'GENERATED') { add(b, `is ${b.status}`); continue; }
+    if (!b.cut_output_id) { add(b, 'is not linked to a cut output'); continue; }
+    if (b.balance_qty != null && num(b.balance_qty) !== num(b.qty)) { add(b, `balance ${num(b.balance_qty)} of ${num(b.qty)} PCS`); continue; }
+    const c = COUNTERS.find((k) => num(b[k]) !== 0);
+    if (c) add(b, `has ${c.replace(/_/g, ' ')} ${num(b[c])}`);
+  }
+  const ids = bundles.map((b) => Number(b.id)).filter((id) => !seen.has(id));
+  if (!ids.length) return out;
+  const byId = new Map(bundles.map((b) => [Number(b.id), b]));
+  const ph = ids.map(() => '?').join(',');
+  const moves = await q<any>(tx,
+    `SELECT bundle_id, MIN(COALESCE(txn_type,'')) AS t FROM trx_bundle_movement
+      WHERE bundle_id IN (${ph}) AND COALESCE(txn_type,'') <> 'BUNDLE_CREATE' GROUP BY bundle_id`, ids);
+  for (const m of moves) add(byId.get(Number(m.bundle_id)), `has a ${m.t || 'floor'} movement`);
+  const left = ids.filter((id) => !seen.has(id));
+  if (!left.length) return out;
+  const lph = left.map(() => '?').join(',');
+  for (const r of await bundleRefTables(tx)) {
+    const where = r.table === 'trx_cutting_bundle' ? `${r.column} IN (${lph}) AND status <> 'CANCELLED'` : `${r.column} IN (${lph})`;
+    const hits = await q<any>(tx, `SELECT DISTINCT ${r.column} AS bid FROM ${r.table} WHERE ${where}`, left);
+    for (const h of hits) {
+      const b = byId.get(Number(h.bid));
+      if (b) add(b, r.table === 'trx_cutting_bundle' ? 'has split child bundles' : `is used in ${r.table.replace(/^trx_/, '').replace(/_/g, ' ')}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * Cancel a lay's GENERATED bundles (never a hard delete) and give their PCS
+ * back to the cut outputs so they can be bundled again. Throws (naming the
+ * bundles) when any bundle has moved. Caller owns the transaction and has
+ * locked the lay.
+ */
+export async function cancelLayBundlesForRegenerate(tx: Tx, p: {
+  cid: number; userId: number; layId: number; layNo: string; reason: string;
+}) {
+  const bundles = await q<any>(tx,
+    `SELECT * FROM trx_cutting_bundle WHERE lay_id = ? AND company_id = ? AND status <> 'CANCELLED' ORDER BY id FOR UPDATE`,
+    [p.layId, p.cid]);
+  if (!bundles.length) return { cancelled: [] as any[], by_output: new Map<number, number>() };
+  const blockers = await findBundleBlockers(tx, bundles);
+  if (blockers.length) {
+    const list = blockers.slice(0, 5).map((x) => `${x.bundle_no} ${x.reason}`).join('; ');
+    throw BadRequest(`Lay ${p.layNo} bundles cannot be regenerated: ${blockers.length} bundle(s) already moved or used — ${list}${blockers.length > 5 ? ' …' : ''}`);
+  }
+  const byOutput = new Map<number, number>();
+  for (const b of bundles) byOutput.set(Number(b.cut_output_id), (byOutput.get(Number(b.cut_output_id)) ?? 0) + num(b.qty));
+  for (const [coId, qty] of byOutput) {
+    const co = await q1<any>(tx, `SELECT * FROM trx_cut_output WHERE id = ? AND company_id = ? FOR UPDATE`, [coId, p.cid]);
+    if (!co) throw NotFound('Cut output not found');
+    if (co.status === 'REVERSED') throw BadRequest(`Cut output ${co.output_no} was reversed`);
+    const bundled = Math.max(num(co.bundled_qty) - qty, 0);
+    await tx.execute(`UPDATE trx_cut_output SET bundled_qty = ?, status = ? WHERE id = ?`,
+      [bundled, bundled >= num(co.good_qty) && num(co.good_qty) > 0 ? 'COMPLETED' : 'OPEN', coId]);
+  }
+  const ids = bundles.map((b) => b.id);
+  await tx.execute(`UPDATE trx_cutting_bundle SET status = 'CANCELLED', balance_qty = 0 WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+  for (const b of bundles) {
+    await tx.execute(
+      `INSERT INTO trx_bundle_movement (company_id, bundle_id, io_no, style_id, from_stage, to_stage, txn_type,
+         moved_qty, moved_by, remarks, ref_table, ref_id)
+       VALUES (?,?,?,?,'GENERATED','CANCELLED','BUNDLE_REGENERATE',?,?,?,'trx_lay_plan',?)`,
+      [p.cid, b.id, b.io_no, b.style_id, b.qty, p.userId, p.reason.slice(0, 255), p.layId]);
+  }
+  return { cancelled: bundles.map((b) => ({ id: b.id, bundle_no: b.bundle_no, qty: num(b.qty), cut_output_id: b.cut_output_id })), by_output: byOutput };
 }
 
 /**

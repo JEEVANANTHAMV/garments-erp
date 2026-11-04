@@ -6,6 +6,7 @@ import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../lib/auth';
 import { JobSelect } from '../../components/JobSelect';
 import { SearchSelect, StatusChip, Qty, UomInput, MetricTile, errMsg, ratioText } from './cuttingUi';
+import { LayBundlesModal } from './LayBundlesModal';
 
 /**
  * Lay Planner — CAD marker → automatic lay calculation → roll allocation → issue → receive → spreading → cut
@@ -358,7 +359,7 @@ export function LayActions({ lay, onExecute, onDone }: { lay: any; onExecute: (l
       {['RECEIVED', 'SPREADING'].includes(s) && <Button size="sm" id={`${id}-spread`} onClick={() => setModal('spread')}>{s === 'RECEIVED' ? 'Start spreading' : 'Complete spreading'}</Button>}
       {s === 'READY_FOR_CUTTING' && <Button size="sm" id={`${id}-cut`} onClick={() => onExecute(lay)}>Cut</Button>}
       {s === 'CUT' && supervise && <Button size="sm" variant="outline" id={`${id}-verify-cut`} loading={busy} onClick={() => post(`/lay-plans/${lay.id}/approve`, {}, `Lay ${lay.lay_no} cut verified`)}>Verify cut</Button>}
-      {['CUT', 'APPROVED'].includes(s) && <Button size="sm" variant="outline" id={`${id}-bundles`} loading={busy} onClick={() => post(`/lay-plans/${lay.id}/bundles`, { bundle_size: 10 }, `Bundles generated for ${lay.lay_no}`)}>Bundles</Button>}
+      {['CUT', 'APPROVED'].includes(s) && <Button size="sm" variant="outline" id={`${id}-bundles`} onClick={() => setModal('bundles')}>Bundles</Button>}
       {['ROLL_RESERVED', 'PLAN_APPROVED'].includes(s) && <Button size="sm" variant="ghost" id={`${id}-release`} onClick={() => setModal('release')}>Release</Button>}
       {s !== 'CANCELLED' && <Button size="sm" variant="ghost" id={`${id}-sheet`} onClick={() => setModal('sheet')}>Lay sheet</Button>}
       <Button size="sm" variant="ghost" id={`${id}-trace`} onClick={() => setModal('trace')}>Trace</Button>
@@ -368,6 +369,7 @@ export function LayActions({ lay, onExecute, onDone }: { lay: any; onExecute: (l
       {modal === 'spread' && <FlowSpreadingModal lay={lay} onClose={() => setModal(null)} onSaved={() => { setModal(null); onDone(); }} />}
       {modal === 'sheet' && <LaySheetModal lay={lay} onClose={() => setModal(null)} />}
       {modal === 'trace' && <GenealogyModal lay={lay} onClose={() => setModal(null)} />}
+      {modal === 'bundles' && <LayBundlesModal lay={lay} onClose={() => setModal(null)} onDone={onDone} />}
       {(modal === 'release' || modal === 'cancel') && <ReasonModal title={`${modal === 'release' ? 'Release the rolls of' : 'Cancel'} lay ${lay.lay_no}`}
         onClose={() => setModal(null)} onOk={(reason) => post(modal === 'release' ? `/lay-plans/${lay.id}/release-rolls` : `/lay-plans/${lay.id}/cancel`, { reason },
           modal === 'release' ? 'Rolls released' : 'Lay cancelled').then(() => setModal(null))} />}

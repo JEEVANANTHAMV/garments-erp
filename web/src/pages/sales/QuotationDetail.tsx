@@ -109,7 +109,7 @@ interface QRoll { fabric_roll_id: number; roll_no: string; qty_kg: number | ''; 
 const rollTrace = (r: any) => [r.production_no ? `prod ${r.production_no}` : null, r.program_no, r.lot_no ? `lot ${r.lot_no}` : null, r.previous_process ? `after ${r.previous_process}` : null].filter(Boolean).join(' · ');
 /** Group rolls by fabric, process state, distinct colour, program and geometry */
 const rollGroup = (r: any) => `${r.fabric_id}|${r.process_state ?? ''}|${r.color_name || r.for_colour || (r.lot_no ? `lot:${r.lot_no}` : `roll:${r.id}`)}|${r.program_no || ''}|${r.gsm ?? ''}|${r.dia ?? ''}`;
-/** "Kora / Raw (for Orange)" for undyed fabric, else its colour and state (GREY is not shown as a colour — client 30-Oct-2026) */
+/** "Cora / Raw (for Orange)" for undyed fabric, else its colour and state (GREY is not shown as a colour — client 30-Oct-2026) */
 const fabricColourState = (g: any) => [rollColour(g), g.process_state && g.process_state !== 'GREY' ? g.process_state : ''].filter(Boolean).join(' · ');
 const sumRolls = (rs: QRoll[] | undefined) => Math.round((rs ?? []).reduce((a, r) => a + (Number(r.qty_kg) || 0), 0) * 1000) / 1000;
 

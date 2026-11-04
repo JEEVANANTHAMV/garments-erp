@@ -789,7 +789,7 @@ export default function KnittingProgramPage() {
                           {r.fabric_type} · {r.gsm ?? '—'} GSM · {r.dia ?? '—'} {r.fabric_form === 'OPEN_WIDTH' ? 'open' : r.fabric_form === 'TUBULAR' ? 'tube' : ''} · {r.colour ? `for ${r.colour}` : '—'} · {fmtDecimal(r.required_kg, 1)} KG{r.programmed_kg > 0 ? ` (programmed ${fmtDecimal(r.programmed_kg, 1)})` : ''}
                         </option>)}
                       </select>
-                      {form.fabric_colour && <span className="rounded bg-white px-2 py-0.5 text-caption" id="kp-colour-note" title="Knitting gives Kora / Raw fabric; the CAD colour is what it is dyed to later">Knitted {RAW_COLOUR} · for {form.fabric_colour} (dyed later)</span>}
+                      {form.fabric_colour && <span className="rounded bg-white px-2 py-0.5 text-caption" id="kp-colour-note" title="Knitting gives Cora / Raw fabric; the CAD colour is what it is dyed to later">Knitted {RAW_COLOUR} · for {form.fabric_colour} (dyed later)</span>}
                     </div>)}
               </div>
             )}

@@ -570,7 +570,7 @@ export async function jobFabricAvailability(cid: number, soId: number, opts: { s
   const rolls = rows.map((r) => {
     const avail = r3g(Number(r.weight_kg) - Number(r.issued_kg) - Number(r.draft_kg) - Number(r.allocated_kg));
     const mPerKg = Number(r.weight_kg) > 0 ? Number(r.meters || r.calc_meters || 0) / Number(r.weight_kg) : 0;
-    // the roll's own colour; knitted / undyed fabric is Kora / Raw — the knitting program's (CAD) colour is only
+    // the roll's own colour; knitted / undyed fabric is Cora / Raw — the knitting program's (CAD) colour is only
     // what it will be dyed to (for_colour), never the fabric colour (client 30-Oct-2026)
     const resolvedColour = r.color_name || (r.process_state === 'GREY' ? RAW_COLOUR : null);
     return { ...r, colour: resolvedColour, available_kg: avail, available_m: r3g(avail * mPerKg) };

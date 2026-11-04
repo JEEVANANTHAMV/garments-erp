@@ -14,6 +14,8 @@ import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { Input, Select, StatusBadge, Modal, Button } from '../../components/ui';
 import { fmtDecimal, today } from '../../lib/format';
+import { RAW_COLOUR } from '../../lib/rawColour';
+import { PoLineCard, PoLineRow, PoLineField, PoLineAmounts } from './PoLineLayout';
 
 interface YarnLine {
   id?: number;
@@ -439,6 +441,9 @@ export default function YarnPurchaseOrderDetailPage() {
     });
   };
 
+  /** New line: takes the IO No / Style chosen in the order details (client 04-Nov-2026), still editable per line. */
+  const addLine = () => setLines((p) => [...p, { ...emptyYarnLine(), so_id: header.so_id || '', style_id: header.so_id ? header.style_id || '' : '' }]);
+
   const removeLine = (idx: number) => {
     if (lines.length === 1) {
       toast('At least one yarn item is required', 'warning');
@@ -691,7 +696,7 @@ export default function YarnPurchaseOrderDetailPage() {
               )}
             </div>
             <p className="text-xs text-ink-secondary mt-0.5">
-              Unified procurement for Grey & Dyed yarn, Direct KG & Bag/Pack weights
+              Unified procurement for {RAW_COLOUR} & Dyed yarn, Direct KG & Bag/Pack weights
             </p>
           </div>
         </div>
@@ -978,20 +983,22 @@ export default function YarnPurchaseOrderDetailPage() {
         </div>
       </div>
 
-      {/* Multi-Item Yarn Grid Cockpit */}
-      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm overflow-hidden space-y-3 p-4">
-        <div className="flex items-center justify-between pb-2 border-b border-surface-divider">
-          <div>
+      {/* Yarn line items — one card per line, labelled fields in rows (client 04-Nov-2026: the single long row was unreadable) */}
+      <div className="bg-white rounded-xl border border-surface-border/80 shadow-sm space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-surface-divider">
+          <div className="min-w-0">
             <h2 className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <Disc size={14} className="text-amber-600" />
               <span>Yarn Line Items ({lines.length})</span>
             </h2>
             <p className="text-caption text-ink-muted">
-              Select Grey or Dyed Yarn, specify Direct KG or Pack/Bag basis (auto-multiplies Total KG)
+              Select {RAW_COLOUR} or Dyed yarn, Direct KG or Pack / Bag basis (bags × kg per bag = total KG).
+              {header.so_id && <> New lines take IO No {selectedJob?.job_no || header.internal_ir_no}{header.style_id ? ' and the style' : ''} from the order details above — change it per line if needed.</>}
             </p>
           </div>
           <button
-            onClick={() => setLines((p) => [...p, emptyYarnLine()])}
+            type="button"
+            onClick={addLine}
             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-surface-input bg-white hover:bg-surface-muted text-ink shadow-sm transition"
           >
             <Plus size={13} />
@@ -999,365 +1006,303 @@ export default function YarnPurchaseOrderDetailPage() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-surface-muted text-ink-secondary font-semibold border-b border-surface-border text-caption uppercase tracking-wider">
-                <th className="py-2.5 px-2 w-8 text-center">#</th>
-                <th className="py-2.5 px-2 min-w-[130px]">IO No</th>
-                <th className="py-2.5 px-2 min-w-[110px]">Style</th>
-                <th className="py-2.5 px-2 min-w-[150px]">Yarn</th>
-                <th className="py-2.5 px-2 w-24">Grey / Dyed</th>
-                <th className="py-2.5 px-2 w-24">Color / Shade</th>
-                <th className="py-2.5 px-2 w-16">Count</th>
-                <th className="py-2.5 px-2 w-28">Composition</th>
-                <th className="py-2.5 px-2 w-16">HSN</th>
-                <th className="py-2.5 px-2 w-20">Basis</th>
-                <th className="py-2.5 px-2 text-center">Packs × Wt</th>
-                <th className="py-2.5 px-2 text-right">Total KG</th>
-                <th className="py-2.5 px-2 text-right">Rate/KG (₹)</th>
-                <th className="py-2.5 px-2 text-right">Taxable (₹)</th>
-                {header.is_interstate ? (
-                  <>
-                    <th className="py-2.5 px-2 text-center">IGST %</th>
-                    <th className="py-2.5 px-2 text-right">IGST (₹)</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="py-2.5 px-2 text-center">GST %</th>
-                    <th className="py-2.5 px-2 text-right">CGST+SGST (₹)</th>
-                  </>
-                )}
-                <th className="py-2.5 px-2 text-right">Net (₹)</th>
-                <th className="py-2.5 px-2 w-8 text-center"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-divider text-ink">
-              {lines.map((l, idx) => {
-                const isDyed = l.yarn_type === 'Dyed Yarn';
-                const isPack = l.purchase_basis === 'PACK_BAG';
-                const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['YARN']).filter((it) => it.yarn_id);
+        <div className="space-y-3">
+          {lines.map((l, idx) => {
+            const isDyed = l.yarn_type === 'Dyed Yarn';
+            const isPack = l.purchase_basis === 'PACK_BAG';
+            const lineBom = jobBoms.itemsFor(l.so_id, lineStyle(l), ['YARN']).filter((it) => it.yarn_id);
+            const lineJob = jobs.find((j) => String(j.id) === String(l.so_id));
+            const yarnLabel = (yarns.data || []).find((y: any) => String(y.id) === String(l.yarn_id))?.label || l.yarn_name || '';
+            const fid = (f: string) => `ypo-line-${idx}-${f}`;
 
-                return (
-                  <tr key={l._key || idx} className="hover:bg-surface-muted/70 transition">
-                    {/* # S NO */}
-                    <td className="py-2.5 px-2 text-center text-ink-muted tabular-nums text-caption">{idx + 1}</td>
+            return (
+              <PoLineCard
+                key={l._key || idx}
+                index={idx}
+                testId={`ypo-line-${idx}`}
+                summary={<>
+                  <span className="font-semibold text-ink truncate max-w-full">{yarnLabel || 'Yarn not selected'}</span>
+                  <span>{lineJob ? `IO ${lineJob.job_no}` : 'Stock / General'}</span>
+                  <span className={isDyed ? 'text-purple-700 font-medium' : 'text-amber-800 font-medium'}>{isDyed ? `Dyed${l.shade_code || l.color_name ? ` · ${l.shade_code || l.color_name}` : ''}` : RAW_COLOUR}</span>
+                  <span className="tabular-nums">{fmtDecimal(l.qty)} kg</span>
+                  <span className="tabular-nums font-semibold text-ink">₹{fmtDecimal(l.net_amount)}</span>
+                </>}
+              >
+                {/* Row 1 — what and for whom */}
+                <PoLineRow>
+                  <PoLineField label="IO No / Job" htmlFor={fid('job')}>
+                    <select
+                      id={fid('job')}
+                      value={l.so_id || ''}
+                      onChange={(e) => updateLine(idx, { so_id: e.target.value, _bom: undefined })}
+                      className="input"
+                    >
+                      <option value="">Stock / General</option>
+                      {jobs.map((j) => (
+                        <option key={j.id} value={j.id}>{j.job_no}</option>
+                      ))}
+                    </select>
+                  </PoLineField>
 
-                    {/* I/O Num (Sales Order / Job) */}
-                    <td className="py-2.5 px-2 min-w-[130px]">
-                      <select
-                        value={l.so_id || ''}
-                        onChange={(e) => updateLine(idx, { so_id: e.target.value, _bom: undefined })}
-                        className="w-full text-xs rounded border border-surface-input py-1 px-1 bg-white"
-                      >
-                        <option value="">Stock / General</option>
-                        {jobs.map((j) => (
-                          <option key={j.id} value={j.id}>
-                            {j.job_no}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
+                  <PoLineField label="Style" htmlFor={fid('style')}>
+                    <select
+                      id={fid('style')}
+                      value={l.style_id || ''}
+                      onChange={(e) => updateLine(idx, { style_id: e.target.value, _bom: undefined })}
+                      className="input"
+                    >
+                      <option value="">—</option>
+                      {lineJob
+                        ? lineJob.styles.map((st) => <option key={st.style_id} value={st.style_id}>{st.style_code} — {st.style_name}</option>)
+                        : toOptions(styles.data).map((st) => <option key={st.value} value={st.value}>{st.label}</option>)}
+                    </select>
+                  </PoLineField>
 
-                    {/* Style */}
-                    <td className="py-2.5 px-2">
-                      <select
-                        value={l.style_id || ''}
-                        onChange={(e) => updateLine(idx, { style_id: e.target.value, _bom: undefined })}
-                        className="w-full text-xs rounded border border-surface-input py-1 px-1 bg-white"
-                      >
-                        <option value="">—</option>
-                        {(() => {
-                          const job = jobs.find((j) => String(j.id) === String(l.so_id));
-                          return job
-                            ? job.styles.map((st) => <option key={st.style_id} value={st.style_id}>{st.style_code} — {st.style_name}</option>)
-                            : toOptions(styles.data).map((st) => <option key={st.value} value={st.value}>{st.label}</option>);
-                        })()}
-                      </select>
-                    </td>
-
-                    {/* Yarn Master Selection */}
-                    <td className="py-2.5 px-2 min-w-[140px]">
-                      <select
-                        value={l._bom && lineBom.some((it) => it.bom_line_id === l._bom) ? `bom:${l._bom}` : l.yarn_id}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val.startsWith('base:')) {
-                            const baseId = val.slice(5);
-                            const cnt = countIdOf(l);
-                            if (cnt) { void resolveYarn(idx, baseId, cnt); return; }
-                            updateLine(idx, { _bom: undefined, yarn_id: '', yarn_name: '', _pending_base: baseId } as any);
-                            toast('Now choose the count — base + count make the yarn item', 'info');
-                            return;
-                          }
-                          if (val.startsWith('bom:')) {
-                            const it = lineBom.find((x) => `bom:${x.bom_line_id}` === val);
-                            if (it) pickBomYarn(idx, l, it);
-                            return;
-                          }
-                          // A yarn that is on this job's BOM once fills from the BOM (qty, count, colour)
-                          const inBom = lineBom.filter((x) => String(x.yarn_id) === val);
-                          if (inBom.length === 1) { pickBomYarn(idx, l, inBom[0]); return; }
-                          if (inBom.length > 1) toast(`${inBom.length} BOM lines use this yarn (colour wise) — pick the line from the BOM group to load its qty`, 'info');
-                          const opt: any = (yarns.data || []).find((y: any) => String(y.id) === val);
-                          updateLine(idx, {
-                            _bom: undefined,
-                            yarn_id: val,
-                            yarn_name: opt?.label || opt?.yarn_name || '',
-                            yarn_count_str: String(opt?.count_value || opt?.yarn_count || l.yarn_count_str || ''),
-                            composition: String(opt?.composition || l.composition || ''),
-                            ...(() => {
-                              const q = matchQuote(quoted.data, { material_id: val, so_id: l.so_id });
-                              return q ? { rate: q.rate, gst_rate: q.gst_rate } : { rate: Number(l.rate) > 0 ? l.rate : (Number(opt?.std_rate) || 0) };
-                            })(),
-                          });
-                        }}
-                        className="w-full text-xs rounded border border-surface-input py-1 px-1.5 focus:border-amber-500 bg-white"
-                      >
-                        <option value="">{jobBoms.statusFor(l.so_id, lineStyle(l)) === 'loading' ? 'Loading BOM…' : 'Select Yarn'}</option>
-                        {lineBom.length > 0 && (
-                          <optgroup label="BOM of this job (qty = requirement)">
-                            {lineBom.map((it) => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
-                          </optgroup>
-                        )}
-                        {l.yarn_id && !(filterBomOnly && bomYarns.length > 0) && (
-                          <optgroup label="Selected item">
-                            <option value={l.yarn_id}>{(yarns.data || []).find((y: any) => String(y.id) === String(l.yarn_id))?.label || l.yarn_name || 'Yarn'}</option>
-                          </optgroup>
-                        )}
-                        {(filterBomOnly && bomYarns.length > 0) ? (
-                          <optgroup label="All yarns (BOM only)">
-                            {(yarns.data || []).filter((y: any) => bomYarns.some((by: any) => Number(by.yarn_id) === Number(y.id))).map((o: any) => (
-                              <option key={o.id} value={o.id}>{o.yarn_name || o.yarn_code || o.label}</option>
-                            ))}
-                          </optgroup>
-                        ) : (
-                          <optgroup label="Yarn (base) — then choose the count">
-                            {(yarnBases.data || []).map((b: any) => <option key={`b${b.id}`} value={`base:${b.id}`}>{b.label}</option>)}
-                          </optgroup>
-                        )}
-                      </select>
-                    </td>
-
-                    {/* Grey / Dyed Yarn Type */}
-                    <td className="py-2.5 px-2">
-                      <select
-                        value={l.yarn_type}
-                        onChange={(e) =>
-                          updateLine(idx, { yarn_type: e.target.value as 'Grey Yarn' | 'Dyed Yarn' })
+                  <PoLineField label="Yarn *" htmlFor={fid('yarn')} wide>
+                    <select
+                      id={fid('yarn')}
+                      value={l._bom && lineBom.some((it) => it.bom_line_id === l._bom) ? `bom:${l._bom}` : l.yarn_id}
+                      title={yarnLabel || undefined}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.startsWith('base:')) {
+                          const baseId = val.slice(5);
+                          const cnt = countIdOf(l);
+                          if (cnt) { void resolveYarn(idx, baseId, cnt); return; }
+                          updateLine(idx, { _bom: undefined, yarn_id: '', yarn_name: '', _pending_base: baseId } as any);
+                          toast('Now choose the count — base + count make the yarn item', 'info');
+                          return;
                         }
-                        className={`text-xs rounded border py-1 px-1.5 font-semibold w-full ${
-                          isDyed
-                            ? 'bg-purple-50 text-purple-700 border-purple-300'
-                            : 'bg-amber-50 text-amber-800 border-amber-300'
-                        }`}
-                      >
-                        <option value="Grey Yarn">Grey Yarn</option>
-                        <option value="Dyed Yarn">Dyed Yarn</option>
-                      </select>
-                    </td>
-
-                    {/* Color / Shade */}
-                    <td className="py-2.5 px-2">
-                      {isDyed ? (
-                        <input
-                          type="text"
-                          value={l.shade_code || l.color_name || ''}
-                          onChange={(e) =>
-                            updateLine(idx, {
-                              shade_code: e.target.value,
-                              color_name: e.target.value,
-                            })
-                          }
-                          className="w-24 text-xs border border-purple-300 bg-purple-50/40 rounded px-1.5 py-1"
-                          placeholder="Shade / Color"
-                        />
-                      ) : (
-                        <span className="text-ink-muted text-caption block text-center">—</span>
+                        if (val.startsWith('bom:')) {
+                          const it = lineBom.find((x) => `bom:${x.bom_line_id}` === val);
+                          if (it) pickBomYarn(idx, l, it);
+                          return;
+                        }
+                        // A yarn that is on this job's BOM once fills from the BOM (qty, count, colour)
+                        const inBom = lineBom.filter((x) => String(x.yarn_id) === val);
+                        if (inBom.length === 1) { pickBomYarn(idx, l, inBom[0]); return; }
+                        if (inBom.length > 1) toast(`${inBom.length} BOM lines use this yarn (colour wise) — pick the line from the BOM group to load its qty`, 'info');
+                        const opt: any = (yarns.data || []).find((y: any) => String(y.id) === val);
+                        updateLine(idx, {
+                          _bom: undefined,
+                          yarn_id: val,
+                          yarn_name: opt?.label || opt?.yarn_name || '',
+                          yarn_count_str: String(opt?.count_value || opt?.yarn_count || l.yarn_count_str || ''),
+                          composition: String(opt?.composition || l.composition || ''),
+                          ...(() => {
+                            const q = matchQuote(quoted.data, { material_id: val, so_id: l.so_id });
+                            return q ? { rate: q.rate, gst_rate: q.gst_rate } : { rate: Number(l.rate) > 0 ? l.rate : (Number(opt?.std_rate) || 0) };
+                          })(),
+                        });
+                      }}
+                      className="input"
+                    >
+                      <option value="">{jobBoms.statusFor(l.so_id, lineStyle(l)) === 'loading' ? 'Loading BOM…' : 'Select Yarn'}</option>
+                      {lineBom.length > 0 && (
+                        <optgroup label="BOM of this job (qty = requirement)">
+                          {lineBom.map((it) => <option key={it.bom_line_id} value={`bom:${it.bom_line_id}`}>{bomItemLabel(it)}</option>)}
+                        </optgroup>
                       )}
-                    </td>
+                      {l.yarn_id && !(filterBomOnly && bomYarns.length > 0) && (
+                        <optgroup label="Selected item">
+                          <option value={l.yarn_id}>{yarnLabel || 'Yarn'}</option>
+                        </optgroup>
+                      )}
+                      {(filterBomOnly && bomYarns.length > 0) ? (
+                        <optgroup label="All yarns (BOM only)">
+                          {(yarns.data || []).filter((y: any) => bomYarns.some((by: any) => Number(by.yarn_id) === Number(y.id))).map((o: any) => (
+                            <option key={o.id} value={o.id}>{o.yarn_name || o.yarn_code || o.label}</option>
+                          ))}
+                        </optgroup>
+                      ) : (
+                        <optgroup label="Yarn (base) — then choose the count">
+                          {(yarnBases.data || []).map((b: any) => <option key={`b${b.id}`} value={`base:${b.id}`}>{b.label}</option>)}
+                        </optgroup>
+                      )}
+                    </select>
+                  </PoLineField>
 
-                    {/* Count */}
-                    <td className="py-2.5 px-2">
-                      <select
-                        value={countIdOf(l)}
-                        id={`ypo-line-${idx}-count`}
-                        onChange={(e) => {
-                          const cnt = e.target.value;
-                          const baseId = baseOf(l.yarn_id) ?? (l as any)._pending_base;
-                          if (baseId) { void resolveYarn(idx, baseId, cnt); return; }
-                          const c: any = (yarnCounts.data || []).find((x: any) => String(x.id) === cnt);
-                          updateLine(idx, { yarn_count_str: c ? String(c.count_value) : '' });
-                        }}
-                        className="w-20 text-xs tabular-nums font-medium border border-surface-input rounded px-1 py-1"
-                        title="The count is part of the yarn item: changing it switches to that base's item for the count"
-                      >
-                        <option value="">{l.yarn_count_str || '—'}</option>
-                        {(yarnCounts.data || []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                      </select>
-                    </td>
+                  {/* Stored value stays 'Grey Yarn'; undyed yarn going to knitting reads "Cora / Raw" (client 04-Nov-2026) */}
+                  <PoLineField label={`${RAW_COLOUR} / Dyed`} htmlFor={fid('type')}>
+                    <select
+                      id={fid('type')}
+                      value={l.yarn_type}
+                      onChange={(e) => updateLine(idx, { yarn_type: e.target.value as 'Grey Yarn' | 'Dyed Yarn' })}
+                      className={`input font-semibold ${isDyed ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-amber-50 text-amber-800 border-amber-300'}`}
+                    >
+                      <option value="Grey Yarn">{RAW_COLOUR}</option>
+                      <option value="Dyed Yarn">Dyed Yarn</option>
+                    </select>
+                  </PoLineField>
 
-                    {/* Composition */}
-                    <td className="py-2.5 px-2">
+                  <PoLineField label="Colour / Shade" htmlFor={fid('shade')}>
+                    {isDyed ? (
                       <input
+                        id={fid('shade')}
                         type="text"
-                        value={l.composition}
-                        onChange={(e) => updateLine(idx, { composition: e.target.value })}
-                        className="w-full text-xs border border-surface-input rounded px-1.5 py-1"
-                        placeholder="100% Cotton"
+                        value={l.shade_code || l.color_name || ''}
+                        onChange={(e) => updateLine(idx, { shade_code: e.target.value, color_name: e.target.value })}
+                        className="input border-purple-300 bg-purple-50/40"
+                        placeholder="Shade / Color"
                       />
-                    </td>
-
-                    {/* HSN Code */}
-                    <td className="py-2.5 px-2">
-                      <input
-                        type="text"
-                        value={l.hsn_code}
-                        onChange={(e) => updateLine(idx, { hsn_code: e.target.value })}
-                        className="w-14 text-xs tabular-nums border border-surface-input rounded px-1 py-1"
-                        placeholder="5205"
-                      />
-                    </td>
-
-                    {/* Purchase Basis: DIRECT_KG vs PACK_BAG */}
-                    <td className="py-2.5 px-2">
-                      <select
-                        value={l.purchase_basis}
-                        onChange={(e) =>
-                          updateLine(idx, { purchase_basis: e.target.value as any })
-                        }
-                        className="text-xs rounded border border-surface-input py-1 px-1 font-medium text-ink bg-white"
-                      >
-                        <option value="DIRECT_KG">Direct KG</option>
-                        <option value="PACK_BAG">Pack / Bag</option>
-                      </select>
-                    </td>
-
-                    {/* Packs × Weight */}
-                    <td className="py-2.5 px-2 text-center">
-                      {isPack ? (
-                        <div className="flex items-center gap-1 justify-center">
-                          <input
-                            type="number"
-                            value={l.packs}
-                            onChange={(e) =>
-                              updateLine(idx, { packs: parseInt(e.target.value) || 0 })
-                            }
-                            className="w-12 text-xs text-center border border-surface-input rounded px-1 py-1 font-semibold"
-                            placeholder="Bags"
-                          />
-                          <span className="text-ink-muted">×</span>
-                          <input
-                            type="number"
-                            value={l.pack_weight_kg}
-                            onChange={(e) =>
-                              updateLine(idx, { pack_weight_kg: parseFloat(e.target.value) || 0 })
-                            }
-                            className="w-14 text-xs text-center border border-surface-input rounded px-1 py-1"
-                            placeholder="kg"
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-ink-muted text-caption">—</span>
-                      )}
-                    </td>
-
-                    {/* Total KG */}
-                    <td className="py-2.5 px-2 text-right">
-                      {isPack ? (
-                        <span className="font-bold text-amber-700">{fmtDecimal(l.qty)} kg</span>
-                      ) : (
-                        <input
-                          type="number"
-                          value={l.qty}
-                          onChange={(e) =>
-                            updateLine(idx, { qty: parseFloat(e.target.value) || 0 })
-                          }
-                          className="w-20 text-xs text-right font-bold text-amber-700 border border-surface-input rounded px-1.5 py-1"
-                        />
-                      )}
-                    </td>
-
-                    {/* Rate / KG */}
-                    <td className="py-2.5 px-2 text-right">
-                      <input
-                        type="number"
-                        value={l.rate}
-                        onChange={(e) =>
-                          updateLine(idx, { rate: parseFloat(e.target.value) || 0 })
-                        }
-                        className="w-16 text-xs text-right font-medium border border-surface-input rounded px-1.5 py-1"
-                      />
-                    </td>
-
-                    {/* Taxable Amount */}
-                    <td className="py-2.5 px-2 text-right font-medium text-ink">
-                      ₹{fmtDecimal(l.taxable_amount || l.amount)}
-                    </td>
-
-                    {/* GST / IGST Fields */}
-                    {header.is_interstate ? (
-                      <>
-                        <td className="py-2.5 px-2 text-center">
-                          <select
-                            value={l.gst_rate}
-                            onChange={(e) =>
-                              updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })
-                            }
-                            className="text-xs rounded border border-purple-300 py-1 px-1 text-center bg-purple-50/40 font-semibold text-purple-800"
-                          >
-                            <option value="5">5%</option>
-                            <option value="12">12%</option>
-                            <option value="18">18%</option>
-                            <option value="0">0%</option>
-                          </select>
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-semibold text-purple-700">
-                          ₹{fmtDecimal(l.igst_amount)}
-                        </td>
-                      </>
                     ) : (
-                      <>
-                        <td className="py-2.5 px-2 text-center">
-                          <select
-                            value={l.gst_rate}
-                            onChange={(e) =>
-                              updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })
-                            }
-                            className="text-xs rounded border border-surface-input py-1 px-1 text-center bg-white"
-                          >
-                            <option value="5">5%</option>
-                            <option value="12">12%</option>
-                            <option value="18">18%</option>
-                            <option value="0">0%</option>
-                          </select>
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-medium text-ink">
-                          ₹{fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}
-                        </td>
-                      </>
+                      <input id={fid('shade')} type="text" value={RAW_COLOUR} disabled className="input" title="Undyed yarn has no colour of its own" />
                     )}
+                  </PoLineField>
+                </PoLineRow>
 
-                    {/* Net Amount */}
-                    <td className="py-2.5 px-2 text-right font-bold text-ink">
-                      ₹{fmtDecimal(l.net_amount)}
-                    </td>
+                {/* Row 2 — specification, quantity and price */}
+                <PoLineRow>
+                  <PoLineField label="Count" htmlFor={fid('count')}>
+                    <select
+                      value={countIdOf(l)}
+                      id={fid('count')}
+                      onChange={(e) => {
+                        const cnt = e.target.value;
+                        const baseId = baseOf(l.yarn_id) ?? (l as any)._pending_base;
+                        if (baseId) { void resolveYarn(idx, baseId, cnt); return; }
+                        const c: any = (yarnCounts.data || []).find((x: any) => String(x.id) === cnt);
+                        updateLine(idx, { yarn_count_str: c ? String(c.count_value) : '' });
+                      }}
+                      className="input tabular-nums font-medium"
+                      title="The count is part of the yarn item: changing it switches to that base's item for the count"
+                    >
+                      <option value="">{l.yarn_count_str || '—'}</option>
+                      {(yarnCounts.data || []).map((c: any) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                  </PoLineField>
 
-                    {/* Delete */}
-                    <td className="py-2.5 px-2 text-center">
-                      <button
-                        onClick={() => removeLine(idx)}
-                        className="p-1 text-ink-muted hover:text-red-600 rounded transition"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  <PoLineField label="Composition" htmlFor={fid('composition')} wide>
+                    <input
+                      id={fid('composition')}
+                      type="text"
+                      value={l.composition}
+                      title={l.composition || undefined}
+                      onChange={(e) => updateLine(idx, { composition: e.target.value })}
+                      className="input"
+                      placeholder="100% Cotton"
+                    />
+                  </PoLineField>
+
+                  <PoLineField label="HSN" htmlFor={fid('hsn')}>
+                    <input
+                      id={fid('hsn')}
+                      type="text"
+                      value={l.hsn_code}
+                      onChange={(e) => updateLine(idx, { hsn_code: e.target.value })}
+                      className="input tabular-nums"
+                      placeholder="5205"
+                    />
+                  </PoLineField>
+
+                  <PoLineField label="Basis" htmlFor={fid('basis')}>
+                    <select
+                      id={fid('basis')}
+                      value={l.purchase_basis}
+                      onChange={(e) => updateLine(idx, { purchase_basis: e.target.value as any })}
+                      className="input font-medium"
+                    >
+                      <option value="DIRECT_KG">Direct KG</option>
+                      <option value="PACK_BAG">Pack / Bag</option>
+                    </select>
+                  </PoLineField>
+
+                  {isPack && (
+                    <>
+                      <PoLineField label="Bags / Packs" htmlFor={fid('packs')}>
+                        <input
+                          id={fid('packs')}
+                          type="number"
+                          value={l.packs}
+                          onChange={(e) => updateLine(idx, { packs: parseInt(e.target.value) || 0 })}
+                          className="input font-semibold"
+                          placeholder="Bags"
+                        />
+                      </PoLineField>
+                      <PoLineField label="Kg per Bag" htmlFor={fid('packwt')}>
+                        <input
+                          id={fid('packwt')}
+                          type="number"
+                          value={l.pack_weight_kg}
+                          onChange={(e) => updateLine(idx, { pack_weight_kg: parseFloat(e.target.value) || 0 })}
+                          className="input"
+                          placeholder="kg"
+                        />
+                      </PoLineField>
+                    </>
+                  )}
+
+                  <PoLineField label={isPack ? 'Total KG (bags × kg)' : 'Total KG *'} htmlFor={fid('qty')}>
+                    {isPack ? (
+                      <input id={fid('qty')} type="number" value={l.qty} readOnly tabIndex={-1} className="input bg-surface-muted font-bold text-amber-700" />
+                    ) : (
+                      <input
+                        id={fid('qty')}
+                        type="number"
+                        value={l.qty}
+                        onChange={(e) => updateLine(idx, { qty: parseFloat(e.target.value) || 0 })}
+                        className="input font-bold text-amber-700"
+                      />
+                    )}
+                  </PoLineField>
+
+                  <PoLineField label="Rate / KG (₹)" htmlFor={fid('rate')}>
+                    <input
+                      id={fid('rate')}
+                      type="number"
+                      value={l.rate}
+                      onChange={(e) => updateLine(idx, { rate: parseFloat(e.target.value) || 0 })}
+                      className="input font-medium"
+                    />
+                  </PoLineField>
+
+                  <PoLineField label={header.is_interstate ? 'IGST %' : 'GST %'} htmlFor={fid('gst')}>
+                    <select
+                      id={fid('gst')}
+                      value={l.gst_rate}
+                      onChange={(e) => updateLine(idx, { gst_rate: parseFloat(e.target.value) || 0 })}
+                      className={`input tabular-nums ${header.is_interstate ? 'border-purple-300 bg-purple-50/40 font-semibold text-purple-800' : ''}`}
+                    >
+                      <option value="5">5%</option>
+                      <option value="12">12%</option>
+                      <option value="18">18%</option>
+                      <option value="0">0%</option>
+                    </select>
+                  </PoLineField>
+                </PoLineRow>
+
+                <PoLineAmounts
+                  items={[
+                    { label: 'Taxable', value: `₹${fmtDecimal(l.taxable_amount || l.amount)}` },
+                    header.is_interstate
+                      ? { label: 'IGST', value: `₹${fmtDecimal(l.igst_amount)}`, tone: 'text-purple-700' }
+                      : { label: 'CGST + SGST', value: `₹${fmtDecimal((l.cgst_amount || 0) + (l.sgst_amount || 0))}` },
+                    { label: 'Net', value: `₹${fmtDecimal(l.net_amount)}`, strong: true },
+                  ]}
+                  actions={
+                    <button
+                      type="button"
+                      id={fid('remove')}
+                      onClick={() => removeLine(idx)}
+                      className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-small text-ink-secondary hover:border-red-300 hover:text-red-600 transition"
+                      title="Remove this line"
+                    >
+                      <Trash2 size={13} /> Remove
+                    </button>
+                  }
+                />
+              </PoLineCard>
+            );
+          })}
         </div>
+
+        <button
+          type="button"
+          onClick={addLine}
+          className="w-full inline-flex items-center justify-center gap-1 rounded-lg border border-dashed border-surface-input py-2 text-small font-medium text-ink-secondary hover:bg-surface-muted hover:text-ink transition"
+        >
+          <Plus size={13} /> Add another yarn item
+        </button>
 
         {/* Footer Financial Cockpit */}
         <div className="pt-4 border-t border-surface-border bg-surface-muted/70 p-4 rounded-xl space-y-4">
@@ -1367,7 +1312,7 @@ export default function YarnPurchaseOrderDetailPage() {
               <span className="font-bold text-amber-700 text-sm">{fmtDecimal(totals.totalKg)} KG</span>
             </div>
             <div>
-              <span className="text-ink-secondary block">Grey / Dyed Split</span>
+              <span className="text-ink-secondary block">{RAW_COLOUR} / Dyed split</span>
               <span className="font-medium text-ink">
                 {fmtDecimal(totals.greyKg)} / {fmtDecimal(totals.dyedKg)} KG
               </span>

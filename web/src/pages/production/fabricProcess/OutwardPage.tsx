@@ -140,7 +140,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
       setPlan(p);
       const add: DcRow[] = [];
       for (const l of p.lines) for (const r of l.rolls) add.push({ fabric_roll_id: Number(r.id), roll_no: r.roll_no, lot_no: r.lot_no, fabric_name: r.fabric_name, so_id: r.so_id, io_no: r.io_no,
-        // fabric colour = the roll as it is (Kora / Raw for knitted fabric); the job's colour (for_colour) only suggests the dye colour
+        // fabric colour = the roll as it is (Cora / Raw for knitted fabric); the job's colour (for_colour) only suggests the dye colour
         buyer_po_no: r.buyer_po_no, style_code: null, color_name: dyeing ? (l.dye_colour ?? r.for_colour ?? '') : (r.color_name ?? ''), fabric_color: r.colour ?? '', gsm: r.gsm, dia: r.dia,
         available_kg: Number(r.available_kg), weight_kg: Number(r.send_kg), meters: 0 });
       if (!add.length) { toast(`${p.quotation_no}: nothing left to send (quoted KG already sent, or the job has no fabric in stock)`, 'warning'); return; }

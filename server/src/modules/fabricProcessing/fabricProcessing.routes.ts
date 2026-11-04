@@ -257,7 +257,7 @@ async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, 
               (SELECT sol.style_id FROM trx_sales_order_line sol WHERE sol.so_id = so.id ORDER BY sol.id LIMIT 1) AS style_id
          FROM trx_sales_order so WHERE so.id = ? AND so.company_id = ?`, [soId, cid]) : null;
     const meters = r.meters || (n(fr.weight_kg) > 0 ? r2(n(fr.meters) * (r.weight_kg / n(fr.weight_kg))) : 0);
-    // fabric colour = the roll as it goes out (Kora / Raw when undyed, melange …); color_name = the dye colour on a dyeing DC
+    // fabric colour = the roll as it goes out (Cora / Raw when undyed, melange …); color_name = the dye colour on a dyeing DC
     const fabricColor = fr.color_name || (fr.process_state === 'GREY' ? RAW_COLOUR : null);
     const dyeing = isDyeing(fpo.sub_process);
     const colour = r.color_name || fpo.color_name || (dyeing && !fpo.is_reprocess ? null : fr.color_name) || null;

@@ -31,7 +31,7 @@ const kpYarnSchema = z.object({
   yarn_id: s.id(),
   yarn_name_manual: s.nullableStr(150),
   count_value: s.nullableStr(30),
-  /** raw / kora / greige … are saved as "Kora / Raw" (client 30-Oct-2026) */
+  /** raw / kora / greige … are saved as "Cora / Raw" (client 30-Oct-2026) */
   colour: s.nullableStr(80).transform((c) => normRawColour(c)),
   yarn_po_no: s.nullableStr(80),
   yarn_lot_no: s.nullableStr(80),

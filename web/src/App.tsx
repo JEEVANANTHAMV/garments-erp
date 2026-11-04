@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './lib/auth';
 import { ToastProvider } from './hooks/useToast';
+import { SelectSearch } from './components/SelectSearch';
 import AppLayout from './layouts/AppLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -517,6 +518,7 @@ export default function App() {
               </Route>
             </Routes>
           </BrowserRouter>
+          <SelectSearch />
         </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>
