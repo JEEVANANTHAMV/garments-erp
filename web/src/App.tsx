@@ -43,6 +43,15 @@ import TnaTemplatesPage from './pages/tna/TnaTemplatesPage';
 
 /* Gate & Security */
 import { GateInwardsPage, GateOutwardsPage, GateVisitorsPage } from './pages/gate';
+import { GateVisitorPass } from './pages/gate/GateVisitorPass';
+/* Gate security · transport (db/150, client voice notes 04-Nov-2026) */
+import { TransportRequestsPage, TransportRequestForm } from './pages/transport/TransportRequests';
+import { TransportRequestDetail } from './pages/transport/TransportRequestDetail';
+import { TransportTripsPage, TripPlanner, TripDetail } from './pages/transport/TransportTrips';
+import { TransportVehiclesPage, TransportDriversPage, TransportRequestTypesPage } from './pages/transport/TransportMasters';
+import { TransportDashboard } from './pages/transport/TransportDashboard';
+import { DriverMyTrips, DriverTripPage } from './pages/transport/DriverTrips';
+import { GateReportsPage } from './pages/transport/GateReports';
 
 /* Procurement */
 import {
@@ -267,6 +276,26 @@ export default function App() {
                   <Route path="inwards" element={<GateInwardsPage />} />
                   <Route path="outwards" element={<GateOutwardsPage />} />
                   <Route path="visitors" element={<GateVisitorsPage />} />
+                  <Route path="visitors/:id/pass" element={<GateVisitorPass />} />
+                  <Route path="reports" element={<GateReportsPage />} />
+                </Route>
+                <Route path="transport">
+                  <Route path="dashboard" element={<TransportDashboard />} />
+                  <Route path="requests" element={<TransportRequestsPage />} />
+                  <Route path="requests/new" element={<TransportRequestForm />} />
+                  <Route path="requests/:id" element={<TransportRequestDetail />} />
+                  <Route path="requests/:id/edit" element={<TransportRequestForm />} />
+                  <Route path="trips" element={<TransportTripsPage />} />
+                  <Route path="trips/new" element={<TripPlanner />} />
+                  <Route path="trips/:id" element={<TripDetail />} />
+                  <Route path="trips/:id/plan" element={<TripPlanner />} />
+                  <Route path="vehicles" element={<TransportVehiclesPage />} />
+                  <Route path="drivers" element={<TransportDriversPage />} />
+                  <Route path="request-types" element={<TransportRequestTypesPage />} />
+                </Route>
+                <Route path="driver">
+                  <Route path="my-trips" element={<DriverMyTrips />} />
+                  <Route path="trips/:id" element={<DriverTripPage />} />
                 </Route>
 
                 {/* Stores transactions (14-Oct) */}

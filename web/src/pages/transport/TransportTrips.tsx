@@ -23,7 +23,8 @@ export function TransportTripsPage() {
   const { can } = useAuth();
   const [search, setSearch] = useState('');
   const q = useDebounced(search);
-  const [f, setF] = useState({ status: '', from: '', to: '' });
+  const [sp] = useSearchParams();
+  const [f, setF] = useState({ status: sp.get('status') ?? '', from: '', to: '' });
   const params = { q: q || undefined, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)) };
   const list = useQuery({ queryKey: ['transport', 'trips', params], queryFn: async () => (await http.get<{ data: any[] }>('/transport/trips', params)).data });
   const cols: Column<any>[] = [
@@ -262,6 +263,7 @@ export function TripDetail() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
+  const { can } = useAuth();
   const q = useQuery({ queryKey: ['transport', 'trip', id], queryFn: async () => (await http.get<{ data: any }>(`/transport/trips/${id}`)).data });
   const [dialog, setDialog] = useState<'' | 'cancel' | 'exception' | 'reassign'>('');
   const [resolve, setResolve] = useState<any>(null);
@@ -342,7 +344,7 @@ export function TripDetail() {
                     <b>{humanize(i.issue_type)}</b> <span className="text-ink-secondary">{humanize(i.severity)}</span> {i.description}
                     <span className="text-caption text-ink-secondary">{i.reported_by_name} · {fmtIst(i.reported_at)}</span>
                     {i.resolved_at ? <span className="text-small text-ink-secondary">Resolved: {i.resolution_note}</span>
-                      : a.reassign !== undefined && <button className="btn-secondary btn-sm" onClick={() => setResolve(i)}>Resolve</button>}
+                      : can('TRANSPORT.ASSIGN') && <button className="btn-secondary btn-sm" onClick={() => setResolve(i)}>Resolve</button>}
                   </li>
                 ))}
               </ul>

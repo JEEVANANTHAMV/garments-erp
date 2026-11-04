@@ -108,6 +108,21 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    // Gate security · own / rental vehicles: request → vehicle manager approves + allocates → driver screen (04-Nov-2026)
+    label: 'Gate · Vehicles & Transport', group: 'INVENTORY', menu: 'Gate Security · Transport', icon: Truck,
+    items: [
+      { label: 'Vehicle Requests',       to: '/transport/requests', icon: ClipboardList, perms: ['TRANSPORT.REQUEST', 'TRANSPORT.VIEW'] },
+      { label: 'Transport Dashboard',    to: '/transport/dashboard', icon: Gauge, perms: ['TRANSPORT.VIEW'] },
+      { label: 'Trips / Programs',       to: '/transport/trips', icon: Truck, perms: ['TRANSPORT.VIEW', 'TRANSPORT.ASSIGN'] },
+      { label: 'Driver – My Trips',      to: '/driver/my-trips', icon: Truck, perms: ['TRANSPORT.DRIVER'] },
+      { label: 'Vehicle Master',         to: '/transport/vehicles', icon: Truck, perms: ['TRANSPORT.MASTER', 'TRANSPORT.VIEW'] },
+      { label: 'Driver Master',          to: '/transport/drivers', icon: Users, perms: ['TRANSPORT.MASTER', 'TRANSPORT.VIEW'] },
+      { label: 'Request Types',          to: '/transport/request-types', icon: SlidersHorizontal, perms: ['TRANSPORT.MASTER'] },
+      { label: 'Gate & Transport Reports', to: '/gate/reports', icon: BarChart3, perms: ['GATE_INWARD.VIEW', 'TRANSPORT.VIEW'] },
+      { label: 'Driver – Trip',          to: '/driver/trips', icon: Truck, perms: ['TRANSPORT.DRIVER'], hidden: true, parent: '/driver/my-trips' },
+    ],
+  },
+  {
     label: '4 · Yarn & Knitting', group: 'PRODUCTION', menu: 'Yarn & Knitting', icon: Workflow,
     items: [
       { label: 'Knitting Programs',            to: '/production/knitting-programs', icon: Layers, perms: ['PRODUCTION.VIEW'] },
