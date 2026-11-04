@@ -162,7 +162,7 @@ transportRequestsRouter.get('/requests', ah(async (req, res) => {
   const base = all ? 'r.company_id = ?' : 'r.company_id = ? AND r.requested_by = ?';
   const baseArgs = all ? [req.user!.companyId] : [req.user!.companyId, req.user!.id];
   const counters: Record<string, number> = {};
-  const parts = Object.entries(QUEUES).map(([k, cond]) => `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END) AS ${k}`);
+  const parts = Object.entries(QUEUES).map(([k, cond]) => `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END) AS \`${k}\``);
   const c = await queryOne<any>(`SELECT ${parts.join(', ')}, SUM(r.status = 'DRAFT') AS DRAFT FROM trx_transport_request r WHERE ${base}`, [todayStart, ...baseArgs]);
   for (const k of [...Object.keys(QUEUES), 'DRAFT']) counters[k] = Number(c?.[k] ?? 0);
   res.json({ data: rows, counters, scope: all ? 'all' : 'mine',

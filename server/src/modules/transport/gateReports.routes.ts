@@ -283,7 +283,7 @@ transportDashboardRouter.get('/dashboard', ah(async (req, res) => {
   const cid = req.user!.companyId;
   const today = istToday();
   const t0 = istDayStart(today); const t1 = istDayEnd(today);
-  const parts = Object.entries(QUEUES).map(([k, cond]) => `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END) AS ${k}`);
+  const parts = Object.entries(QUEUES).map(([k, cond]) => `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END) AS \`${k}\``);
   const counters = await queryOne<any>(`SELECT ${parts.join(', ')} FROM trx_transport_request r WHERE r.company_id = ?`, [t0, cid]);
   const trips = await queryOne<any>(`SELECT SUM(status IN ('STARTED','IN_PROGRESS')) running, SUM(status IN ('ASSIGNED','DRIVER_ACCEPTED')) planned, SUM(status = 'EXCEPTION') exceptions,
       SUM(status = 'COMPLETED' AND completed_at >= ? AND completed_at < ?) completed_today FROM trx_transport_trip WHERE company_id = ?`, [t0, t1, cid]);
