@@ -281,7 +281,7 @@ labRequestRouter.post('/requests/:id/cancel', requireAny(P.CREATE, P.APPROVE), a
     if (['CANCELLED', 'CLOSED', 'APPROVED'].includes(r.status)) throw Conflict(`A ${r.status.toLowerCase()} request cannot be cancelled`);
     const busy = await txQueryOne<any>(tx, `SELECT trial_no FROM trx_lab_trial WHERE request_id = ? AND status IN ('SUBMITTED','LAB_REVIEWED') LIMIT 1`, [id]);
     if (busy) throw Conflict(`${busy.trial_no} is waiting for approval — decide it first`);
-    await txExecute(tx, `UPDATE trx_lab_trial SET status = 'CANCELLED', remarks = CONCAT_WS(' · ', remarks, ?) WHERE request_id = ? AND status IN (?)`, [`Request cancelled: ${b.reason}`, id, TRIAL_EDITABLE]);
+    await txQuery(tx, `UPDATE trx_lab_trial SET status = 'CANCELLED', remarks = CONCAT_WS(' · ', remarks, ?) WHERE request_id = ? AND status IN (?)`, [`Request cancelled: ${b.reason}`, id, TRIAL_EDITABLE]);
     await txExecute(tx, `UPDATE trx_lab_request SET status = 'CANCELLED', status_reason = ?, row_version = row_version + 1, updated_by = ? WHERE id = ?`, [b.reason, uidOf(req), id]);
     await labAudit(req, tx, { request_id: id, entity_type: 'REQUEST', entity_id: id, action: 'CANCEL', before: { status: r.status }, remarks: b.reason });
   });

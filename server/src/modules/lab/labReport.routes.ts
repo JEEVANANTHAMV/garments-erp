@@ -310,8 +310,8 @@ labReportRouter.post('/reports/:id/release', requirePermission(P.QA), ah(async (
       [uidOf(req), f.key, f.sha256, id]);
     const sup = await txQuery<any>(tx, `SELECT id FROM trx_lab_report WHERE company_id = ? AND report_no = ? AND revision_no < ? AND report_status IN ('RELEASED','APPROVED')`, [cid, r.report_no, r.revision_no]);
     if (sup.length) {
-      await txExecute(tx, `UPDATE trx_lab_report SET report_status = 'SUPERSEDED', row_version = row_version + 1 WHERE id IN (?)`, [sup.map((x) => x.id)]);
-      await txExecute(tx, `UPDATE trx_lab_production_ref SET status = 'REVOKED', revoked_by = ?, revoked_at = NOW(), revoke_reason = ? WHERE report_id IN (?) AND status = 'ACTIVE'`,
+      await txQuery(tx, `UPDATE trx_lab_report SET report_status = 'SUPERSEDED', row_version = row_version + 1 WHERE id IN (?)`, [sup.map((x) => x.id)]);
+      await txQuery(tx, `UPDATE trx_lab_production_ref SET status = 'REVOKED', revoked_by = ?, revoked_at = NOW(), revoke_reason = ? WHERE report_id IN (?) AND status = 'ACTIVE'`,
         [uidOf(req), `Superseded by ${r.report_no} rev ${r.revision_no}`, sup.map((x) => x.id)]);
     }
     const me = await txQueryOne<any>(tx, `SELECT full_name FROM mst_user WHERE id = ?`, [uidOf(req)]);
