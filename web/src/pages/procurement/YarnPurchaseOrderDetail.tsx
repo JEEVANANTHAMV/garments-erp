@@ -20,6 +20,8 @@ import { PoDocumentActions } from '../../components/PoDocumentActions';
 
 interface YarnLine {
   id?: number;
+  /** typed by the user; prints under the item on the PO (client 04-Nov-2026) */
+  description?: string;
   _key: string;
   so_id?: string | number;
   style_id?: string | number;
@@ -367,6 +369,7 @@ export default function YarnPurchaseOrderDetailPage() {
         const mappedLines: YarnLine[] = existingPo.lines.map((l: any) => ({
           id: l.id,
           _key: `yl_${l.id}`,
+          description: l.description || '',
           so_id: l.so_id || '',
           style_id: l.style_id || '',
           yarn_id: l.yarn_id || '',
@@ -618,7 +621,7 @@ export default function YarnPurchaseOrderDetailPage() {
           so_id: l.so_id ? Number(l.so_id) : null,
           style_id: l.style_id ? Number(l.style_id) : null,
           hsn_code: l.hsn_code || '5205',
-          description: l.yarn_name || `${l.yarn_type} ${l.yarn_count_str}`,
+          description: l.description?.trim() || l.yarn_name || `${l.yarn_type} ${l.yarn_count_str}`,
           yarn_type: l.yarn_type,
           purchase_basis: l.purchase_basis,
           yarn_count_str: l.yarn_count_str,
@@ -1277,6 +1280,13 @@ export default function YarnPurchaseOrderDetailPage() {
                     </select>
                   </PoLineField>
                 </PoLineRow>
+
+                <div className="min-w-0">
+                  <label htmlFor={`ypo-line-${idx}-desc`} className="mb-1 block text-caption font-semibold uppercase tracking-wide text-ink-secondary">Description / specification <span className="normal-case font-normal text-ink-muted">(prints on the PO under this item)</span></label>
+                  <textarea id={`ypo-line-${idx}-desc`} rows={2} maxLength={500} className="input w-full resize-y" value={l.description ?? ''}
+                    placeholder="Type any spec for the supplier — e.g. lot / shade card / packing instructions"
+                    onChange={(e) => updateLine(idx, { description: e.target.value })} />
+                </div>
 
                 <PoLineAmounts
                   items={[

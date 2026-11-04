@@ -19,6 +19,8 @@ import { PoLineCard, PoLineRow, PoLineField, PoLineAmounts } from './PoLineLayou
 import { PoDocumentActions } from '../../components/PoDocumentActions';
 
 interface FabricLine {
+  /** typed by the user; prints under the item on the PO (client 04-Nov-2026) */
+  description?: string;
   id?: number;
   _key: string;
   so_id?: string | number;
@@ -362,6 +364,7 @@ export default function FabricPurchaseOrderDetailPage() {
           d.lines.map((l: any) => ({
             id: l.id,
             _key: `fl_${++fseq}`,
+            description: l.description || '',
             so_id: l.so_id || '',
             style_id: l.style_id || '',
             fabric_id: l.fabric_id || '',
@@ -574,7 +577,7 @@ export default function FabricPurchaseOrderDetailPage() {
             style_id: l.style_id ? Number(l.style_id) : undefined,
             hsn_code: l.hsn_code || '5208',
             material_type: 'FABRIC',
-            description: `${l.fabric_category} — ${l.composition} ${l.fabric_type} ${l.gsm} GSM`,
+            description: l.description?.trim() || `${l.fabric_category === 'Dyed Fabric' ? 'Dyed' : RAW_COLOUR} — ${l.composition} ${l.fabric_type} ${l.gsm} GSM`,
             fabric_category: l.fabric_category,
             fabric_type: l.fabric_type,
             color_name: l.color_name || null,
@@ -1242,6 +1245,13 @@ export default function FabricPurchaseOrderDetailPage() {
                     />
                   </PoLineField>
                 </PoLineRow>
+
+                <div className="min-w-0">
+                  <label htmlFor={`fpo-line-${idx}-desc`} className="mb-1 block text-caption font-semibold uppercase tracking-wide text-ink-secondary">Description / specification <span className="normal-case font-normal text-ink-muted">(prints on the PO under this item)</span></label>
+                  <textarea id={`fpo-line-${idx}-desc`} rows={2} maxLength={500} className="input w-full resize-y" value={l.description ?? ''}
+                    placeholder="Type any spec for the supplier — e.g. lot / shade card / packing instructions"
+                    onChange={(e) => updateLine(idx, { description: e.target.value })} />
+                </div>
 
                 <PoLineAmounts
                   items={[
