@@ -42,7 +42,7 @@ export default function OpeningStockPage() {
   ];
   return (
     <>
-      <PageHeader breadcrumb={['Gate & Stores', 'Opening Stock']} title="Opening Stock" subtitle="Stock on hand at go-live, by location — posts into yarn lots, fabric rolls, trim stock and general items"
+      <PageHeader breadcrumb={['Stores', 'Opening Stock']} title="Opening Stock" subtitle="Stock on hand at go-live, by location — posts into yarn lots, fabric rolls, trim stock and general items"
         actions={can('INVENTORY.CREATE') || can('INVENTORY.ADJUST') ? <Button id="new-opening" onClick={() => setEdit({})}><Plus size={14} className="mr-1 inline" /> New opening stock</Button> : null} />
       <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'LIST', label: 'Register' }, { key: 'REPORT', label: 'Opening stock report' }]} active={tab} onChange={setTab} /></div>
       {tab === 'LIST' ? (

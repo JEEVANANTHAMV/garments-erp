@@ -6,6 +6,7 @@ import { api, http, ApiError } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
 import { useToast } from '../hooks/useToast';
 import { Modal, Spinner, Field } from './ui';
+import { PrintTemplatePicker, printTemplateParam, usePrintTemplate, type PrintTemplateChoice } from './PrintTemplatePicker';
 
 /**
  * Print / PDF / Email for a purchase order (client 04-Nov-2026: "click Mail after the PO → it becomes a PDF and the
@@ -14,7 +15,7 @@ import { Modal, Spinner, Field } from './ui';
  *
  *   <PoDocumentActions type="yarn" id={po.id} poNo={po.po_no} status={po.approval_state} />
  *
- * Stable ids (full mode): #po-print #po-pdf #po-email #po-last-sent, and in the mail popup #po-mail-to #po-mail-cc
+ * Stable ids (full mode): #po-print-template (Colour / Black & White, remembered) #po-print #po-pdf #po-email #po-last-sent, and in the mail popup #po-mail-to #po-mail-cc
  * #po-mail-subject #po-mail-body #po-mail-send #po-mail-fallback #po-mail-error. `compact` = icon buttons for list
  * rows (no ids, data-po-action instead).
  */
@@ -38,9 +39,9 @@ const DRAFTISH = ['DRAFT', 'PENDING'];
 const pdfUrl = (type: PoDocType, id: number | string) => `/purchase-docs/${type}/${id}/pdf`;
 
 /** The PDF as a blob with the app's auth (401 still goes through the token refresh); error bodies are read as JSON. */
-async function fetchPdf(type: PoDocType, id: number | string, download = false): Promise<{ blob: Blob; name: string }> {
+async function fetchPdf(type: PoDocType, id: number | string, download = false, template: PrintTemplateChoice = ''): Promise<{ blob: Blob; name: string }> {
   const r = await api.get<Blob>(pdfUrl(type, id), {
-    params: download ? { download: 1 } : undefined, responseType: 'blob', timeout: 60_000,
+    params: { ...(download ? { download: 1 } : {}), ...printTemplateParam(template) }, responseType: 'blob', timeout: 60_000,
     validateStatus: (s) => s !== 401 && s < 500,   // 401 → interceptor refresh; 4xx read here for the real message
   });
   if (r.status !== 200) {
@@ -76,6 +77,7 @@ export function PoDocumentActions({ type, id, poNo, status, compact = false, cla
   const toast = useToast();
   const [busy, setBusy] = useState<'print' | 'pdf' | null>(null);
   const [mailOpen, setMailOpen] = useState(false);
+  const [template, setTemplate] = usePrintTemplate();   // Colour / Black & White for Print + PDF (mail uses the company default)
   const label = poNo || `PO ${id}`;
 
   const log = useQuery({
@@ -92,7 +94,7 @@ export function PoDocumentActions({ type, id, poNo, status, compact = false, cla
     const w = window.open('', '_blank');
     setBusy('print');
     try {
-      const { blob } = await fetchPdf(type, id);
+      const { blob } = await fetchPdf(type, id, false, template);
       const url = URL.createObjectURL(blob);
       if (w) w.location.href = url; else window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 5 * 60_000);
@@ -104,7 +106,7 @@ export function PoDocumentActions({ type, id, poNo, status, compact = false, cla
   const download = async () => {
     setBusy('pdf');
     try {
-      const { blob, name } = await fetchPdf(type, id, true);
+      const { blob, name } = await fetchPdf(type, id, true, template);
       saveBlob(blob, name);
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(null); }
   };
@@ -117,6 +119,7 @@ export function PoDocumentActions({ type, id, poNo, status, compact = false, cla
   return (
     <div className={clsx('inline-flex flex-wrap items-center gap-2', compact && 'gap-0.5', className)}
       onClick={compact ? (e) => e.stopPropagation() : undefined}>
+      {!compact && <PrintTemplatePicker value={template} onChange={setTemplate} id="po-print-template" />}
       <button type="button" className={btn} onClick={() => void print()} disabled={!!busy}
         id={compact ? undefined : 'po-print'} data-po-action="print" title={`Print ${label}`} aria-label={`Print ${label}`}>
         {busy === 'print' ? <Spinner size={14} /> : <Printer size={15} />}{!compact && ' Print'}
@@ -222,7 +225,7 @@ function PoMailModal({ type, id, label, onClose }: { type: PoDocType; id: number
   const fallback = async () => {
     setFallbackBusy(true); setError(null);
     try {
-      const { blob, name } = await fetchPdf(type, id, true);
+      const { blob, name } = await fetchPdf(type, id, true);   // a mailed PDF uses the company default design
       saveBlob(blob, name);
       const q = new URLSearchParams();
       if (cc.length) q.set('cc', cc.join(','));

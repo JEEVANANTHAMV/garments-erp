@@ -14,7 +14,8 @@ import { s } from '../resources/schemas.js';
 import { yarnJobLots, resolveSoId } from '../stock/jobStock.routes.js';
 import { postKnittingDc } from './knittingDc.routes.js';
 import { contractorSnapshot, dcAudit, jobSnapshot, yarnDescription } from './knitDcSnapshots.js';
-import { renderYarnIssueDcPdf, type YarnIssueDcPdf } from './yarnIssueDcPdf.js';
+import { renderKnitDcPdf, type KnitDcPrint } from './yarnIssueDcPrint.js';
+import { loadPrintCompany, resolvePrintTemplate } from '../../core/print/printCompany.js';
 
 /**
  * Knitting Yarn Issue DC (C-ONE ERP developer specification, 04-Nov-2026) — /knitting/yarn-issue-dcs.
@@ -630,26 +631,32 @@ yarnIssueDcRouter.post(`${BASE}/:id/cancel`, requirePermission('KNIT_DC.CANCEL')
    PRINT (A4 portrait PDF)
 ================================================================ */
 
-async function pdfData(cid: number, id: number, printedBy: string | null, reprintNo: number): Promise<YarnIssueDcPdf> {
+async function pdfData(cid: number, id: number, printedBy: string | null, reprintNo: number, template: KnitDcPrint['template']): Promise<KnitDcPrint> {
   const { h, lines } = await loadDc(cid, id);
-  const c = await queryOne<any>('SELECT legal_name, trade_name, gstin, address_line1, address_line2, city, state, pincode FROM mst_company WHERE id = ?', [cid]);
+  const company = await loadPrintCompany(cid);
   const e = await queryOne<any>('SELECT * FROM trx_knitting_dc_eway WHERE dc_id = ?', [id]);
   const v = ewbView(e, h.doc_status);
   const d = String(h.dc_date ?? '').slice(0, 10);
   const dt = d ? new Date(`${d}T00:00:00Z`) : null;
   const dcDate = dt ? `${String(dt.getUTCDate()).padStart(2, '0')}-${dt.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })}-${dt.getUTCFullYear()}` : '-';
+  // delivery address never empty: the DC's snapshot, else the contractor's default address (else our own, in the PDF)
+  const party = h.vendor_id ? await contractorSnapshot(cid, Number(h.vendor_id)) : null;
+  const phone = h.vendor_id ? await queryOne<any>('SELECT phone FROM mst_party WHERE id = ? AND company_id = ?', [h.vendor_id, cid]) : null;
   return {
-    company: { name: c?.legal_name || c?.trade_name || '', address: [c?.address_line1, c?.address_line2, c?.city, c?.state, c?.pincode].filter(Boolean).join(', '), gstin: c?.gstin ?? null },
+    template,
+    company,
     dc: { dc_no: h.dc_no, dc_date: dcDate, doc_status: h.doc_status, contractor: h.contractor_name_snapshot ?? h.vendor_name ?? null,
-      contractor_address: h.contractor_address_snapshot ?? null, contractor_gstin: h.contractor_gstin_snapshot ?? h.vendor_gstin ?? null,
-      vehicle_no: h.vehicle_no ?? null, purpose: h.purpose ?? DEFAULT_PURPOSE, cancel_reason: h.cancel_reason ?? null },
-    lines: lines.map((l) => ({ job_no: l.job_no_snapshot ?? l.io_no ?? l.program_no ?? '', yarn: l.yarn_description_snapshot ?? l.yarn_name ?? '', fabric: l.fabric_description_snapshot ?? '',
-      lot_no: l.lot_no ?? null, cones: n(l.cones), net_kg: n(l.net_weight_kg) })),
-    // e-way bill block only when the DC needs one (spec §15.3 / §16.3: no empty panel)
+      contractor_address: h.contractor_address_snapshot ?? party?.address ?? null, contractor_gstin: h.contractor_gstin_snapshot ?? h.vendor_gstin ?? null,
+      contractor_phone: phone?.phone ?? null, vehicle_no: h.vehicle_no ?? null, purpose: h.purpose ?? DEFAULT_PURPOSE, cancel_reason: h.cancel_reason ?? null },
+    // IO No of the program (else the job snapshot), the program no + the program's fabric, the yarn name as on the DC
+    lines: lines.map((l) => ({ io_no: l.io_no ?? l.job_no_snapshot ?? '', program_no: l.program_no ?? null, program_fabric: l.fabric_description_snapshot ?? null,
+      yarn: l.yarn_description_snapshot ?? l.yarn_name ?? '', lot_no: l.lot_no ?? null, cones: n(l.cones), net_kg: n(l.net_weight_kg) })),
+    // e-way bill block only when the DC needs one (spec §15.3 / §16.3: no empty panel); QR only from the verified payload
     eway: e && e.is_required ? {
       eway_bill_no: e.eway_bill_no ?? null, date_text: v.eway_bill_datetime_text ?? null, valid_until_text: v.valid_until_text ?? null, expired: v.expired,
       distance_km: e.approx_distance_km == null ? null : n(e.approx_distance_km), transport_mode: e.transport_mode ?? null, transporter_name: e.transporter_name ?? null,
-      transporter_gstin: e.transporter_gstin ?? null, vehicle_no: e.eway_vehicle_no ?? null, qr_payload: e.qr_payload ?? null, status: e.status,
+      transporter_gstin: e.transporter_gstin ?? null, vehicle_no: e.eway_vehicle_no ?? null,
+      qr_payload: e.qr_payload && e.qr_source ? e.qr_payload : null, status: e.status,
     } : null,
     print: { reprint_no: reprintNo, printed_at: istText(new Date()) ?? '', printed_by: printedBy },
   };
@@ -658,12 +665,13 @@ async function pdfData(cid: number, id: number, printedBy: string | null, reprin
 /**
  * GET /:id/print — the A4 portrait PDF. `purpose=preview` (default) only shows it; `print` / `download` of an
  * approved DC count as a print (the second and later ones are marked "Reprint n" and audited as REPRINT).
- * `download=1` sends it as a file.
+ * `download=1` sends it as a file; `template=colour|bw` picks the design (else the company default).
  */
 yarnIssueDcRouter.get(`${BASE}/:id/print`, requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId; const uid = req.user!.id;
   const id = idParam(req);
-  const q = z.object({ purpose: z.enum(['preview', 'print', 'download']).default('preview'), download: z.coerce.number().int().optional() }).parse(req.query);
+  const q = z.object({ purpose: z.enum(['preview', 'print', 'download']).default('preview'), download: z.coerce.number().int().optional(),
+    template: z.string().max(20).optional() }).parse(req.query);
   const h = await queryOne<any>('SELECT id, dc_no, doc_status, print_count FROM trx_knitting_dc WHERE id = ? AND company_id = ?', [id, cid]);
   if (!h) throw NotFound('Knitting yarn issue DC not found');
   const counts = h.doc_status === 'APPROVED' && q.purpose !== 'preview';
@@ -676,7 +684,9 @@ yarnIssueDcRouter.get(`${BASE}/:id/print`, requirePermission('PRODUCTION.VIEW'),
     });
   }
   const me = await queryOne<any>('SELECT full_name FROM mst_user WHERE id = ?', [uid]);
-  const buf = await renderYarnIssueDcPdf(await pdfData(cid, id, me?.full_name ?? null, counts ? reprintNo : 0));
+  // ?template=colour|bw for this print, else the company default (Admin → Settings PRINT_TEMPLATE)
+  const template = await resolvePrintTemplate(cid, q.template);
+  const buf = await renderKnitDcPdf(await pdfData(cid, id, me?.full_name ?? null, counts ? reprintNo : 0, template));
   const name = `${String(h.dc_no).replace(/[^A-Za-z0-9_-]/g, '_')}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `${q.download || q.purpose === 'download' ? 'attachment' : 'inline'}; filename="${name}"`);

@@ -4,12 +4,11 @@
  * general → trx_general_purchase doc_kind PO) into ONE shape that the PDF renderer and the mailer use.
  * Totals are recomputed from the lines with the common invoice engine so the printed figures always add up.
  */
-import fs from 'fs';
-import path from 'path';
 import { query, queryOne } from '../../config/db.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
 import { computeInvoice } from '../../core/invoiceCalc.js';
 import { RAW_COLOUR } from '../../core/rawColour.js';
+import { loadPrintCompany } from '../../core/print/printCompany.js';
 
 export const PO_TYPES = ['yarn', 'fabric', 'trim', 'general'] as const;
 export type PoType = (typeof PO_TYPES)[number];
@@ -30,8 +29,10 @@ export interface PoLine {
   taxable: number;
   gstRate: number;
   tax: number;
-  /** Trim POs print colour and size in their own columns. */
+  /** Trim / fabric POs print colour and size in their own columns. */
   color?: string | null;
+  /** Yarn POs print the count in its own column. */
+  count?: string | null;
   size?: string | null;
 }
 
@@ -48,7 +49,7 @@ export interface PoDocument {
   status: string;            // normalised: DRAFT / PENDING / APPROVED / PARTIAL / CLOSED / CANCELLED / REJECTED …
   isDraft: boolean;
   isCancelled: boolean;
-  currency: { code: string; symbol: string | null };
+  currency: { code: string; symbol: string | null; name: string | null; decimals: number };
   exchangeRate: number;
   isInterstate: boolean;
   meta: [string, string][];  // extra header fields (IO / job, style, quotation …)
@@ -79,37 +80,7 @@ const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 const dateStr = (v: unknown) => (v ? (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10)) : null);
 const fmtQtyStr = (v: unknown) => { const x = num(v); return Number.isInteger(x) ? String(x) : String(Number(x.toFixed(3))); };
 
-/** The company logo as a local PNG / JPEG inside uploads/ (never a path outside it, never a remote URL). */
-function logoFile(logoPath: string | null): string | null {
-  if (!logoPath || /^https?:/i.test(logoPath) || !/\.(png|jpe?g)$/i.test(logoPath)) return null;
-  const uploads = path.resolve(process.cwd(), 'uploads');
-  const rel = logoPath.replace(/^\/+/, '').replace(/^uploads\//, '');
-  const file = path.resolve(uploads, rel);
-  if (!file.startsWith(uploads + path.sep)) return null;
-  try { return fs.statSync(file).isFile() ? file : null; } catch { return null; }
-}
-
-async function loadCompany(companyId: number, branchId: number | null) {
-  const c = await queryOne<any>(`SELECT * FROM mst_company WHERE id = ?`, [companyId]);
-  if (!c) throw NotFound('Company not found');
-  const b = branchId ? await queryOne<any>(`SELECT * FROM mst_branch WHERE id = ? AND company_id = ?`, [branchId, companyId]) : null;
-  const useBranch = !!(b && b.address_line1 && !b.is_head_office);
-  const address = useBranch
-    ? [b.address_line1, [b.city, b.state, b.pincode].filter(Boolean).join(', ')]
-    : [c.address_line1, c.address_line2, [c.city, c.state, c.pincode].filter(Boolean).join(' - ')];
-  return {
-    name: String(c.legal_name || c.trade_name || ''),
-    tradeName: str(c.trade_name) && c.trade_name !== c.legal_name ? String(c.trade_name) : null,
-    address: address.map((a) => String(a ?? '').trim()).filter(Boolean),
-    gstin: str(useBranch && b.gstin ? b.gstin : c.gstin),
-    pan: str(c.pan),
-    phone: str(useBranch && b.phone ? b.phone : c.phone),
-    email: str(c.email),
-    website: str(c.website),
-    stateCode: str(c.state_gst_code) ?? (str(c.gstin)?.slice(0, 2) ?? null),
-    logoFile: logoFile(str(c.logo_path)),
-  };
-}
+const loadCompany = loadPrintCompany;
 
 type Company = Awaited<ReturnType<typeof loadCompany>>;
 /** "Bill to" default: our company name, address and GSTIN (as the PO entry screens prefill it). */
@@ -189,13 +160,18 @@ function totalsFrom(lines: PoLine[], interstate: boolean, ch: { freight?: number
   return { taxable: t.taxable, cgst: t.cgst, sgst: t.sgst, igst: t.igst, gst: t.gst, gstGroups: t.gstGroups, charges, tcs: t.tcs, roundOff: t.roundOff, grandTotal: t.net };
 }
 
+const currencyOf = (po: any) => ({
+  code: String(po.currency_code || 'INR'), symbol: str(po.currency_symbol), name: str(po.currency_name),
+  decimals: po.currency_decimals == null ? 2 : Number(po.currency_decimals),
+});
+
 /** A line's tax: the stored tax when present, else taxable × GST %. */
 const lineTax = (taxable: number, rate: number, stored: unknown) => (num(stored) > 0 ? r2(num(stored)) : r2((taxable * rate) / 100));
 
 // ------------------------------------------------------------------ yarn / fabric (trx_purchase_order)
 async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number): Promise<PoDocument> {
   const po = await queryOne<any>(
-    `SELECT t.*, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.code AS status_code,
+    `SELECT t.*, cur.code AS currency_code, cur.symbol AS currency_symbol, cur.name AS currency_name, cur.decimal_place AS currency_decimals, cs.code AS status_code,
             so.so_no, so.io_no, st.style_code, st.style_name, q.quotation_no
        FROM trx_purchase_order t
        LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
@@ -227,7 +203,6 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
     if (l.material_type === 'YARN') {
       description = str(l.yarn_name) ?? str(l.description) ?? `${l.yarn_type ?? 'Yarn'} ${l.yarn_count_str ?? ''}`.trim();
       if (str(l.description) && l.description !== description) details.push(String(l.description));
-      if (str(l.yarn_count_str)) details.push(`Count: ${l.yarn_count_str}`);
       if (str(l.composition)) details.push(`Composition: ${l.composition}`);
       if (str(l.yarn_category)) details.push(`Type: ${l.yarn_category}`);
       const dyed = /dyed/i.test(String(l.yarn_type ?? '')) || (!l.yarn_type && (l.color_name || l.color_id));
@@ -241,8 +216,8 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
       const spec = [str(l.fabric_type), str(l.composition), l.gsm ? `GSM ${l.gsm}` : null, l.dia ? `Dia ${l.dia}` : null].filter(Boolean);
       if (spec.length) details.push(spec.join(' | '));
       const colour = str(l.color_name) ?? str(l.master_color);
-      if (colour) details.push(`Colour: ${colour}${l.shade_code && l.shade_code !== colour ? ` (shade ${l.shade_code})` : ''}`);
-      else if (str(l.shade_code)) details.push(`Shade: ${l.shade_code}`);
+      // the colour prints in its own column; the shade (when it says more) under the fabric
+      if (str(l.shade_code) && l.shade_code !== colour) details.push(`Shade: ${l.shade_code}`);
       if (str(l.pantone_spec)) details.push(`Pantone: ${l.pantone_spec}`);
       if (str(l.finish)) details.push(`Finish: ${l.finish}`);
       if (Number(l.print_flag)) details.push(`Print${l.print_color ? `: ${l.print_color}` : ''}`);
@@ -262,6 +237,8 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
       hsn: str(l.hsn_code) ?? str(l.yarn_hsn) ?? str(l.fabric_hsn) ?? str(l.trim_hsn),
       qty: num(l.qty), uom: String(l.uom_code ?? ''), rate: num(l.rate),
       taxable, gstRate, tax: lineTax(taxable, gstRate, storedTax),
+      count: l.material_type === 'YARN' ? str(l.yarn_count_str) : null,
+      color: l.material_type === 'FABRIC' ? (str(l.color_name) ?? str(l.master_color)) : null,
     };
   });
 
@@ -271,7 +248,7 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
       : type === 'yarn' ? 'YARN PURCHASE ORDER' : 'FABRIC PURCHASE ORDER';
   const status = String(po.status_code === 'CANCELLED' ? 'CANCELLED' : (po.approval_state || po.status_code || 'DRAFT')).toUpperCase();
   const meta: [string, string][] = [];
-  if (headerJob) meta.push(['IO / Job No', headerJob]);
+  if (headerJob) meta.push(['IO No', headerJob]);
   if (str(po.style_code)) meta.push(['Style', `${po.style_code}${po.style_name ? ` - ${po.style_name}` : ''}`]);
   if (str(po.quotation_no)) meta.push(['Quotation', String(po.quotation_no)]);
   if (str(po.order_type)) meta.push(['Order type', String(po.order_type)]);
@@ -282,7 +259,7 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
     no: String(po.po_no || `PO-${id}`), date: dateStr(po.po_date), deliveryDate: dateStr(po.delivery_date),
     paymentTerms: str(po.payment_terms), status,
     isDraft: ['DRAFT', 'PENDING'].includes(status), isCancelled: ['CANCELLED', 'REJECTED'].includes(status),
-    currency: { code: String(po.currency_code || 'INR'), symbol: str(po.currency_symbol) },
+    currency: currencyOf(po),
     exchangeRate: num(po.exchange_rate) || 1, isInterstate: interstate, meta,
     company, ...resolveAddresses(company, po),
     supplier: await loadSupplier(Number(po.supplier_id), cid),
@@ -298,7 +275,7 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
 // ------------------------------------------------------------------ trim (trx_trim_po)
 async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
   const po = await queryOne<any>(
-    `SELECT t.*, cur.code AS currency_code, cur.symbol AS currency_symbol, st.style_code, st.style_name
+    `SELECT t.*, cur.code AS currency_code, cur.symbol AS currency_symbol, cur.name AS currency_name, cur.decimal_place AS currency_decimals, st.style_code, st.style_name
        FROM trx_trim_po t
        LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
        LEFT JOIN mst_style st ON st.id = t.style_id
@@ -328,7 +305,7 @@ async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
   });
   const status = String(po.status || 'APPROVED').toUpperCase();
   const meta: [string, string][] = [];
-  if (str(po.io_no)) meta.push(['IO / Job No', String(po.io_no)]);
+  if (str(po.io_no)) meta.push(['IO No', String(po.io_no)]);
   if (str(po.style_code)) meta.push(['Style', `${po.style_code}${po.style_name ? ` - ${po.style_name}` : ''}`]);
   const company = await loadCompany(cid, null);
   return {
@@ -336,7 +313,7 @@ async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
     no: String(po.po_no || `TPO-${id}`), date: dateStr(po.po_date), deliveryDate: dateStr(po.delivery_date),
     paymentTerms: str(po.payment_terms), status,
     isDraft: status === 'DRAFT', isCancelled: status === 'CANCELLED',
-    currency: { code: String(po.currency_code || 'INR'), symbol: str(po.currency_symbol) },
+    currency: currencyOf(po),
     exchangeRate: num(po.exchange_rate) || 1, isInterstate: interstate, meta,
     company, ...resolveAddresses(company, po), supplier: await loadSupplier(Number(po.supplier_id), cid),
     lines,
@@ -353,7 +330,7 @@ const ALLOCATION_LABEL: Record<string, string> = {
 
 async function loadGeneralPo(id: number, cid: number): Promise<PoDocument> {
   const po = await queryOne<any>(
-    `SELECT t.*, cur.code AS currency_code, cur.symbol AS currency_symbol, cs.code AS status_code
+    `SELECT t.*, cur.code AS currency_code, cur.symbol AS currency_symbol, cur.name AS currency_name, cur.decimal_place AS currency_decimals, cs.code AS status_code
        FROM trx_general_purchase t
        LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
        LEFT JOIN cfg_status cs ON cs.id = t.status_id
@@ -397,7 +374,7 @@ async function loadGeneralPo(id: number, cid: number): Promise<PoDocument> {
     no: String(po.purchase_no || `GP-${id}`), date: dateStr(po.purchase_date), deliveryDate: null,
     paymentTerms: str(po.payment_terms), status,
     isDraft: ['DRAFT', 'PENDING'].includes(status), isCancelled: ['CANCELLED', 'REJECTED'].includes(status),
-    currency: { code: String(po.currency_code || 'INR'), symbol: str(po.currency_symbol) },
+    currency: currencyOf(po),
     exchangeRate: num(po.exchange_rate) || 1, isInterstate: interstate, meta,
     company, ...resolveAddresses(company, po),
     supplier: await loadSupplier(Number(po.supplier_id), cid),

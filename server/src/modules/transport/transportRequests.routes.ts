@@ -13,7 +13,7 @@ import { audit } from '../../core/audit.js';
 import { Forbidden, NotFound, Unprocessable, Conflict } from '../../core/errors.js';
 import {
   P, has, must, REQUEST_FLOW, assertFrom, assertVersion, zBizTime, nextTransportNo, logStatus, notify, coordinators,
-  lockRequest, istDayStart, istDayEnd, humanStatus, istText, type RequestStatus,
+  lockRequest, istDayStart, istDayEnd, humanStatus, istText, type RequestStatus, deliveryPhotoOn, planners,
 } from './transportCore.js';
 
 export const transportRequestsRouter = Router();
@@ -118,7 +118,10 @@ export const QUEUES: Record<string, string> = {
   ASSIGNED: `r.status = 'ASSIGNED'`,
   IN_PROGRESS: `r.status IN ('IN_PROGRESS','PICKUP_COMPLETED','DELIVERED')`,
   DELAYED: `r.status IN ('SUBMITTED','UNDER_REVIEW','CLARIFICATION_REQUIRED','APPROVED','ASSIGNED','IN_PROGRESS','PICKUP_COMPLETED','DELIVERED') AND r.required_at < UTC_TIMESTAMP()`,
-  COMPLETED_TODAY: `r.status = 'COMPLETED' AND r.completed_at >= ?`,
+  COMPLETED_TODAY: `r.status IN ('COMPLETED','RECEIVED') AND r.completed_at >= ?`,
+  // delivered, the requester has not confirmed the material received yet (client 05-Nov-2026)
+  PENDING_RECEIPT: `r.status IN ('DELIVERED','COMPLETED')`,
+  RECEIVED: `r.status = 'RECEIVED'`,
   REJECTED: `r.status = 'REJECTED'`,
 };
 
@@ -155,7 +158,7 @@ transportRequestsRouter.get('/requests', ah(async (req, res) => {
   const w = where.join(' AND ');
   const [{ n }] = await query<{ n: number }>(`SELECT COUNT(*) n FROM trx_transport_request r JOIN mst_user u ON u.id = r.requested_by WHERE ${w}`, args);
   const rows = await query(`${REQ_SELECT} WHERE ${w}
-      ORDER BY FIELD(r.status,'SUBMITTED','UNDER_REVIEW','CLARIFICATION_REQUIRED','APPROVED','ASSIGNED','IN_PROGRESS','PICKUP_COMPLETED','DELIVERED','DRAFT','COMPLETED','REJECTED','CANCELLED'),
+      ORDER BY FIELD(r.status,'SUBMITTED','UNDER_REVIEW','CLARIFICATION_REQUIRED','APPROVED','ASSIGNED','IN_PROGRESS','PICKUP_COMPLETED','DELIVERED','DRAFT','COMPLETED','RECEIVED','REJECTED','CANCELLED'),
                FIELD(r.priority,'CRITICAL','URGENT','NORMAL'), r.required_at, r.id DESC
       LIMIT ? OFFSET ?`, [...args, q.pageSize, (q.page - 1) * q.pageSize]);
   // counters over the same visibility (not the queue / status filter)
@@ -165,6 +168,9 @@ transportRequestsRouter.get('/requests', ah(async (req, res) => {
   const parts = Object.entries(QUEUES).map(([k, cond]) => `SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END) AS \`${k}\``);
   const c = await queryOne<any>(`SELECT ${parts.join(', ')}, SUM(r.status = 'DRAFT') AS DRAFT FROM trx_transport_request r WHERE ${base}`, [todayStart, ...baseArgs]);
   for (const k of [...Object.keys(QUEUES), 'DRAFT']) counters[k] = Number(c?.[k] ?? 0);
+  // the signed-in user's own requests waiting for "Confirm material received" (also for coordinators viewing all)
+  const mineWaiting = await queryOne<any>(`SELECT COUNT(*) n FROM trx_transport_request r WHERE r.company_id = ? AND r.requested_by = ? AND ${QUEUES.PENDING_RECEIPT}`, [req.user!.companyId, req.user!.id]);
+  counters.MY_PENDING_RECEIPT = Number(mineWaiting?.n ?? 0);
   res.json({ data: rows, counters, scope: all ? 'all' : 'mine',
     pagination: { page: q.page, pageSize: q.pageSize, total: Number(n), totalPages: Math.max(1, Math.ceil(Number(n) / q.pageSize)) } });
 }));
@@ -211,7 +217,14 @@ transportRequestsRouter.get('/requests/:id', ah(async (req, res) => {
       reject: has(req, P.APPROVE) && REQUEST_FLOW.reject.includes(st),
       cancel: (has(req, P.APPROVE) && REQUEST_FLOW.cancelAny.includes(st)) || (mine && REQUEST_FLOW.cancelOwn.includes(st) && (st !== 'ASSIGNED' || !['STARTED', 'IN_PROGRESS'].includes(r.trip_status))),
       assign: has(req, P.ASSIGN) && st === 'APPROVED',
-    } } });
+      confirm_received: (mine || has(req, P.APPROVE)) && REQUEST_FLOW.confirmReceived.includes(st),
+    }, delivery_photo: await deliveryPhotoOn(req.user!.companyId) } });
+}));
+
+/** Screen switches for the transport pages (any transport user). */
+transportRequestsRouter.get('/settings', ah(async (req, res) => {
+  must(req, P.REQUEST, P.VIEW, P.ASSIGN, P.DRIVER, P.APPROVE);
+  res.json({ data: { delivery_photo: await deliveryPhotoOn(req.user!.companyId) } });
 }));
 
 /* ====================================================================== create / edit draft */
@@ -420,6 +433,47 @@ transportRequestsRouter.post('/requests/:id/cancel', ah(async (req, res) => {
     await audit(req, 'trx_transport_request', r.id, 'UPDATE', { status: r.status }, { status: 'CANCELLED', reason: b.reason }, tx);
     if (!mine) await notify(tx, req, [r.requested_by], { key: `TRN:${r.id}:CANCELLED`, refType: 'TRANSPORT_REQUEST', refId: r.id, url: reqUrl(r.id), title: `Vehicle request ${r.request_no} cancelled`, body: b.reason });
     else if (r.status !== 'DRAFT') await notify(tx, req, await coordinators(tx, req.user!.companyId), { key: `TRN:${r.id}:CANCELLED`, refType: 'TRANSPORT_REQUEST', refId: r.id, url: reqUrl(r.id), title: `Vehicle request ${r.request_no} cancelled by requester`, body: b.reason });
+  });
+  res.json({ data: row });
+}));
+
+/**
+ * Requester confirms the material received (client 05-Nov-2026): "when we receive the material, OUR person must update
+ * received". From Delivered / Completed → RECEIVED (final) with the received date-time (default now), qty (default the
+ * requested qty), condition OK / SHORT / DAMAGED (remarks required when not OK). The requester, or a coordinator
+ * (TRANSPORT.APPROVE) on their behalf. The coordinators are notified; a short / damaged receipt is flagged.
+ */
+const receivedSchema = z.object({
+  received_at: z.union([zBizTime, z.literal(''), z.null()]).transform((v) => (v === '' ? null : v)).nullish(),
+  received_qty: optNum,
+  condition: z.enum(['OK', 'SHORT', 'DAMAGED']).default('OK'),
+  remarks: optStr(500),
+  row_version: z.coerce.number().int().nullish(),
+});
+transportRequestsRouter.post('/requests/:id/confirm-received', ah(async (req, res) => {
+  must(req, P.REQUEST, P.APPROVE);
+  const b = receivedSchema.parse(req.body ?? {});
+  const now = new Date();
+  const at = b.received_at ?? now;
+  if (at.getTime() > now.getTime() + 5 * 60_000) throw fieldErr('received_at', 'Received time cannot be in the future');
+  if (b.condition !== 'OK' && !b.remarks) throw fieldErr('remarks', `Say what was ${b.condition === 'SHORT' ? 'short' : 'damaged'} in the remarks`);
+  const row = await act(req, idOf(req.params.id), async (tx, r) => {
+    const mine = Number(r.requested_by) === req.user!.id;
+    if (!mine && !has(req, P.APPROVE)) throw Forbidden('Only the requester (or the transport coordinator) confirms the material received');
+    assertFrom(r.status, REQUEST_FLOW.confirmReceived, 'confirm the material received');
+    assertVersion(r, b.row_version);
+    if (r.submitted_at && at.getTime() < new Date(r.submitted_at).getTime()) throw fieldErr('received_at', 'Received time is before the request was raised');
+    const qty = b.received_qty ?? (r.package_qty != null ? Number(r.package_qty) : null);
+    if (b.condition === 'OK' && qty != null && r.package_qty != null && qty < Number(r.package_qty)) throw fieldErr('condition', `Received ${qty} of ${Number(r.package_qty)} — mark the condition Short and say what is missing`);
+    await txExecute(tx, `UPDATE trx_transport_request SET status = 'RECEIVED', received_at = ?, received_by = ?, received_qty = ?, received_condition = ?, received_remarks = ?,
+        received_recorded_at = ?, completed_at = COALESCE(completed_at, ?), row_version = row_version + 1, updated_by = ? WHERE id = ?`,
+      [at, req.user!.id, qty, b.condition, b.remarks ?? null, now, at, req.user!.id, r.id]);
+    const note = [`${b.condition === 'OK' ? 'Received OK' : `Received — ${b.condition.toLowerCase()}`}${qty != null ? ` · qty ${qty}${r.package_uom ? ` ${r.package_uom}` : ''}` : ''}`, istText(at), mine ? null : `recorded by ${req.user!.fullName} for the requester`, b.remarks].filter(Boolean).join(' · ');
+    await logStatus(tx, req, { entity: 'REQUEST', id: r.id, tripId: r.current_trip_id ?? null, from: r.status, to: 'RECEIVED', event: 'MATERIAL_RECEIVED', note });
+    await audit(req, 'trx_transport_request', r.id, 'UPDATE', { status: r.status }, { status: 'RECEIVED', received_at: at, received_qty: qty, condition: b.condition, remarks: b.remarks ?? null }, tx);
+    const who = [...await coordinators(tx, req.user!.companyId), ...await planners(tx, req.user!.companyId), ...(mine ? [] : [Number(r.requested_by)])];
+    await notify(tx, req, who, { key: `TRN:${r.id}:RECEIVED`, refType: 'TRANSPORT_REQUEST', refId: r.id, url: reqUrl(r.id),
+      title: `${b.condition === 'OK' ? '' : '⚠ '}${r.request_no} material received${b.condition === 'OK' ? '' : ` — ${b.condition.toLowerCase()}`}`, body: note });
   });
   res.json({ data: row });
 }));

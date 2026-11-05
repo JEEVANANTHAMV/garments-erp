@@ -57,7 +57,7 @@ export default function StockDeliveryPage({ kind = 'STOCK' }: { kind?: Kind }) {
   ];
   return (
     <>
-      <PageHeader breadcrumb={['Gate & Stores', label]} title={label}
+      <PageHeader breadcrumb={['Stores', label]} title={label}
         subtitle={kind === 'STOCK' ? 'Items out of stock to a party — returnable (outstanding until returned) or non-returnable (billable / FOC)' : 'Machinery, tools and other goods sent out — returnable or not; approval with a vehicle makes the outward gate pass'}
         actions={can('INVENTORY.CREATE') || can('ISSUE.CREATE') || can('INVENTORY.ADJUST') ? <Button id="new-delivery" onClick={() => setEdit({})}><Plus size={14} className="mr-1 inline" /> New {label.toLowerCase()}</Button> : null} />
       <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'LIST', label: 'Register' }, { key: 'OUT', label: 'Returnable outstanding' }, { key: 'REPORT', label: `${label} report` }]} active={tab} onChange={setTab} /></div>

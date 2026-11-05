@@ -661,6 +661,8 @@ export function MaterialIssuePage() {
 interface JobIssueItem {
   item_id: number; item_name: string; item_code: string | null; uom_id: number | null; uom_code: string | null;
   on_requirement: boolean; required: number | null; allowed: number | null; issued: number; balance_to_issue: number | null;
+  /** PURCHASE = bought for the job: may issue min(received, purchased incl. excess); REQUIREMENT = no PO, BOM + excess */
+  basis: 'PURCHASE' | 'REQUIREMENT' | null; purchased: number | null; received: number | null; po_nos: string | null;
   job_stock: number; general_stock: number; other_job_stock: number; store_stock: number; available_for_job: number;
 }
 interface JobIssueItems { source: 'REQUIREMENT' | 'JOB_STOCK' | 'ALL'; control: string; work_order: any; items: JobIssueItem[] }
@@ -733,7 +735,7 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
 
   return (
     <Modal open={open} onClose={onClose} title="New material issue" size="xl" icon={<PackageMinus size={16} />}
-      footerStart="The issue is rejected if a line exceeds the stock in that warehouse, the job's stock, or the job's requirement + allowed excess."
+      footerStart="The issue is rejected if a line exceeds the stock in that warehouse, the job's stock, or what was bought and received for the job (no PO: requirement + allowed excess)."
       footer={<>
         <button className="btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn-primary" id="mi-post" onClick={() => void submit()} disabled={busy}>
@@ -797,8 +799,10 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
                         : l.material_type === 'FABRIC' ? fabrics.data : trims.data;
               const job = wo ? jobFor(l.material_type).data : undefined;
               const picked: JobIssueItem | undefined = job?.items.find((x) => x.item_id === Number(l.material_id));
-              const label = (x: JobIssueItem) => `${x.item_name}${x.on_requirement
-                ? ` — req ${q3(x.required)} · issued ${q3(x.issued)} · bal ${q3(x.balance_to_issue)}`
+              const label = (x: JobIssueItem) => `${x.item_name}${x.basis === 'PURCHASE'
+                ? ` — ${x.on_requirement ? `req ${q3(x.required)} · ` : 'not on BOM · '}bought ${q3(x.purchased)} · recd ${q3(x.received)} · issued ${q3(x.issued)} · bal ${q3(x.balance_to_issue)}`
+                : x.on_requirement
+                ? ` — req ${q3(x.required)} · no PO · issued ${q3(x.issued)} · bal ${q3(x.balance_to_issue)}`
                 : ' — not on requirement'}${wh ? ` · avail ${q3(x.available_for_job)}` : ''} ${x.uom_code ?? ''}`;
               return (
                 <tr key={l._key}>
@@ -826,8 +830,11 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
                     </select>
                     {picked && (
                       <div className="mt-1 text-caption text-ink-secondary" id={`mi-info-${idx}`}>
-                        {picked.on_requirement
-                          ? <>Required {q3(picked.required)} (allowed {q3(picked.allowed)}) · issued {q3(picked.issued)} · <strong>balance {q3(picked.balance_to_issue)}</strong></>
+                        {picked.basis === 'PURCHASE'
+                          ? <>{picked.on_requirement ? <>Required {q3(picked.required)} · </> : <span className="text-amber-700">Not on the BOM (bought for the job) · </span>}
+                              purchased {q3(picked.purchased)} <span className="text-ink-muted">(incl. excess{picked.po_nos ? `, ${picked.po_nos}` : ''})</span> · received {q3(picked.received)} · issued {q3(picked.issued)} · <strong>balance {q3(picked.balance_to_issue)}</strong></>
+                          : picked.on_requirement
+                          ? <>Required {q3(picked.required)} (no PO for the job — allowed {q3(picked.allowed)} incl. excess) · issued {q3(picked.issued)} · <strong>balance {q3(picked.balance_to_issue)}</strong></>
                           : <span className="text-amber-700">Not on the job's requirement</span>}
                         {wh && <> · stock: job {q3(picked.job_stock)} + general {q3(picked.general_stock)}{picked.other_job_stock > 0 ? ` (other jobs ${q3(picked.other_job_stock)})` : ''} · store {q3(picked.store_stock)} · <strong>can issue {q3(picked.available_for_job)}</strong></>}
                         {' '}{picked.uom_code}

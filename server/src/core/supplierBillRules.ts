@@ -76,36 +76,68 @@ export async function checkSupplierBill(req: Request, data: Record<string, unkno
 }
 
 /**
- * Edit lock by status (client 04-Nov-2026 — "Edit" on Bills Inward):
- *  - DRAFT / VERIFIED / DISPUTED bills are edited in full
- *  - an APPROVED bill only moves on (Paid / Disputed / Cancelled) with remarks / payment details —
- *    set it to Disputed to correct it
- *  - PAID bills only take remarks / payment details; CANCELLED bills are final
+ * Edit lock by status (client 04-Nov-2026, tightened 05-Nov-2026 — "once approved the values must not change,
+ * we auto-post to Tally; after approval the only thing is the payment reference"):
+ *  - DRAFT / VERIFIED / DISPUTED bills are edited in full (but never set to Paid here)
+ *  - an APPROVED bill's values are locked; it is marked paid only through POST /supplier-bills/:id/mark-paid
+ *    (paid date, mode, bank reference / UTR). It can still be Disputed / Cancelled with a reason (audited)
+ *  - PAID bills only take remarks; a wrong payment is reversed (POST /:id/reverse-payment, reason, audited)
+ *  - CANCELLED bills are final
  * Returns true for an allowed status-only change of a locked bill (the GRN / totals checks are skipped).
  */
 export const BILL_EDITABLE_STATUSES = ['DRAFT', 'VERIFIED', 'DISPUTED'];
 const LOCKED_NEXT: Record<string, string[]> = {
-  APPROVED: ['APPROVED', 'PAID', 'DISPUTED', 'CANCELLED'],
+  APPROVED: ['APPROVED', 'DISPUTED', 'CANCELLED'],
   PAID: ['PAID'],
 };
-const LOCKED_KEYS = new Set(['status', 'remarks', 'payment_due_date', 'voucher_id']);
+const LOCKED_KEYS: Record<string, Set<string>> = {
+  APPROVED: new Set(['status', 'remarks', 'payment_due_date', 'voucher_id']),
+  PAID: new Set(['status', 'remarks']),
+};
+const PAYMENT_KEYS = ['paid_date', 'payment_mode', 'payment_ref', 'paid_amount', 'paid_bank_account_id', 'payment_remarks', 'paid_by', 'paid_at',
+  'payment_reversal_reason', 'payment_reversed_by', 'payment_reversed_at'];
+const MARK_PAID_HINT = 'use "Mark as paid" on the approved bill (paid date + bank reference / UTR)';
 
 export function assertSupplierBillEditable(req: Request, data: Record<string, unknown>, before?: any): boolean {
-  if (!before) return false;
+  const payKeys = PAYMENT_KEYS.filter((k) => req.body && Object.prototype.hasOwnProperty.call(req.body, k));
+  if (payKeys.length) {
+    throw BadRequest(`Payment details (${payKeys.join(', ')}) are not edited here — ${before?.status === 'PAID' ? 'reverse the payment with a reason and mark it paid again' : MARK_PAID_HINT}`);
+  }
+  if (!before) {
+    if (String(data.status ?? '') === 'PAID') throw BadRequest(`A bill is not saved as paid — approve it, then ${MARK_PAID_HINT}`);
+    return false;
+  }
   const st = String(before.status ?? 'DRAFT');
-  if (BILL_EDITABLE_STATUSES.includes(st)) return false;
   const no = before.bill_no || `Bill #${before.id}`;
+  if (BILL_EDITABLE_STATUSES.includes(st)) {
+    if (data.status != null && String(data.status) === 'PAID') throw BadRequest(`${no} is ${st.toLowerCase()} — approve it first, then ${MARK_PAID_HINT}`);
+    return false;
+  }
   if (st === 'CANCELLED') throw BadRequest(`${no} is cancelled — a cancelled bill cannot be edited`);
-  const extra = Object.keys(data).filter((k) => !LOCKED_KEYS.has(k));
+  const allowed = LOCKED_KEYS[st] ?? new Set(['status']);
+  const extra = Object.keys(data).filter((k) => !allowed.has(k));
   if (Array.isArray(req.body?.lines) || extra.length) {
-    throw BadRequest(`${no} is ${st.toLowerCase()} — its lines and amounts are locked. Only the status, remarks and payment details can change${st === 'APPROVED' ? ' (set it to Disputed to correct the bill)' : ''}`);
+    throw BadRequest(st === 'PAID'
+      ? `${no} is paid — its values and payment details are locked (posted to accounts). Only remarks can change; a wrong payment entry is reversed with a reason`
+      : `${no} is ${st.toLowerCase()} — its lines and amounts are locked (posted to accounts). Only the status, remarks and payment due date can change; ${MARK_PAID_HINT}`);
   }
   const next = data.status != null ? String(data.status) : st;
+  if (st === 'APPROVED' && next === 'PAID') throw BadRequest(`${no}: ${MARK_PAID_HINT}`);
   if (!(LOCKED_NEXT[st] ?? [st]).includes(next)) {
     throw BadRequest(`${no} is ${st.toLowerCase()} — it cannot go back to ${next.toLowerCase()}`);
   }
+  if (st === 'APPROVED' && next !== 'APPROVED') {
+    const reason = String(data.remarks ?? '').trim();
+    if (reason.length < 3 || reason === String(before.remarks ?? '').trim()) {
+      throw BadRequest(`${no} is approved (posted to accounts) — enter the reason in Remarks to set it ${next.toLowerCase()}`);
+    }
+  }
   return true;
 }
+
+/** Payment capture on an APPROVED bill (client 05-Nov-2026). */
+export const PAYMENT_MODES = ['NEFT', 'RTGS', 'IMPS', 'CHEQUE', 'CASH', 'UPI', 'OTHER'] as const;
+export const UTR_RE = /^[A-Za-z0-9]{8,22}$/;
 
 /** Only a draft bill is deleted; anything further along is cancelled instead (its GRNs are then free to bill again). */
 export function assertSupplierBillDeletable(before: any) {

@@ -148,5 +148,5 @@ export function GateReportsPage() {
   }, [gate, transport, types.data, vehicles.data, drivers.data]);
 
   if (!defs.length) return <p className="text-body text-ink-secondary">You do not have access to gate or transport reports.</p>;
-  return <ReportSection title="Gate & Transport Reports" subtitle="Visitors, vehicle requests, trips and fleet use — filter, then export to Excel" defs={defs} />;
+  return <ReportSection title="Security & Transport Reports" subtitle="Visitors, vehicle requests, trips and fleet use — filter, then export to Excel" defs={defs} />;
 }

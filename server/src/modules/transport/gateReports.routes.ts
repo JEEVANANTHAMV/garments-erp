@@ -108,15 +108,17 @@ gateReportsRouter.get('/transport-requests', ah(async (req, res) => {
   const q = reqFilters.parse(req.query);
   const { rows, r } = await requestRows(req, q);
   const now = new Date();
-  const final = ['COMPLETED', 'CANCELLED', 'REJECTED'];
+  const final = ['COMPLETED', 'RECEIVED', 'CANCELLED', 'REJECTED'];
   const data = rows.map((x) => ({
     id: x.id, request_no: x.request_no, required_at: istText(x.required_at), type_name: x.type_name, priority: x.priority, status: x.status,
     requester: x.requester, department: x.dept_name, purpose: x.purpose, pickup: x.pickup_location, destination: x.destination_location,
     material: x.material_description, package_qty: x.package_qty, submitted_at: istText(x.submitted_at), approver: x.approver, approved_at: istText(x.approved_at),
     approval_hours: hoursBetween(x.submitted_at, x.approved_at ?? x.rejected_at),
     ageing_hours: final.includes(x.status) ? null : hoursBetween(x.submitted_at, now),
-    turnaround_hours: x.status === 'COMPLETED' ? hoursBetween(x.submitted_at, x.completed_at) : null,
-    completed_at: istText(x.completed_at), trip_no: x.trip_no, vehicle_no: x.vehicle_no, ownership: x.ownership_type, driver: x.driver_name,
+    turnaround_hours: ['COMPLETED', 'RECEIVED'].includes(x.status) ? hoursBetween(x.submitted_at, x.completed_at) : null,
+    completed_at: istText(x.completed_at),
+    // requester's confirmation (client 05-Nov-2026)
+    received_at: istText(x.received_at), received_condition: x.received_condition ?? null, received_qty: x.received_qty ?? null, trip_no: x.trip_no, vehicle_no: x.vehicle_no, ownership: x.ownership_type, driver: x.driver_name,
     reason: x.rejection_reason ?? x.cancel_reason ?? null,
   }));
   res.json({ data, meta: { footnotes: [`Required between ${r.from} and ${r.to}; drafts excluded. Hours are clock hours from submission.`] } });
@@ -151,7 +153,7 @@ gateReportsRouter.get('/requests-by-department', ah(async (req, res) => {
     const k = `${x.dept_name ?? '—'}|${x.requester}`;
     const g = map.get(k) ?? { department: x.dept_name ?? '—', requester: x.requester, total: 0, completed: 0, open: 0, rejected: 0, cancelled: 0, urgent: 0, turnaround_sum: 0 };
     g.total++;
-    if (x.status === 'COMPLETED') { g.completed++; g.turnaround_sum += hoursBetween(x.submitted_at, x.completed_at) ?? 0; }
+    if (x.status === 'COMPLETED' || x.status === 'RECEIVED') { g.completed++; g.turnaround_sum += hoursBetween(x.submitted_at, x.completed_at) ?? 0; }
     else if (x.status === 'REJECTED') g.rejected++;
     else if (x.status === 'CANCELLED') g.cancelled++;
     else g.open++;
@@ -264,7 +266,7 @@ gateReportsRouter.get('/service-performance', ah(async (req, res) => {
     g.deliveries_done += ls.filter((l) => l.service_type === 'DELIVERY' && ['DONE', 'PARTIAL'].includes(l.result)).length;
     g.partial += ls.filter((l) => l.result === 'PARTIAL').length;
     g.failed += ls.filter((l) => l.result === 'FAILED').length;
-    if (x.status === 'COMPLETED') {
+    if (x.status === 'COMPLETED' || x.status === 'RECEIVED') {
       g.completed++;
       g.completion_sum += hoursBetween(x.submitted_at, x.completed_at) ?? 0;
       const served = x.delivered_at ?? x.completed_at;
@@ -318,6 +320,7 @@ transportDashboardRouter.get('/dashboard', ah(async (req, res) => {
       available_drivers: drivers.filter((d) => Number(d.is_active) && d.availability_status === 'AVAILABLE' && !Number(d.busy)).length, drivers: drivers.filter((d) => Number(d.is_active)).length,
       owned_trips_month: num(own.find((o) => o.ownership_type === 'OWNED')?.n), rental_trips_month: num(own.find((o) => o.ownership_type === 'RENTAL')?.n),
       open_issues: issues.length,
+      pending_receipt: num(counters?.PENDING_RECEIPT), received: num(counters?.RECEIVED),
     },
     schedule, queue, issues,
     expiring: expiring.filter((e) => String(e.expiry).slice(0, 10) <= soon).map((e) => ({ ...e, expiry: String(e.expiry).slice(0, 10), expired: String(e.expiry).slice(0, 10) < today })),

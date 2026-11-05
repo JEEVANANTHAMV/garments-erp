@@ -46,7 +46,7 @@ export default function StockAuditPage() {
   ];
   return (
     <>
-      <PageHeader breadcrumb={['Gate & Stores', 'Stock Audit']} title="Stock Audit" subtitle="Physical stock vs ERP stock per lot / roll / item; approval posts the difference"
+      <PageHeader breadcrumb={['Stores', 'Stock Audit']} title="Stock Audit" subtitle="Physical stock vs ERP stock per lot / roll / item; approval posts the difference"
         actions={can('INVENTORY.CREATE') || can('INVENTORY.ADJUST') ? <Button id="new-audit" onClick={() => setEdit({})}><Plus size={14} className="mr-1 inline" /> New stock audit</Button> : null} />
       <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'LIST', label: 'Register' }, { key: 'REPORT', label: 'Stock audit report' }]} active={tab} onChange={setTab} /></div>
       {tab === 'LIST' ? (

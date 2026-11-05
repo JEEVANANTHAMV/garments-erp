@@ -1,7 +1,8 @@
 /**
  * Purchase order Print / PDF / Email (client voice notes 04-Nov-2026) + Admin → Mail (SMTP) settings.
  *
- *   GET  /purchase-docs/:type/:id/pdf            A4 PO PDF (inline; ?download=1 → attachment)   type = yarn|fabric|trim|general
+ *   GET  /purchase-docs/:type/:id/pdf            A4 PO PDF (inline; ?download=1 → attachment; ?template=colour|bw, else the
+ *                                                company default PRINT_TEMPLATE)   type = yarn|fabric|trim|general
  *   GET  /purchase-docs/:type/:id/mail-defaults  suggested To / CC / subject / body, SMTP configured?, may it be sent?
  *   GET  /purchase-docs/:type/:id/mail-log       earlier sends of this PO
  *   POST /purchase-docs/:type/:id/email          { to[], cc?[], subject, body } → PDF attached, sent, logged, audited
@@ -22,6 +23,7 @@ import { sealSecret } from '../../core/secretBox.js';
 import { requireAny } from '../../middleware/auth.js';
 import { loadPoDocument, mailBlockReason, pdfFileName, PO_PERMISSION, PO_TYPES, supplierEmails, type PoType } from './poDocument.js';
 import { renderPoPdf } from './poPdf.js';
+import { companyPrintTemplate, resolvePrintTemplate } from '../../core/print/printCompany.js';
 import {
   fillTemplate, isMailConfigured, loadMailSettings, notConfiguredError, publicMailSettings, sendMail, splitEmails,
   DEFAULT_PO_BODY, DEFAULT_PO_SUBJECT,
@@ -70,7 +72,9 @@ const fmtDmy = (d: string | null) => (d && /^\d{4}-\d{2}-\d{2}/.test(d) ? `${d.s
 purchaseDocsRouter.get('/purchase-docs/:type/:id/pdf', requireDocRight('VIEW'), ah(async (req, res) => {
   const type = parseType(req);
   const doc = await loadPoDocument(type, parseId(req), req.user!.companyId);
-  const pdf = await renderPoPdf(doc);
+  // ?template=colour|bw for this print, else the company default (Admin → Settings PRINT_TEMPLATE)
+  const template = await resolvePrintTemplate(req.user!.companyId, req.query.template);
+  const pdf = await renderPoPdf(doc, { template, printedBy: req.user!.fullName || req.user!.username });
   const name = pdfFileName(doc);
   const disposition = req.query.download === '1' || req.query.download === 'true' ? 'attachment' : 'inline';
   res.setHeader('Content-Type', 'application/pdf');
@@ -171,7 +175,8 @@ purchaseDocsRouter.post('/purchase-docs/:type/:id/email', requireDocRight('CREAT
   const s = await loadMailSettings(cid);
   if (!isMailConfigured(s)) throw notConfiguredError();
 
-  const pdf = await renderPoPdf(doc);
+  // mailed PDFs always use the company's default template
+  const pdf = await renderPoPdf(doc, { template: await companyPrintTemplate(cid), printedBy: req.user!.fullName || req.user!.username });
   const filename = pdfFileName(doc);
   try {
     const info = await sendMail(s, {

@@ -33,7 +33,7 @@ export function must(req: Request, ...codes: string[]) {
 
 /* ------------------------------------------------------------------ statuses */
 export const REQUEST_STATUSES = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'REJECTED', 'ASSIGNED',
-  'IN_PROGRESS', 'PICKUP_COMPLETED', 'DELIVERED', 'COMPLETED', 'CANCELLED'] as const;
+  'IN_PROGRESS', 'PICKUP_COMPLETED', 'DELIVERED', 'COMPLETED', 'RECEIVED', 'CANCELLED'] as const;
 export type RequestStatus = typeof REQUEST_STATUSES[number];
 export const TRIP_STATUSES = ['DRAFT', 'ASSIGNED', 'DRIVER_ACCEPTED', 'STARTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'EXCEPTION'] as const;
 export type TripStatus = typeof TRIP_STATUSES[number];
@@ -42,6 +42,14 @@ export const ACTIVE_TRIP: TripStatus[] = ['ASSIGNED', 'DRIVER_ACCEPTED', 'STARTE
 export const RUNNING_TRIP: TripStatus[] = ['STARTED', 'IN_PROGRESS'];
 /** Request statuses still open (not final). */
 export const OPEN_REQUEST: RequestStatus[] = ['SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'PICKUP_COMPLETED', 'DELIVERED'];
+
+/**
+ * Delivered, waiting for the requester to confirm the material received (client 05-Nov-2026: "when we receive the
+ * material, our person must update received"). RECEIVED is the final state of a served request.
+ */
+export const AWAITING_RECEIPT: RequestStatus[] = ['DELIVERED', 'COMPLETED'];
+/** Served and closed (reports / turnaround): completed by the trip, or confirmed received. */
+export const SERVED_FINAL: RequestStatus[] = ['COMPLETED', 'RECEIVED'];
 
 /** Allowed request transitions by action (§5). Anything else is a 409. */
 export const REQUEST_FLOW: Record<string, RequestStatus[]> = {
@@ -55,7 +63,18 @@ export const REQUEST_FLOW: Record<string, RequestStatus[]> = {
   // requester: before the trip starts; coordinator: also once it is moving
   cancelOwn: ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'ASSIGNED'],
   cancelAny: ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'PICKUP_COMPLETED'],
+  confirmReceived: AWAITING_RECEIPT,
 };
+
+/**
+ * TRANSPORT_DELIVERY_PHOTO (db/156, default 0): delivery / proof photos are hidden and never required unless the company
+ * switches them on (client 05-Nov-2026: "not needed now — keep the option but hidden").
+ */
+export async function deliveryPhotoOn(companyId: number, tx?: Tx): Promise<boolean> {
+  const sql = `SELECT setting_value v FROM cfg_system_setting WHERE (company_id = ? OR company_id IS NULL) AND setting_key = 'TRANSPORT_DELIVERY_PHOTO' ORDER BY company_id IS NULL LIMIT 1`;
+  const r = tx ? await txQueryOne<{ v: string | null }>(tx, sql, [companyId]) : (await query<{ v: string | null }>(sql, [companyId]))[0];
+  return String(r?.v ?? '0').trim() === '1';
+}
 
 export function assertFrom<T extends string>(current: T, allowed: readonly T[], what: string) {
   if (!allowed.includes(current)) {
@@ -231,7 +250,7 @@ export function expiryWarnings(kind: 'vehicle' | 'driver', row: any, on: Date): 
  */
 export async function refreshRequestFromLines(tx: Tx, req: Request, requestId: number, tripId: number, tripRunning: boolean) {
   const r = await txQueryOne<any>(tx, `SELECT id, status, row_version FROM trx_transport_request WHERE id = ? FOR UPDATE`, [requestId]);
-  if (!r || ['CANCELLED', 'COMPLETED', 'REJECTED'].includes(r.status)) return;
+  if (!r || ['CANCELLED', 'COMPLETED', 'RECEIVED', 'REJECTED'].includes(r.status)) return;
   const lines = await txQuery<any>(tx,
     `SELECT sr.service_type, sr.result FROM trx_transport_stop_request sr
        JOIN trx_transport_trip_stop s ON s.id = sr.stop_id AND s.is_active = 1 AND s.trip_id = ?

@@ -39,7 +39,7 @@ export default function ScrapRejectionPage() {
   ];
   return (
     <>
-      <PageHeader breadcrumb={['Gate & Stores', 'Scrap & Rejection']} title="Scrap & Rejection" subtitle="Scrap or reject goods at any stage; rejected stock moves to the rejection godown"
+      <PageHeader breadcrumb={['Stores', 'Scrap & Rejection']} title="Scrap & Rejection" subtitle="Scrap or reject goods at any stage; rejected stock moves to the rejection godown"
         actions={canAny('INVENTORY.CREATE', 'QC.CREATE', 'PRODUCTION.CREATE', 'INVENTORY.ADJUST') ? <>
           <Button variant="secondary" id="new-rejection" onClick={() => setEdit({ entry_kind: 'REJECTION' })}><Plus size={14} className="mr-1 inline" /> Rejection</Button>
           <Button id="new-scrap" onClick={() => setEdit({ entry_kind: 'SCRAP' })}><Plus size={14} className="mr-1 inline" /> Scrap</Button>

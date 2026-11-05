@@ -275,7 +275,7 @@ export function GateOutwardsPage() {
     <CrudPage
       newWith={nw}
       path="gate-outwards"
-      title="Outward Gate Pass"
+      title="Outward Gate Entry"
       permission="GATE_OUTWARD"
       singular="Gate Pass"
       subtitle="Job-work returnable passes, factory unit transfers, and non-returnable export dispatches"

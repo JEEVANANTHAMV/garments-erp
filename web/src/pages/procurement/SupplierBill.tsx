@@ -6,6 +6,7 @@ import { StatusBadge, Badge, Modal, FormSection, LoadingBlock, Input, Select, Bu
 import { fmtDate, fmtDecimal, humanize, today } from '../../lib/format';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../lib/auth';
 import { http, ApiError } from '../../lib/api';
 import { Plus, Trash2, CheckCircle2, Sparkles, Layers, Receipt } from 'lucide-react';
 import { InvoiceSummary } from '../../components/InvoiceSummary';
@@ -28,10 +29,14 @@ export const BILL_TYPES = [
 /** Yarn / fabric process bills are booked in their own Bills Inward tabs (from the process GRNs);
  *  the old categories stay only to show bills booked earlier. */
 const OWN_TAB_TYPES = ['YARN_PROCESS', 'FABRIC_PROCESS'];
-/** Edited in full; APPROVED only moves on (Paid / Disputed / Cancelled), PAID / CANCELLED are final (server: supplierBillRules.ts). */
+/** Edited in full; an APPROVED bill's values are locked (posted to Tally) — it is only marked paid with the bank
+ *  reference / UTR (Mark as paid), or disputed / cancelled with a reason; PAID only takes remarks (wrong payment →
+ *  Reverse payment with a reason); CANCELLED is final (server: supplierBillRules.ts, supplierBillPayment.routes.ts). */
 const BILL_EDITABLE_STATUSES = ['DRAFT', 'VERIFIED', 'DISPUTED'];
-const LOCKED_NEXT: Record<string, string[]> = { APPROVED: ['APPROVED', 'PAID', 'DISPUTED', 'CANCELLED'], PAID: ['PAID'], CANCELLED: ['CANCELLED'] };
-const BILL_STATUS_OPTIONS = ['DRAFT', 'VERIFIED', 'APPROVED', 'PAID', 'DISPUTED', 'CANCELLED'];
+const LOCKED_NEXT: Record<string, string[]> = { APPROVED: ['APPROVED', 'DISPUTED', 'CANCELLED'], PAID: ['PAID'], CANCELLED: ['CANCELLED'] };
+/** Paid is never picked here — an approved bill is marked paid with its payment reference. */
+const BILL_STATUS_OPTIONS = ['DRAFT', 'VERIFIED', 'APPROVED', 'DISPUTED', 'CANCELLED'];
+const PAYMENT_MODES = ['NEFT', 'RTGS', 'IMPS', 'CHEQUE', 'CASH', 'UPI', 'OTHER'];
 const NEW_BILL_TYPES = BILL_TYPES.filter((b) => !OWN_TAB_TYPES.includes(b.value));
 
 interface BillLineItem {
@@ -126,6 +131,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
   const [lines, setLines] = useState<BillLineItem[]>([]);
   // Status the bill was saved with — APPROVED / PAID / CANCELLED bills are locked (server rule, 04-Nov-2026)
   const [savedStatus, setSavedStatus] = useState('DRAFT');
+  const [savedBill, setSavedBill] = useState<any>(null);
   const locked = !!billId && !BILL_EDITABLE_STATUSES.includes(savedStatus);
   // Common invoice summary heads (TDS / TCS / other charges / landed cost / round off)
   const [charges, setCharges] = useState<InvoiceCharges>(EMPTY_CHARGES);
@@ -164,6 +170,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             remarks: b.remarks || '',
           });
           setSavedStatus(b.status || 'DRAFT');
+          setSavedBill(b);
           setCharges(chargesFromRow(b));
           setBillType(b.bill_type || 'YARN_PURCHASE');
           let gids: number[] = [];
@@ -526,8 +533,10 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       // a locked bill only moves on: status + remarks / payment details (lines and amounts stay)
       setSaving(true);
       try {
-        await http.put(`/supplier-bills/${billId}`, { status: header.status, remarks: header.remarks || null, payment_due_date: header.payment_due_date || null });
-        toast('Bill status updated', 'success');
+        await http.put(`/supplier-bills/${billId}`, savedStatus === 'PAID'
+          ? { remarks: header.remarks || null }
+          : { status: header.status, remarks: header.remarks || null, payment_due_date: header.payment_due_date || null });
+        toast(savedStatus === 'PAID' ? 'Remarks saved' : 'Bill status updated', 'success');
         onSaved();
       } catch (err: any) {
         toast(err instanceof ApiError ? err.message : 'Failed to update the bill', 'error');
@@ -633,7 +642,9 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
       onClose={onClose}
       title={billId ? `${locked ? 'Inward bill' : 'Edit inward bill'} ${header.bill_no || `#${billId}`}${locked ? ` — ${humanize(savedStatus)} (locked)` : ''}` : 'New inward bill'}
       subtitle={locked
-        ? (savedStatus === 'CANCELLED' ? 'A cancelled bill is final — view only' : 'Lines and amounts are locked; only the status, remarks and payment due date can change' + (savedStatus === 'APPROVED' ? ' (set it to Disputed to correct the bill)' : ''))
+        ? (savedStatus === 'CANCELLED' ? 'A cancelled bill is final — view only'
+          : savedStatus === 'PAID' ? 'Paid — values and payment details are locked; only remarks can change'
+          : 'Approved (posted to accounts) — values are locked. Mark it paid with the bank reference / UTR, or dispute / cancel it with a reason')
         : 'Pick the bill type and supplier, link the GRN(s) to pull lines, then check the match and totals'}
       icon={<Receipt size={16} />}
       size="full"
@@ -660,7 +671,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
           className="inline-flex items-center gap-1.5"
         >
           {saving ? <Spinner size={14} /> : <CheckCircle2 size={15} />}
-          <span>{saving ? 'Saving...' : locked ? 'Update status' : billId ? 'Save changes' : 'Save Inward Bill'}</span>
+          <span>{saving ? 'Saving...' : locked ? (savedStatus === 'PAID' ? 'Save remarks' : 'Update status') : billId ? 'Save changes' : 'Save Inward Bill'}</span>
         </Button>
         )}
       </>}
@@ -672,7 +683,8 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
           {locked && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" id="sb-locked-note">
               This bill is <strong>{humanize(savedStatus)}</strong> — its lines and amounts are locked.
-              {savedStatus !== 'CANCELLED' && ' Change the Bill Status / remarks below and press Update status.'}
+              {savedStatus === 'APPROVED' && ' When it is paid, use Mark as paid below to save the bank reference / UTR.'}
+              {savedStatus === 'PAID' && ' Only the remarks can change.'}
             </div>
           )}
           <fieldset disabled={locked} className="min-w-0 space-y-4">
@@ -1259,8 +1271,21 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
             />
           </div>
           </fieldset>
-          {locked && savedStatus !== 'CANCELLED' && (
-            <FormSection title="Status & payment">
+          {locked && savedStatus === 'APPROVED' && billId && (
+            <MarkPaidPanel billId={billId} bill={savedBill} total={Number(savedBill?.total_amount ?? totals.inv.net)} currencySymbol={currencySymbol} onDone={onSaved} />
+          )}
+          {locked && savedStatus === 'PAID' && billId && (
+            <PaymentDetails billId={billId} bill={savedBill} currencySymbol={currencySymbol} onReversed={onSaved} />
+          )}
+          {locked && savedStatus === 'PAID' && (
+            <FormSection title="Remarks">
+              <input id="sb-locked-remarks" value={header.remarks} aria-label="Remarks"
+                onChange={(e) => setHeader((p) => ({ ...p, remarks: e.target.value }))}
+                className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white" />
+            </FormSection>
+          )}
+          {locked && savedStatus === 'APPROVED' && (
+            <FormSection title="Status (dispute / cancel need a reason in Remarks)">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="block text-caption font-semibold text-ink-secondary" htmlFor="sb-locked-status">Bill Status</label>
@@ -1277,7 +1302,7 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
                     className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white mt-0.5" />
                 </div>
                 <div>
-                  <label className="block text-caption font-semibold text-ink-secondary" htmlFor="sb-locked-remarks">Remarks</label>
+                  <label className="block text-caption font-semibold text-ink-secondary" htmlFor="sb-locked-remarks">Remarks{header.status !== savedStatus ? ' (reason — required)' : ''}</label>
                   <input id="sb-locked-remarks" value={header.remarks}
                     onChange={(e) => setHeader((p) => ({ ...p, remarks: e.target.value }))}
                     className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white mt-0.5" />
@@ -1288,6 +1313,161 @@ function InwardBillModal({ open, billId, initialType, onClose, onSaved }: Inward
         </div>
       )}
     </Modal>
+  );
+}
+
+/** Mark an APPROVED bill paid with its payment reference (client 05-Nov-2026) — POST /supplier-bills/:id/mark-paid. */
+function MarkPaidPanel({ billId, bill, total, currencySymbol, onDone }: { billId: number; bill: any; total: number; currencySymbol: string; onDone: () => void }) {
+  const toast = useToast();
+  const { can } = useAuth();
+  const banks = useLookup('company-bank-accounts');
+  const [f, setF] = useState({ paid_date: today(), payment_mode: 'NEFT', payment_ref: '', paid_amount: '', paid_bank_account_id: '', payment_remarks: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    const def = (banks.data ?? []).find((b: any) => Number(b.is_default)) ?? (banks.data ?? [])[0];
+    if (def && !f.paid_bank_account_id) setF((p) => ({ ...p, paid_bank_account_id: String(def.id) }));
+  }, [banks.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const billDate = String(bill?.bill_date ?? '').slice(0, 10);
+  const cash = f.payment_mode === 'CASH';
+  const submit = async () => {
+    setErr('');
+    if (!f.paid_date) return setErr('Enter the paid date');
+    if (f.paid_date > today()) return setErr('Paid date cannot be in the future');
+    if (billDate && f.paid_date < billDate) return setErr(`Paid date cannot be before the bill date (${fmtDate(billDate)})`);
+    if (!cash && !f.payment_ref.trim()) return setErr(f.payment_mode === 'CHEQUE' ? 'Enter the cheque number' : 'Enter the bank reference / UTR number');
+    setBusy(true);
+    try {
+      await http.post(`/supplier-bills/${billId}/mark-paid`, {
+        paid_date: f.paid_date, payment_mode: f.payment_mode, payment_ref: f.payment_ref.trim() || null,
+        paid_amount: f.paid_amount === '' ? total : Number(f.paid_amount),
+        paid_bank_account_id: f.paid_bank_account_id ? Number(f.paid_bank_account_id) : null,
+        payment_remarks: f.payment_remarks.trim() || null,
+      });
+      toast('Bill marked paid', 'success');
+      onDone();
+    } catch (e: any) {
+      setErr(e instanceof ApiError ? e.message : 'Could not mark the bill paid');
+    } finally { setBusy(false); }
+  };
+  const lbl = 'block text-caption font-semibold text-ink-secondary';
+  const inp = 'w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white mt-0.5';
+  return (
+    <FormSection title="Mark as paid">
+      <div id="sb-mark-paid-panel" className="space-y-3">
+        <p className="text-caption text-ink-muted">The bill values stay as approved. Enter how it was paid — the bank reference / UTR is saved on the bill.</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label className={lbl} htmlFor="sb-paid-date">Paid date *</label>
+            <input id="sb-paid-date" type="date" value={f.paid_date} min={billDate || undefined} max={today()}
+              onChange={(e) => setF((p) => ({ ...p, paid_date: e.target.value }))} className={inp} />
+          </div>
+          <div>
+            <label className={lbl} htmlFor="sb-pay-mode">Payment mode *</label>
+            <select id="sb-pay-mode" value={f.payment_mode} onChange={(e) => setF((p) => ({ ...p, payment_mode: e.target.value }))} className={inp}>
+              {PAYMENT_MODES.map((m) => <option key={m} value={m}>{m === 'CHEQUE' || m === 'CASH' || m === 'OTHER' ? humanize(m) : m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={lbl} htmlFor="sb-pay-ref">{f.payment_mode === 'CHEQUE' ? 'Cheque no *' : cash ? 'Receipt / voucher ref' : 'Bank reference / UTR no *'}</label>
+            <input id="sb-pay-ref" value={f.payment_ref} maxLength={30} placeholder={cash ? 'optional' : 'e.g. HDFCR52026110512345'}
+              onChange={(e) => setF((p) => ({ ...p, payment_ref: e.target.value.toUpperCase() }))} className={`${inp} tabular-nums`} />
+          </div>
+          <div>
+            <label className={lbl} htmlFor="sb-paid-amount">Paid amount</label>
+            <input id="sb-paid-amount" type="number" step="0.01" value={f.paid_amount} placeholder={total.toFixed(2)}
+              onChange={(e) => setF((p) => ({ ...p, paid_amount: e.target.value }))} className={`${inp} tabular-nums`} />
+            <span className="text-caption text-ink-muted">Full bill total {currencySymbol}{fmtDecimal(total, 2)}</span>
+          </div>
+          <div>
+            <label className={lbl} htmlFor="sb-paid-bank">Paid from (our bank){cash ? '' : ' *'}</label>
+            <select id="sb-paid-bank" value={f.paid_bank_account_id} onChange={(e) => setF((p) => ({ ...p, paid_bank_account_id: e.target.value }))} className={inp}>
+              <option value="">{(banks.data ?? []).length ? '— pick —' : 'No bank accounts in the master'}</option>
+              {(banks.data ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={lbl} htmlFor="sb-pay-remarks">Payment remarks</label>
+            <input id="sb-pay-remarks" value={f.payment_remarks} maxLength={300}
+              onChange={(e) => setF((p) => ({ ...p, payment_remarks: e.target.value }))} className={inp} />
+          </div>
+        </div>
+        {err && <div id="sb-pay-error" className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-caption text-red-700">{err}</div>}
+        <div className="flex justify-end">
+          <Button id="sb-mark-paid" onClick={submit} disabled={busy || !can('PURCHASE.UPDATE')} className="inline-flex items-center gap-1.5">
+            {busy ? <Spinner size={14} /> : <CheckCircle2 size={15} />}<span>Mark as paid</span>
+          </Button>
+        </div>
+      </div>
+    </FormSection>
+  );
+}
+
+/** Payment details of a PAID bill (read only) + Reverse payment (wrong entry, reason, audited). */
+function PaymentDetails({ billId, bill, currencySymbol, onReversed }: { billId: number; bill: any; currencySymbol: string; onReversed: () => void }) {
+  const toast = useToast();
+  const { can } = useAuth();
+  const [reversing, setReversing] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const history = useQuery({
+    queryKey: ['supplier-bill-payment-history', billId],
+    queryFn: async () => (await http.get<{ data: any[] }>(`/supplier-bills/${billId}/payment-history`)).data,
+  });
+  const reverse = async () => {
+    if (reason.trim().length < 5) { toast('Enter the reason for reversing the payment (at least 5 characters)', 'error'); return; }
+    setBusy(true);
+    try {
+      await http.post(`/supplier-bills/${billId}/reverse-payment`, { reason: reason.trim() });
+      toast('Payment reversed — the bill is back to approved', 'success');
+      onReversed();
+    } catch (e: any) {
+      toast(e instanceof ApiError ? e.message : 'Could not reverse the payment', 'error');
+    } finally { setBusy(false); }
+  };
+  const row = (k: string, v: React.ReactNode) => (
+    <div><div className="text-caption text-ink-muted">{k}</div><div className="text-small font-medium text-ink">{v || '—'}</div></div>
+  );
+  return (
+    <FormSection title="Payment">
+      <div id="sb-payment-details" className="space-y-3">
+        {bill?.paid_date || bill?.payment_ref ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {row('Paid on', bill?.paid_date ? fmtDate(bill.paid_date) : '')}
+            {row('Mode', bill?.payment_mode ? humanize(bill.payment_mode) : '')}
+            {row('Bank ref / UTR', <span className="tabular-nums" id="sb-paid-ref">{bill?.payment_ref}</span>)}
+            {row('Amount', bill?.paid_amount != null ? `${currencySymbol}${fmtDecimal(bill.paid_amount, 2)}` : '')}
+            {row('Paid from', bill?.paid_bank_account_label)}
+            {row('Recorded by', bill?.paid_by_name ? `${bill.paid_by_name}${bill?.paid_at ? ` · ${fmtDate(bill.paid_at)}` : ''}` : '')}
+            {bill?.payment_remarks ? row('Payment remarks', bill.payment_remarks) : null}
+          </div>
+        ) : (
+          <p className="text-caption text-ink-muted">Marked paid before payment references were captured — no bank reference on record.</p>
+        )}
+        {(history.data ?? []).length > 0 && (
+          <div className="text-caption text-ink-muted" id="sb-payment-history">
+            {(history.data ?? []).map((h: any) => (
+              <div key={h.id}>{fmtDate(h.at)} · {h.user_name || '—'} · {h.action === 'MARK_PAID' ? `marked paid (${h.payment_ref || h.payment_mode || ''})` : `payment reversed — ${h.reason}`}</div>
+            ))}
+          </div>
+        )}
+        {can('PURCHASE.APPROVE') && (reversing ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[16rem] flex-1">
+              <label className="block text-caption font-semibold text-ink-secondary" htmlFor="sb-reverse-reason">Reason for reversing the payment *</label>
+              <input id="sb-reverse-reason" value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)}
+                className="w-full text-xs border border-surface-input rounded px-2 py-1.5 bg-white mt-0.5" />
+            </div>
+            <Button variant="secondary" onClick={() => setReversing(false)}>Keep payment</Button>
+            <Button id="sb-reverse-confirm" variant="danger" onClick={reverse} disabled={busy}>{busy ? 'Reversing…' : 'Reverse payment'}</Button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button id="sb-reverse" variant="secondary" onClick={() => setReversing(true)}>Reverse payment (wrong entry)</Button>
+          </div>
+        ))}
+      </div>
+    </FormSection>
   );
 }
 
@@ -1433,6 +1613,10 @@ export function SupplierBillsPage() {
               return <Badge tone={tone}>{humanize(r.match_status || 'UNMATCHED')}</Badge>;
             },
           },
+          { key: 'paid_date', header: 'Paid on', render: (r: any) => (r.paid_date ? fmtDate(r.paid_date) : <span className="text-ink-muted">—</span>) },
+          { key: 'payment_ref', header: 'UTR / Ref', render: (r: any) => (r.payment_ref || r.payment_mode
+            ? <span className="tabular-nums text-caption">{r.payment_ref || '—'}{r.payment_mode ? <span className="text-ink-muted"> · {humanize(r.payment_mode)}</span> : null}</span>
+            : <span className="text-ink-muted">—</span>) },
           { key: 'status', header: 'Status', render: (r: any) => <StatusBadge value={r.status} /> },
         ]}
         filters={[

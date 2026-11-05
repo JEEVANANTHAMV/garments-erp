@@ -882,7 +882,7 @@ export const transactionResources: ResourceConfig[] = [
     ],
   },
   {
-    path: 'gate-outwards', table: 'trx_gate_outward', permission: 'GATE_OUTWARD', label: 'Outward Gate Pass',
+    path: 'gate-outwards', table: 'trx_gate_outward', permission: 'GATE_OUTWARD', label: 'Outward Gate Entry',
     searchable: ['pass_no', 'vehicle_no', 'driver_name', 'purpose', 'lr_no'],
     sortable: ['pass_no', 'pass_date', 'created_at'], defaultSort: 't.pass_date DESC, t.id DESC',
     hasIsActive: false, softDelete: false, hasAuditCols: false,
@@ -1158,8 +1158,10 @@ export const transactionResources: ResourceConfig[] = [
     defaultSort: 't.bill_date DESC', hasIsActive: false, softDelete: false,
     filters: ['bill_type', 'supplier_id', 'po_id', 'grn_id', 'match_status', 'status'],
     autoNumber: { column: 'bill_no', docType: 'SUPPLIER_BILL' },
-    selectExtra: 'sup.party_name AS supplier_name, po.po_no, grn.grn_no, cur.code AS currency_code, kno.kwo_no AS knitting_order_no, fpo.fpo_no AS fabric_process_order_no',
+    selectExtra: "sup.party_name AS supplier_name, po.po_no, grn.grn_no, cur.code AS currency_code, kno.kwo_no AS knitting_order_no, fpo.fpo_no AS fabric_process_order_no, CONCAT(cba.account_label, ' — ', cba.bank_name, ' ', RIGHT(cba.account_no, 4)) AS paid_bank_account_label, pu.full_name AS paid_by_name",
     joins: `LEFT JOIN mst_party sup ON sup.id = t.supplier_id
+            LEFT JOIN mst_company_bank_account cba ON cba.id = t.paid_bank_account_id
+            LEFT JOIN mst_user pu ON pu.id = t.paid_by
             LEFT JOIN trx_purchase_order po ON po.id = t.po_id
             LEFT JOIN trx_grn grn ON grn.id = t.grn_id
             LEFT JOIN cfg_currency cur ON cur.id = t.currency_id
@@ -1203,7 +1205,8 @@ export const transactionResources: ResourceConfig[] = [
       ...invoiceSummaryFields(),
     ],
     // Totals are recomputed from the lines whenever lines are saved (common invoice summary).
-    // edit / delete lock by status (04-Nov-2026): approved bills only move on, paid / cancelled are final
+    // edit / delete lock by status (04-Nov-2026): approved bills only move on, paid / cancelled are final;
+    // approved → paid only through POST /supplier-bills/:id/mark-paid with the bank reference / UTR (05-Nov-2026)
     beforeDelete: async (_req, _id, before) => assertSupplierBillDeletable(before),
     beforeWrite: async (req, data, before) => {
       if (assertSupplierBillEditable(req, data, before)) return;

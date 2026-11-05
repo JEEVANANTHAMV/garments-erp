@@ -10,6 +10,7 @@ import { fmtDate, fmtDateTime, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup } from '../../hooks/useLookup';
 import { Badge, Input, LoadingBlock, Modal, PageHeader, Select, Textarea } from '../../components/ui';
+import { PrintTemplatePicker, printTemplateParam, usePrintTemplate, type PrintTemplateChoice } from '../../components/PrintTemplatePicker';
 
 /**
  * Knitting – Yarn Issue / Delivery Challan (C-ONE ERP specification, 04-Nov-2026).
@@ -24,9 +25,9 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /* ─────────────────────────── PDF helpers ─────────────────────────── */
 type PdfPurpose = 'preview' | 'print' | 'download';
-export async function fetchKnitDcPdf(id: number, purpose: PdfPurpose = 'preview') {
+export async function fetchKnitDcPdf(id: number, purpose: PdfPurpose = 'preview', template: PrintTemplateChoice = '') {
   const r = await api.get<Blob>(`${BASE}/${id}/print`, {
-    params: { purpose }, responseType: 'blob', timeout: 60_000, validateStatus: (s) => s !== 401 && s < 500,
+    params: { purpose, ...printTemplateParam(template) }, responseType: 'blob', timeout: 60_000, validateStatus: (s) => s !== 401 && s < 500,
   });
   if (r.status !== 200) {
     let msg = `Could not make the PDF (HTTP ${r.status})`;
@@ -58,23 +59,25 @@ export function KnitDcPdfModal({ id, title, onClose }: { id: number | null; titl
   const toast = useToast();
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [template, setTemplate] = usePrintTemplate();   // Colour / Black & White (client 05-Nov-2026)
   useEffect(() => {
     if (!id) return;
     let alive = true; let made: string | null = null;
     setUrl(null);
-    fetchKnitDcPdf(id, 'preview').then(({ blob }) => { if (alive) { made = URL.createObjectURL(blob); setUrl(made); } })
+    fetchKnitDcPdf(id, 'preview', template).then(({ blob }) => { if (alive) { made = URL.createObjectURL(blob); setUrl(made); } })
       .catch((e) => toast(errMsg(e), 'error'));
     return () => { alive = false; if (made) URL.revokeObjectURL(made); };
-  }, [id]);
+  }, [id, template]);
   const run = async (p: PdfPurpose) => {
     if (!id) return;
     setBusy(true);
-    try { const { blob, name } = await fetchKnitDcPdf(id, p); if (p === 'download') saveBlob(blob, name); else printBlob(blob); }
+    try { const { blob, name } = await fetchKnitDcPdf(id, p, template); if (p === 'download') saveBlob(blob, name); else printBlob(blob); }
     catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
   return (
     <Modal open={!!id} onClose={onClose} size="xl" title={title ?? 'Knitting yarn issue DC'} subtitle="A4 portrait — print preview" icon={<FileText size={16} />}
       footer={<>
+        <PrintTemplatePicker value={template} onChange={setTemplate} id="kdc-print-template" className="mr-auto" />
         <button className="btn-secondary" onClick={onClose}>Close</button>
         <button className="btn-secondary" disabled={busy} onClick={() => run('download')} id="btn-kdc-pdf-download"><Download size={14} /> Download PDF</button>
         <button className="btn-primary" disabled={busy} onClick={() => run('print')} id="btn-kdc-pdf-print"><Printer size={14} /> Print</button>
@@ -348,6 +351,7 @@ function DcEditor({ id }: { id: number | null }) {
       loaded.current = null; await refetch();
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
+  const [printTemplate, setPrintTemplate] = usePrintTemplate();   // Colour / Black & White for Print / Download
   const cancelDc = () => setAsk({ title: `Cancel DC ${dc?.dc_no}`, label: isApproved ? 'Reason (the issued yarn goes back to stock)' : 'Reason', onOk: async (reason) => {
     const r = await http.post<{ data: any }>(`${BASE}/${id}/cancel`, { reason });
     toast(r.data.eway_warning ?? `DC cancelled${r.data.lines_reversed ? ` — ${fmtDecimal(r.data.stock_reversed_kg, 3)} KG back in stock` : ''}`, r.data.eway_warning ? 'warning' : 'success');
@@ -356,7 +360,7 @@ function DcEditor({ id }: { id: number | null }) {
   } });
   const pdf = async (p: PdfPurpose) => {
     if (!id) return;
-    try { const { blob, name } = await fetchKnitDcPdf(id, p); if (p === 'download') saveBlob(blob, name); else printBlob(blob); if (p !== 'preview') void refetch(); }
+    try { const { blob, name } = await fetchKnitDcPdf(id, p, printTemplate); if (p === 'download') saveBlob(blob, name); else printBlob(blob); if (p !== 'preview') void refetch(); }
     catch (e) { toast(errMsg(e), 'error'); }
   };
 
@@ -377,6 +381,7 @@ function DcEditor({ id }: { id: number | null }) {
         </span>}
         actions={<>
           <Link to="/production/knitting-yarn-dcs" className="btn-secondary"><X size={14} /> Close</Link>
+          {id && <PrintTemplatePicker value={printTemplate} onChange={setPrintTemplate} id="kyd-print-template" />}
           {id && <button className="btn-secondary" onClick={() => setPdfOpen(true)} id="btn-kyd-preview"><Eye size={14} /> Print Preview</button>}
           {id && <button className="btn-secondary" onClick={() => pdf('download')} id="btn-kyd-download"><Download size={14} /> Download PDF</button>}
           {isApproved && <button className="btn-secondary" onClick={() => pdf('print')} id="btn-kyd-print"><Printer size={14} /> {Number(dc.print_count) > 0 ? 'Reprint' : 'Print'}</button>}

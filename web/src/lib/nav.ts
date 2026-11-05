@@ -87,11 +87,17 @@ export const NAV: NavSection[] = [
     ],
   },
   {
-    label: '3 · Gate & Stores', group: 'INVENTORY', menu: 'Gate & Stores', icon: Warehouse,
+    // Security and Stores are separate menus (client audio 05-Nov-2026): the gate is security's job, stock is stores'.
+    label: '3 · Security', group: 'INVENTORY', menu: 'Security', icon: Shield,
     items: [
       { label: 'Inward Gate Entry',  to: '/gate/inwards', icon: Truck, perms: ['GATE_INWARD.VIEW'] },
-      { label: 'Outward Gate Pass',  to: '/gate/outwards', icon: Shield, perms: ['GATE_OUTWARD.VIEW'] },
+      { label: 'Outward Gate Entry', to: '/gate/outwards', icon: Shield, perms: ['GATE_OUTWARD.VIEW'] },
       { label: 'Visitors & Contractors', to: '/gate/visitors', icon: Users, perms: ['GATE_INWARD.VIEW'] },
+    ],
+  },
+  {
+    label: '3 · Stores', group: 'INVENTORY', menu: 'Stores', icon: Warehouse,
+    items: [
       { label: 'Stock on Hand',      to: '/inventory/stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Yarn Stock List',    to: '/procurement/yarn/stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Fabric Roll Stock',  to: '/procurement/fabric/roll-stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
@@ -109,7 +115,7 @@ export const NAV: NavSection[] = [
   },
   {
     // Gate security · own / rental vehicles: request → vehicle manager approves + allocates → driver screen (04-Nov-2026)
-    label: 'Gate · Vehicles & Transport', group: 'INVENTORY', menu: 'Gate Security · Transport', icon: Truck,
+    label: 'Transport Management', group: 'INVENTORY', menu: 'Transport Management', icon: Truck,
     items: [
       { label: 'Vehicle Requests',       to: '/transport/requests', icon: ClipboardList, perms: ['TRANSPORT.REQUEST', 'TRANSPORT.VIEW'] },
       { label: 'Transport Dashboard',    to: '/transport/dashboard', icon: Gauge, perms: ['TRANSPORT.VIEW'] },
@@ -118,7 +124,7 @@ export const NAV: NavSection[] = [
       { label: 'Vehicle Master',         to: '/transport/vehicles', icon: Truck, perms: ['TRANSPORT.MASTER', 'TRANSPORT.VIEW'] },
       { label: 'Driver Master',          to: '/transport/drivers', icon: Users, perms: ['TRANSPORT.MASTER', 'TRANSPORT.VIEW'] },
       { label: 'Request Types',          to: '/transport/request-types', icon: SlidersHorizontal, perms: ['TRANSPORT.MASTER'] },
-      { label: 'Gate & Transport Reports', to: '/gate/reports', icon: BarChart3, perms: ['GATE_INWARD.VIEW', 'TRANSPORT.VIEW'] },
+      { label: 'Security & Transport Reports', to: '/gate/reports', icon: BarChart3, perms: ['GATE_INWARD.VIEW', 'TRANSPORT.VIEW'] },
       { label: 'Driver – Trip',          to: '/driver/trips', icon: Truck, perms: ['TRANSPORT.DRIVER'], hidden: true, parent: '/driver/my-trips' },
     ],
   },

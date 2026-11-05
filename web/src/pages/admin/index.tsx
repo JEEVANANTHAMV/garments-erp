@@ -885,6 +885,13 @@ export function CompanyPage() {
 }
 
 /* ------------------------------------------------- System settings */
+/** Settings with a fixed set of values: shown as a dropdown instead of a text box. */
+const SETTING_CHOICES: Record<string, { value: string; label: string }[]> = {
+  // client 05-Nov-2026: printout design for POs / DCs (each Print / PDF button can still pick the other one)
+  PRINT_TEMPLATE: [{ value: 'COLOUR', label: 'Colour — light professional colours' }, { value: 'BW', label: 'Black & White — bordered, for B/W printers' }],
+  PURCHASE_EXCESS_CONTROL: [{ value: 'BLOCK', label: 'BLOCK — refuse the PO' }, { value: 'WARN', label: 'WARN — save with a warning' }, { value: 'OFF', label: 'OFF' }],
+};
+
 export function SettingsPage() {
   const toast = useToast();
   const qc = useQueryClient();
@@ -957,7 +964,14 @@ export function SettingsPage() {
                   {s.description && <p className="text-small text-ink-secondary">{s.description}</p>}
                 </div>
                 <div className="w-full sm:w-64">
-                  {isFlag ? (
+                  {SETTING_CHOICES[s.key] ? (
+                    <select className="input" id={`setting-${s.key}`} value={String(vals[s.key] ?? '').toUpperCase()}
+                      disabled={s.is_editable !== undefined && s.is_editable !== null && Number(s.is_editable) === 0}
+                      onChange={(e) => setVals((cur) => ({ ...cur, [s.key]: e.target.value }))}>
+                      {!SETTING_CHOICES[s.key].some((o) => o.value === String(vals[s.key] ?? '').toUpperCase()) && <option value={vals[s.key] ?? ''}>{vals[s.key] || '— not set —'}</option>}
+                      {SETTING_CHOICES[s.key].map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  ) : isFlag ? (
                     <button type="button" role="switch" aria-checked={on} disabled={!s.is_editable && s.is_editable !== undefined && s.is_editable !== null && Number(s.is_editable) === 0}
                       onClick={() => setVals((cur) => ({ ...cur, [s.key]: on ? '0' : '1' }))}
                       className={`flex items-center gap-2 rounded-full px-1 py-1 pr-3 text-small font-semibold transition-colors ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-surface-header text-ink-secondary'}`}>

@@ -17,6 +17,7 @@ import { Conflict, Forbidden, NotFound, Unprocessable } from '../../core/errors.
 import {
   P, has, must, assertFrom, assertVersion, zBizTime, nextTransportNo, logStatus, notify, planners, lockTrip, overlapping,
   expiryWarnings, refreshRequestFromLines, retryDeadlock, tripRequesters, istDayStart, istDayEnd, istText, humanStatus, ACTIVE_TRIP, type TripStatus,
+  deliveryPhotoOn,
 } from './transportCore.js';
 
 export const transportTripsRouter = Router();
@@ -402,7 +403,7 @@ async function releaseRequests(tx: Tx, req: Request, trip: any, reason: string, 
   const now = new Date();
   for (const l of links.filter((x) => !onlyIds || onlyIds.includes(Number(x.request_id)))) {
     await txExecute(tx, `UPDATE trx_transport_trip_request SET is_active = 0, unlinked_by = ?, unlinked_at = ?, unlink_reason = ? WHERE trip_id = ? AND request_id = ? AND is_active = 1`, [req.user!.id, now, reason.slice(0, 500), trip.id, l.request_id]);
-    if (['CANCELLED', 'COMPLETED'].includes(l.status)) continue;
+    if (['CANCELLED', 'COMPLETED', 'RECEIVED'].includes(l.status)) continue;
     await txExecute(tx, `UPDATE trx_transport_request SET status = 'APPROVED', current_trip_id = NULL, row_version = row_version + 1, updated_by = ? WHERE id = ?`, [req.user!.id, l.request_id]);
     await logStatus(tx, req, { entity: 'REQUEST', id: l.request_id, tripId: trip.id, from: l.status, to: 'APPROVED', event: 'BACK_TO_QUEUE', note: `${trip.trip_no}: ${reason}` });
     await notify(tx, req, [l.requested_by], { key: `TRN:${l.request_id}:REQUEUE:${trip.id}`, refType: 'TRANSPORT_REQUEST', refId: l.request_id, url: `/transport/requests/${l.request_id}`,
@@ -454,12 +455,14 @@ async function completeTrip(tx: Tx, req: Request, t: any, opts: { odometer?: num
   const notServed: number[] = [];
   for (const r of links) {
     if (r.status === 'CANCELLED') continue;
+    if (r.status === 'RECEIVED') continue;   // the requester already confirmed the material received — final
     const lines = await txQuery<any>(tx, `SELECT sr.result FROM trx_transport_stop_request sr JOIN trx_transport_trip_stop s ON s.id = sr.stop_id AND s.is_active = 1 AND s.trip_id = ? WHERE sr.request_id = ?`, [t.id, r.id]);
     const ok = lines.length > 0 && lines.every((l) => l.result === 'DONE' || l.result === 'PARTIAL');
     if (ok) {
       await txExecute(tx, `UPDATE trx_transport_request SET status = 'COMPLETED', completed_at = ?, row_version = row_version + 1, updated_by = ? WHERE id = ?`, [now, req.user!.id, r.id]);
       await logStatus(tx, req, { entity: 'REQUEST', id: r.id, tripId: t.id, from: r.status, to: 'COMPLETED', event: 'COMPLETED', note: t.trip_no });
-      await notify(tx, req, [r.requested_by], { key: `TRN:${r.id}:COMPLETED`, refType: 'TRANSPORT_REQUEST', refId: r.id, url: `/transport/requests/${r.id}`, title: `${r.request_no} completed`, body: `Trip ${t.trip_no}` });
+      await notify(tx, req, [r.requested_by], { key: `TRN:${r.id}:COMPLETED`, refType: 'TRANSPORT_REQUEST', refId: r.id, url: `/transport/requests/${r.id}`,
+        title: `${r.request_no} delivered — confirm the material received`, body: `Trip ${t.trip_no} completed. Open the request and press "Confirm material received" once it reaches you.` });
     } else notServed.push(Number(r.id));
   }
   if (notServed.length) await releaseRequests(tx, req, t, opts.exception ? `Exception close: ${opts.exception}` : 'Not serviced on the trip', notServed);
@@ -471,6 +474,63 @@ async function completeTrip(tx: Tx, req: Request, t: any, opts: { odometer?: num
   await notify(tx, req, await planners(tx, req.user!.companyId), { key: `TRIP:${t.id}:COMPLETED`, refType: 'TRANSPORT_TRIP', refId: t.id, url: tripUrl(t.id),
     title: `Trip ${t.trip_no} completed${opts.exception ? ' (exception close)' : ''}`, body: `${links.length - notServed.length}/${links.length} request(s) served${km}` });
 }
+
+/**
+ * Coordinator marks a trip delivered (client 05-Nov-2026) — for trips whose driver has no login / tab: every pending
+ * stop line is recorded as done (or failed with a note), the trip is closed and the requesters are asked to confirm the
+ * material received. Proof photos are never asked here.
+ */
+const markDeliveredSchema = z.object({
+  delivered_at: z.union([zBizTime, z.literal(''), z.null()]).transform((v) => (v === '' ? null : v)).nullish(),
+  receiver_name: optStr(80), note: optStr(500), odometer: z.coerce.number().min(0).nullish(),
+  lines: z.array(z.object({ request_id: z.coerce.number().int().positive(), result: z.enum(['DONE', 'FAILED']).default('DONE'),
+    actual_qty: z.coerce.number().min(0).nullish(), note: optStr(500) })).optional(),
+  row_version: z.coerce.number().int().nullish(),
+});
+transportTripsRouter.post('/trips/:id/mark-delivered', ah(async (req, res) => {
+  must(req, P.ASSIGN, P.APPROVE);
+  const b = markDeliveredSchema.parse(req.body ?? {});
+  const id = idOf(req.params.id);
+  const now = new Date();
+  const at = b.delivered_at ?? now;
+  if (at.getTime() > now.getTime() + 5 * 60_000) throw Unprocessable('Delivered time cannot be in the future', [{ field: 'delivered_at', message: 'Delivered time cannot be in the future' }]);
+  const out = await transaction(async (tx) => {
+    const t = await lockTrip(tx, req.user!.companyId, id);
+    if (!t) throw NotFound('Trip not found');
+    assertFrom<TripStatus>(t.status, ['ASSIGNED', 'DRIVER_ACCEPTED', 'STARTED', 'IN_PROGRESS'], 'mark this trip delivered');
+    assertVersion(t, b.row_version);
+    if (t.assigned_at && at.getTime() < new Date(t.assigned_at).getTime() - 60_000) throw Unprocessable('Delivered time is before the trip was assigned', [{ field: 'delivered_at', message: 'Before the trip was assigned' }]);
+    const stops = await txQuery<any>(tx, `SELECT * FROM trx_transport_trip_stop WHERE trip_id = ? AND is_active = 1 ORDER BY stop_no FOR UPDATE`, [t.id]);
+    const lines = await txQuery<any>(tx, `SELECT sr.*, r.request_no FROM trx_transport_stop_request sr JOIN trx_transport_trip_stop s ON s.id = sr.stop_id AND s.is_active = 1 AND s.trip_id = ?
+        JOIN trx_transport_request r ON r.id = sr.request_id WHERE sr.result = 'PENDING' FOR UPDATE`, [t.id]);
+    for (const l of lines) {
+      const sent = b.lines?.find((x) => x.request_id === Number(l.request_id));
+      const result = sent?.result ?? 'DONE';
+      if (result === 'FAILED' && !(sent?.note || b.note)) throw Unprocessable(`Say why ${l.request_no} was not ${l.service_type === 'PICKUP' ? 'picked up' : 'delivered'}`);
+      const qty = sent?.actual_qty ?? (l.expected_qty != null ? Number(l.expected_qty) : null);
+      const final = result === 'DONE' && l.expected_qty != null && qty != null && qty < Number(l.expected_qty) ? 'PARTIAL' : result;
+      await txExecute(tx, `UPDATE trx_transport_stop_request SET result = ?, actual_qty = ?, receiver_name = ?, result_note = ?, done_at = ?, done_by = ? WHERE id = ?`,
+        [final, qty, l.service_type === 'DELIVERY' ? (b.receiver_name ?? null) : null, sent?.note ?? b.note ?? 'Marked by the transport coordinator', at, req.user!.id, l.id]);
+    }
+    for (const s of stops.filter((x) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(x.status))) {
+      const served = await txQueryOne<any>(tx, `SELECT SUM(result IN ('DONE','PARTIAL')) ok, COUNT(*) n FROM trx_transport_stop_request WHERE stop_id = ?`, [s.id]);
+      const next = Number(served?.n) > 0 && !Number(served?.ok) ? 'FAILED' : 'COMPLETED';
+      await txExecute(tx, `UPDATE trx_transport_trip_stop SET status = ?, actual_arrival_at = COALESCE(actual_arrival_at, ?), actual_departure_at = COALESCE(actual_departure_at, ?) WHERE id = ?`, [next, at, at, s.id]);
+      await logStatus(tx, req, { entity: 'STOP', id: s.id, tripId: t.id, from: s.status, to: next, event: 'MARKED_BY_COORDINATOR', note: `${s.stop_no}. ${s.location_name}` });
+    }
+    if (!t.started_at) await txExecute(tx, `UPDATE trx_transport_trip SET started_at = ? WHERE id = ?`, [at, t.id]);
+    await logStatus(tx, req, { entity: 'TRIP', id: t.id, tripId: t.id, from: t.status, to: t.status, event: 'MARKED_DELIVERED', note: [`By ${req.user!.fullName}`, b.receiver_name ? `Receiver ${b.receiver_name}` : null, b.note].filter(Boolean).join(' · ') });
+    const reqIds = await txQuery<any>(tx, `SELECT request_id FROM trx_transport_trip_request WHERE trip_id = ? AND is_active = 1`, [t.id]);
+    for (const r of reqIds) await refreshRequestFromLines(tx, req, Number(r.request_id), t.id, true);
+    const fresh = await lockTrip(tx, req.user!.companyId, id);
+    await completeTrip(tx, req, fresh, { odometer: b.odometer ?? null });
+    await txExecute(tx, `UPDATE trx_transport_trip SET completed_at = ? WHERE id = ?`, [at, t.id]);
+    const drv = t.driver_id ? await txQueryOne<any>(tx, `SELECT user_id FROM mst_transport_driver WHERE id = ?`, [t.driver_id]) : null;
+    await notify(tx, req, [drv?.user_id], { key: `TRIP:${t.id}:MARKED_DELIVERED`, refType: 'TRANSPORT_TRIP', refId: t.id, url: driverUrl(t.id), title: `Trip ${t.trip_no} marked delivered by the coordinator`, body: '' });
+    return txQueryOne(tx, `SELECT * FROM trx_transport_trip WHERE id = ?`, [id]);
+  });
+  res.json({ data: out });
+}));
 
 transportTripsRouter.post('/trips/:id/close-exception', ah(async (req, res) => {
   must(req, P.ASSIGN);
@@ -676,6 +736,7 @@ driverRouter.post('/stops/:id/complete', ah(async (req, res) => {
     const lines = await txQuery<any>(tx, `SELECT sr.*, r.request_no, r.requested_by, ty.requires_proof FROM trx_transport_stop_request sr JOIN trx_transport_request r ON r.id = sr.request_id
         JOIN cfg_transport_request_type ty ON ty.id = r.request_type_id WHERE sr.stop_id = ? FOR UPDATE`, [s.id]);
     const now = new Date();
+    const photoOn = await deliveryPhotoOn(req.user!.companyId, tx);   // TRANSPORT_DELIVERY_PHOTO off → never required
     let anyServed = false; let allFailed = lines.length > 0;
     const partials: string[] = []; const failed: string[] = [];
     for (const l of lines) {
@@ -687,12 +748,12 @@ driverRouter.post('/stops/:id/complete', ah(async (req, res) => {
       const receiver = sent?.receiver_name || b.receiver_name || null;
       if (result === 'FAILED' && !(sent?.note || b.note)) throw Unprocessable(`Say why ${l.request_no} could not be ${l.service_type === 'PICKUP' ? 'picked up' : 'delivered'}`);
       if (result !== 'FAILED' && l.service_type === 'DELIVERY' && !receiver) throw Unprocessable(`Receiver name is required for the delivery of ${l.request_no}`, [{ field: 'receiver_name', message: 'Receiver name is required' }]);
-      if (result !== 'FAILED' && l.service_type === 'DELIVERY' && Number(l.requires_proof) && !b.photo_url) throw Unprocessable(`${l.request_no} needs a proof photo of the delivery`, [{ field: 'photo_url', message: 'Proof photo is required' }]);
+      if (photoOn && result !== 'FAILED' && l.service_type === 'DELIVERY' && Number(l.requires_proof) && !b.photo_url) throw Unprocessable(`${l.request_no} needs a proof photo of the delivery`, [{ field: 'photo_url', message: 'Proof photo is required' }]);
       await txExecute(tx, `UPDATE trx_transport_stop_request SET result = ?, actual_qty = ?, receiver_name = ?, result_note = ?, done_at = ?, done_by = ? WHERE id = ?`,
         [result, qty, receiver, sent?.note ?? b.note ?? null, now, req.user!.id, l.id]);
       if (result === 'FAILED') failed.push(l.request_no); else { anyServed = true; allFailed = false; }
       if (result === 'PARTIAL') partials.push(`${l.request_no} ${qty}/${l.expected_qty}`);
-      if (b.photo_url && result !== 'FAILED') {
+      if (photoOn && b.photo_url && result !== 'FAILED') {
         await txExecute(tx, `INSERT INTO trx_transport_proof (company_id, trip_id, stop_id, request_id, proof_type, receiver_name, delivered_qty, file_url, captured_at, uploaded_by) VALUES (?,?,?,?, 'PHOTO', ?,?,?,?,?)`,
           [req.user!.companyId, t.id, s.id, l.request_id, receiver, qty, b.photo_url, now, req.user!.id]);
       }
@@ -764,6 +825,7 @@ driverRouter.post('/stops/:id/proof', ah(async (req, res) => {
   const d = await myDriver(req);
   const b = z.object({ photo_url: photoUrl, request_id: z.coerce.number().int().positive().nullish(), receiver_name: z.string().trim().max(80).nullish() }).parse(req.body ?? {});
   const stopId = idOf(req.params.id);
+  if (!await deliveryPhotoOn(req.user!.companyId)) throw Conflict('Delivery photos are switched off for this company (Admin → Settings → TRANSPORT_DELIVERY_PHOTO)');
   await idempotent(req, res, `proof:${stopId}`, async (tx) => {
     const s = await txQueryOne<any>(tx, `SELECT * FROM trx_transport_trip_stop WHERE id = ? AND company_id = ? AND is_active = 1`, [stopId, req.user!.companyId]);
     if (!s) throw NotFound('Stop not found');
