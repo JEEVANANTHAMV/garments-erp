@@ -592,8 +592,8 @@ function drawRow(c: Ctx, cols: Column[], cw: number[], row: Cell[], h: number, a
 }
 
 function totalRowHeight(c: Ctx, t: NonNullable<TableSpec['total']>, cols: Column[], cw: number[]) {
-  const first = cols.findIndex((col) => t.values[col.key] != null);
-  const labelW = cw.slice(0, Math.max(1, first)).reduce((a, b) => a + b, 0);
+  const fi = cols.findIndex((col) => t.values[col.key] != null);
+  const labelW = cw.slice(0, fi < 0 ? cols.length : Math.max(1, fi)).reduce((a, b) => a + b, 0);   // no values: the label spans the row
   let h = hText(c.pdf, t.label, labelW - 2 * PX, B, 9);
   cols.forEach((col, i) => { const v = t.values[col.key]; if (v != null) h = Math.max(h, hText(c.pdf, v, cw[i] - 2 * PX, B, FS)); });
   return h + 2 * PY + 3;
@@ -603,7 +603,8 @@ function drawTotalRow(c: Ctx, t: NonNullable<TableSpec['total']>, cols: Column[]
   const { pdf, th } = c;
   const h = totalRowHeight(c, t, cols, cw);
   const y = c.y;
-  const first = Math.max(1, cols.findIndex((col) => t.values[col.key] != null));
+  const fi = cols.findIndex((col) => t.values[col.key] != null);
+  const first = fi < 0 ? cols.length : Math.max(1, fi);   // no values: the label spans the row
   const labelW = cw.slice(0, first).reduce((a, b) => a + b, 0);
   if (th.totalFill) pdf.save().rect(X0, y, W, h).fill(th.totalFill).restore();
   pdf.font(B).fontSize(9).fillColor(th.ink).text(T(t.label), X0 + PX, y + PY + 1, { width: labelW - 2 * PX, align: 'right' });

@@ -99,7 +99,7 @@ export async function renderPurchaseReturnDcPdf(o: {
       emptyText: 'No items on this return',
     },
     summary: { notes, rows: sumRows, grand: ['Total Value', `INR ${fmtMoney(grand)}`], amountInWords: grand ? amountInWords(grand, 'INR') : null },
-    footerNote: 'Goods returned to the supplier against the purchase above.',
+    footerNote: 'Goods returned to the supplier — not for sale.',   // as on the old Return DC
     signatures: [{ label: 'Prepared By' }, { label: 'Checked By' }, { label: 'Received By (Supplier)' }],
     watermark: draft ? 'DRAFT' : statusWatermark(pr.status),
     reprint: o.reprint,

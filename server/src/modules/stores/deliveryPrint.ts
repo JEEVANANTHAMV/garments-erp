@@ -76,7 +76,10 @@ export async function renderDeliveryDcPdf(o: {
     banner: h.status === 'CANCELLED' && h.cancel_reason ? `CANCELLED — ${h.cancel_reason}` : null,
     addresses: dcAddresses(co, { name: h.party_name ?? party?.name, lines: party?.address ?? [], gstin: party?.gstin }),
     eway: o.eway,
-    table: { columns, rows, total: { label: 'Total', values: oneUom ? { qty: q3([...byUom.values()][0] ?? 0), uom: [...byUom.keys()][0] ?? '' } : {} }, emptyText: 'No items on this DC' },
+    // one UOM: a total row; mixed UOMs: the totals per UOM go in the notes
+    table: { columns, rows, total: oneUom ? { label: 'Total', values: { qty: q3([...byUom.values()][0] ?? 0), uom: [...byUom.keys()][0] ?? '',
+      ...(hasRet ? { ret: q3(lines.reduce((a, l) => a + n(l.returned_qty), 0)), bal: q3(lines.reduce((a, l) => a + n(l.qty) - n(l.returned_qty), 0)) } : {}) } } : null,
+    emptyText: 'No items on this DC' },
     summary: notes.length ? { notes } : null,
     footerNote: returnable ? 'Returnable goods — to be returned to us by the date above.' : (Number(h.is_billable) ? null : 'Free of cost — not for sale.'),
     signatures: [{ label: 'Prepared By', name: h.prepared_by ?? null }, { label: 'Checked By' }, { label: 'Received By (Party)' }],
