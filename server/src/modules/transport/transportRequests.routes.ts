@@ -462,7 +462,8 @@ transportRequestsRouter.post('/requests/:id/confirm-received', ah(async (req, re
     if (!mine && !has(req, P.APPROVE)) throw Forbidden('Only the requester (or the transport coordinator) confirms the material received');
     assertFrom(r.status, REQUEST_FLOW.confirmReceived, 'confirm the material received');
     assertVersion(r, b.row_version);
-    if (r.submitted_at && at.getTime() < new Date(r.submitted_at).getTime()) throw fieldErr('received_at', 'Received time is before the request was raised');
+    // the screen sends minutes only (datetime-local) — a minute of tolerance
+    if (r.submitted_at && at.getTime() < new Date(r.submitted_at).getTime() - 60_000) throw fieldErr('received_at', 'Received time is before the request was raised');
     const qty = b.received_qty ?? (r.package_qty != null ? Number(r.package_qty) : null);
     if (b.condition === 'OK' && qty != null && r.package_qty != null && qty < Number(r.package_qty)) throw fieldErr('condition', `Received ${qty} of ${Number(r.package_qty)} — mark the condition Short and say what is missing`);
     await txExecute(tx, `UPDATE trx_transport_request SET status = 'RECEIVED', received_at = ?, received_by = ?, received_qty = ?, received_condition = ?, received_remarks = ?,

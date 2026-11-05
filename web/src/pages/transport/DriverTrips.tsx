@@ -78,6 +78,7 @@ export function DriverTripPage() {
   const toast = useToast();
   const q = useQuery({ queryKey: ['driver', 'trip', id], queryFn: async () => (await http.get<{ data: any }>(`/driver/trips/${id}`)).data });
   const { run, busy } = useDriverAction();
+  useTransportSettings();   // loads the delivery-photo switch before the serve popup opens
   const [dlg, setDlg] = useState<'' | 'reject' | 'start' | 'complete' | 'issue'>('');
   const [serve, setServe] = useState<any>(null);
   const [err, setErr] = useState('');
