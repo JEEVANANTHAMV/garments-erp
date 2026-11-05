@@ -4,6 +4,7 @@ import { PageHeader, Tabs, Modal, FormSection, Input, Select, Button, LoadingBlo
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useAuth } from '../../lib/auth';
 import { EwayBillButton } from '../../components/EwayBillButton';
+import { DocPdfActions } from '../../components/DocPdfActions';
 import { useToast } from '../../hooks/useToast';
 import { fmtDate, fmtDecimal } from '../../lib/format';
 import {
@@ -189,6 +190,8 @@ function DeliveryView({ id, onClose, onEdit }: { id: number; onClose: () => void
       subtitle={outstanding ? 'Returnable — outstanding until the goods come back' : undefined} icon={<Truck size={16} />} size="xl"
       footerStart={doc ? <StatusBadge value={doc.status} /> : null}
       footer={doc && <>
+        {/* A4 DC PDF on the shared print engine (Colour / Black & White) — client 05-Nov-2026 */}
+        <DocPdfActions url={`/stores/deliveries/${id}/print`} idPrefix="sddc" label="DC" title={`Delivery DC ${doc.doc_no}`} className="mr-auto" />
         <Button variant="secondary" onClick={onClose}>Close</Button>
         {doc.status !== 'CANCELLED' && <EwayBillButton sourceType="STOCK_DELIVERY" sourceId={id} />}
         {doc.status === 'DRAFT' && <Button variant="secondary" id="delivery-cancel" onClick={() => setReason('cancel')}>Cancel DC</Button>}
