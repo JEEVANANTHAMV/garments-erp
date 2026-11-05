@@ -134,13 +134,20 @@ async function verifiedQr(ewbId: number): Promise<string | null> {
 
 /**
  * The e-way bill panel of a DC: the latest non-cancelled e-way bill of the e-way bill module for the document
- * (source_type / source_id), else the e-way bill number typed on the DC itself (number + vehicle only).
+ * (source_type / source_id; for a DC type it has no source for, a MANUAL one made against the DC number), else the
+ * e-way bill number typed on the DC itself (number + vehicle only).
  * null = nothing to print (no empty panel).
  */
-export async function docEway(cid: number, sourceType: string | null, sourceId: number, fallback?: { ewbNo?: string | null; vehicle?: string | null; transporter?: string | null }): Promise<EwaySpec | null> {
-  const e = sourceType ? await queryOne<any>(
+export async function docEway(cid: number, sourceType: string | null, sourceId: number, fallback?: { ewbNo?: string | null; vehicle?: string | null; transporter?: string | null; docNo?: string | null }): Promise<EwaySpec | null> {
+  let e = sourceType ? await queryOne<any>(
     `SELECT * FROM trx_eway_bill WHERE company_id = ? AND source_type = ? AND source_id = ? AND status <> 'CANCELLED' ORDER BY status = 'GENERATED' DESC, id DESC LIMIT 1`,
     [cid, sourceType, sourceId]) : null;
+  // a DC type the e-way bill module has no source for: a MANUAL e-way bill made against this DC number
+  if (!e && str(fallback?.docNo)) {
+    e = await queryOne<any>(
+      `SELECT * FROM trx_eway_bill WHERE company_id = ? AND source_type = 'MANUAL' AND (source_no = ? OR document_number = ?) AND status <> 'CANCELLED' ORDER BY status = 'GENERATED' DESC, id DESC LIMIT 1`,
+      [cid, fallback!.docNo, String(fallback!.docNo).replace(/[^A-Za-z0-9/-]/g, '').slice(-16)]);
+  }
   if (e && (e.ewb_no || !str(fallback?.ewbNo))) {
     const until = e.valid_upto ? new Date(`${String(e.valid_upto instanceof Date ? e.valid_upto.toISOString() : e.valid_upto).replace(' ', 'T').replace(/Z?$/, 'Z')}`) : null;
     const expired = !!until && !Number.isNaN(until.getTime()) && until.getTime() < Date.now();

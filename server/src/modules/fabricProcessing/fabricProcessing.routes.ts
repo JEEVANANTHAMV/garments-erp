@@ -15,6 +15,9 @@ import { nextDocNumber } from '../../core/numbering.js';
 import { s } from '../resources/schemas.js';
 import { checkDcQuotation, useGateEntry } from '../../core/inwardControls.js';
 import { RAW_COLOUR } from '../../core/rawColour.js';
+import { renderFabricProcessDcPdf } from './fabricProcessDcPrint.js';
+import { loadPrintCompany, resolvePrintTemplate } from '../../core/print/printCompany.js';
+import { countDcPrint, dcPrintQuery, docEway, istNowText, partyForPrint, printedBy, reprintLabel, sendPdf } from '../../core/print/dcPrint.js';
 
 /**
  * Fabric Process engine (Garment_ERP_Fabric_Process_Developer_Document_v2).
@@ -386,6 +389,39 @@ fabricProcessingRouter.get(['/fabric-process/outward/:id', '/fabric-processing/o
       WHERE ri.fpo_id = ? ORDER BY ri.io_no, ri.id`, [id]);
   const inwards = await query<any>('SELECT id, inward_no, inward_date, good_kg, reject_kg, loss_kg, challan_no, status FROM trx_fabric_process_inward WHERE fpo_id = ? ORDER BY id', [id]);
   res.json({ data: { ...o, rolls: rolls.map((r) => ({ ...r, balance_kg: Math.max(0, n(r.balance_kg)) })), inwards, reconciliation: await reconciliation(id) } });
+}));
+
+/**
+ * GET /fabric-process/outward/:id/print — the outward DC as an A4 PDF on the shared print engine (client 05-Nov-2026).
+ * ?template=colour|bw (else the company default), ?purpose=preview|print|download (print / download of a dispatched
+ * DC is counted, 2nd+ = "Reprint n").
+ */
+fabricProcessingRouter.get('/fabric-process/outward/:id/print', requirePermission(FP.VIEW), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const q = dcPrintQuery.parse(req.query);
+  const dc = await queryOne<any>(
+    `SELECT o.*, v.party_name AS vendor_name, v.gstin AS vendor_gstin, pt.name AS process_name, w.warehouse_name AS from_store, rp.reprocess_no
+       FROM trx_fabric_process_order o
+       LEFT JOIN mst_party v ON v.id = o.vendor_id
+       LEFT JOIN mst_fabric_process_type pt ON pt.company_id = o.company_id AND pt.code = o.sub_process
+       LEFT JOIN mst_warehouse w ON w.id = o.from_warehouse_id
+       LEFT JOIN trx_fabric_reprocess rp ON rp.id = o.reprocess_id
+      WHERE o.id = ? AND o.company_id = ?`, [id, cid]);
+  if (!dc) throw NotFound('Process DC not found');
+  const rolls = await query<any>(
+    `SELECT ri.*, st.style_code, fb.fabric_name
+       FROM trx_fabric_process_roll_in ri
+       LEFT JOIN mst_style st ON st.id = ri.style_id
+       LEFT JOIN mst_fabric fb ON fb.id = ri.fabric_id
+      WHERE ri.fpo_id = ? ORDER BY ri.io_no, ri.id`, [id]);
+  const [company, party, eway, template, by] = await Promise.all([
+    loadPrintCompany(cid), partyForPrint(cid, dc.vendor_id), docEway(cid, null, id, { docNo: dc.fpo_no, vehicle: dc.vehicle_no }),
+    resolvePrintTemplate(cid, q.template), printedBy(req),
+  ]);
+  const no = await countDcPrint(req, 'trx_fabric_process_order', id, dc.fpo_no, q.purpose, dc.status !== 'DRAFT' && dc.status !== 'CANCELLED');
+  const pdf = await renderFabricProcessDcPdf({ template, company, dc, rolls, party, eway, reprint: reprintLabel(no), printedAt: istNowText(), printedBy: by });
+  sendPdf(res, pdf, dc.fpo_no, q);
 }));
 
 /** POST /fabric-process/outward — Save Draft (no stock moved) or Confirm DC (stock issued). */

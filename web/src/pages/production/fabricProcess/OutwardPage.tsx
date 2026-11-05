@@ -3,14 +3,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { QuotationPicker, type QuoteValue } from '../../../components/ProcessPickers';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, ScanLine, Download, Save, CheckCircle2, Printer, Trash2, Ban, PackageCheck } from 'lucide-react';
+import { ArrowLeft, Plus, ScanLine, Download, Save, CheckCircle2, Trash2, Ban, PackageCheck } from 'lucide-react';
 import { useAuth } from '../../../lib/auth';
 import { http } from '../../../lib/api';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
 import { Button, Modal, Input, Select, Textarea, SearchInput, LoadingBlock } from '../../../components/ui';
 import { fmtDate, today } from '../../../lib/format';
-import { FpTitle, FpStatus, ReconCards, useProcessTypes, useJobs, errText, kg, n, r3, esc, printDoc, groupByJob, isDyeing, quoteColour, type StoreRoll, type Job } from './shared';
+import { DocPdfActions } from '../../../components/DocPdfActions';
+import { FpTitle, FpStatus, ReconCards, useProcessTypes, useJobs, errText, kg, n, r3, groupByJob, isDyeing, quoteColour, type StoreRoll, type Job } from './shared';
 
 /**
  * Fabric Process — Outward DC (doc §5): one DC, many jobs, many rolls per job.
@@ -196,23 +197,6 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
       toast((r as any).message, 'success'); void qc.invalidateQueries({ queryKey: ['fabric-process'] });
     } catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
   };
-  const print = () => {
-    const vendor = suppliers.data?.find((s: any) => String(s.id) === head.vendor_id)?.label ?? d?.vendor_name ?? '';
-    const proc = types.data?.find((t) => t.code === head.sub_process)?.name ?? head.sub_process;
-    const cc = dyeing ? 10 : 9;
-    const colourTd = (r: DcRow) => (dyeing ? `<td>${esc(r.fabric_color)}</td><td>${esc(r.color_name)}</td>` : `<td>${esc(r.color_name || r.fabric_color)}</td>`);
-    const body = groups.map((g) => `<tr class="grp"><td colspan="${cc}">Job ${esc(g.io_no)}${g.rows[0].buyer_po_no ? ` · PO ${esc(g.rows[0].buyer_po_no)}` : ''}${g.rows[0].style_code ? ` · Style ${esc(g.rows[0].style_code)}` : ''}</td></tr>` +
-      g.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.roll_no)}</td><td>${esc(r.lot_no ?? '')}</td><td>${esc(r.fabric_name ?? '')}</td>${colourTd(r)}<td>${esc(r.gsm ?? '')}</td><td>${esc(r.dia ?? '')}</td><td class="r">${kg(r.weight_kg)}</td><td class="r">${n(r.meters) ? n(r.meters).toFixed(2) : ''}</td></tr>`).join('') +
-      `<tr class="sub"><td colspan="${cc - 2}">Job total — ${g.rows.length} roll(s)</td><td class="r">${kg(g.rows.reduce((a, r) => a + n(r.weight_kg), 0))}</td><td></td></tr>`).join('');
-    printDoc(d?.fpo_no ?? 'Outward DC',
-      `<h1>DELIVERY CHALLAN — FABRIC ${esc(proc.toUpperCase())}</h1><table class="meta"><tr><td><b>DC No:</b> ${esc(d?.fpo_no ?? '(draft)')}</td><td><b>Date:</b> ${esc(fmtDate(head.fpo_date))}</td><td><b>Challan:</b> ${esc(head.challan_no || '—')}</td></tr>
-       <tr><td><b>Supplier / Vendor:</b> ${esc(vendor)}</td><td><b>To:</b> ${esc(head.to_location || '—')}</td><td><b>Vehicle:</b> ${esc(head.vehicle_no || '—')}</td></tr>
-       <tr><td><b>Jobs:</b> ${groups.length}</td><td><b>Expected return:</b> ${esc(head.expected_return_date ? fmtDate(head.expected_return_date) : '—')}</td><td></td></tr></table>`,
-      `<table><thead><tr><th>#</th><th>Roll</th><th>Lot</th><th>Fabric</th>${dyeing ? '<th>Fabric colour</th><th>Dye colour</th>' : '<th>Colour</th>'}<th>GSM</th><th>Dia</th><th class="r">KG</th><th class="r">Mtr</th></tr></thead><tbody>${body}
-       <tr class="sub"><td colspan="${cc - 2}">GRAND TOTAL — ${rows.length} roll(s), ${groups.length} job(s)</td><td class="r">${kg(total)}</td><td></td></tr></tbody></table>
-       <p>Goods sent for job work (${esc(proc)}) and to be returned after processing — not for sale. ${esc(head.remarks)}</p>`);
-  };
-
   if (id && detail.isLoading) return <LoadingBlock />;
   return (
     <div>
@@ -302,7 +286,9 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         {editable && can('FABRIC_PROCESS.CONFIRM') && <Button loading={busy} onClick={() => save(true)}><CheckCircle2 size={14} className="mr-1" /> Confirm DC</Button>}
         {d && ['DRAFT', 'DISPATCHED'].includes(d.status) && !d.inwards?.length && can(d.status === 'DRAFT' ? 'FABRIC_PROCESS.EDIT_DRAFT' : 'FABRIC_PROCESS.CANCEL') && <Button variant="danger" loading={busy} onClick={cancel}><Ban size={14} className="mr-1" /> Cancel DC</Button>}
         {d && ['DISPATCHED', 'PARTIALLY_RECEIVED', 'IN_PROCESS'].includes(d.status) && can('FABRIC_PROCESS.CREATE') && <Button onClick={() => nav(`/production/fabric-process/inward?fpo=${id}`)}><PackageCheck size={14} className="mr-1" /> Receive (GRN)</Button>}
-        <Button variant="secondary" disabled={!rows.length} onClick={print}><Printer size={14} className="mr-1" /> Print DC</Button>
+        {/* A4 PDF on the shared print engine (Colour / Black & White) — client 05-Nov-2026; prints the saved DC */}
+        <DocPdfActions url={id ? `/fabric-process/outward/${id}/print` : null} idPrefix="fpdc" label="DC" title={`Fabric Process DC ${d?.fpo_no ?? ''}`}
+          disabledHint="Save the DC (draft or confirmed) to print it" />
       </div>
 
       {picker && <RollPicker mode={picker} jobs={jobs.data ?? []} warehouseId={head.from_warehouse_id} quotationId={quote.quotation_id} taken={rows.map((r) => r.fabric_roll_id)}

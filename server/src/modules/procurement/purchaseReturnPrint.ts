@@ -27,7 +27,8 @@ export function returnLineDescription(l: any): { text: string; sub: string[] } {
     l.gsm ? `GSM: ${l.gsm}` : null, l.dia ? `Dia: ${l.dia}` : null, l.size ? `Size: ${l.size}` : null,
     l.style_no ? `Style: ${l.style_no}` : null,
   ].filter(Boolean).join(' · ');
-  const sub = [spec, l.reason ? `Reason: ${String(l.reason).replace(/_/g, ' ').toLowerCase()}` : null, l.material_type ? `Material: ${String(l.material_type).toLowerCase()}` : null]
+  const note = l.remarks && l.remarks !== item ? `Note: ${l.remarks}` : null;
+  const sub = [spec, note, l.reason ? `Reason: ${String(l.reason).replace(/_/g, ' ').toLowerCase()}` : null, l.material_type ? `Material: ${String(l.material_type).toLowerCase()}` : null]
     .filter(Boolean) as string[];
   return { text: String(item), sub };
 }
