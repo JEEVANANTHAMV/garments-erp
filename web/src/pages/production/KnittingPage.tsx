@@ -9,6 +9,7 @@ import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { Badge, Modal, FormSection } from '../../components/ui';
 import { JobSelect, onlyStyle } from '../../components/JobSelect';
+import { CompanyPrintHeading } from '../../components/CompanyPrintHeading';
 
 export default function KnittingPage() {
   const qc = useQueryClient();
@@ -1048,7 +1049,7 @@ export default function KnittingPage() {
             <div className="p-8 overflow-y-auto print-container text-ink bg-white font-sans text-xs">
               {/* Company & Document Title */}
               <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
-                <h1 className="text-xl font-bold uppercase tracking-wider text-ink">GARMENT MANUFACTURING ERP</h1>
+                <CompanyPrintHeading />
                 <p className="text-xs text-ink-secondary font-medium">Yarn Processing Division — Work Order &amp; Yarn Issuance Card</p>
                 <div className="inline-block mt-2 px-4 py-1 rounded bg-teal-100 text-teal-900 font-bold text-sm tracking-wide">
                   {activeOrder.sub_process || 'YARN PROCESSING'} WORK ORDER

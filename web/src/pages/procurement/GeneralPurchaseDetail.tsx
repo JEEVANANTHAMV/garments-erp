@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { CompanyPrintHeading } from '../../components/CompanyPrintHeading';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, ArrowLeft, Save, Trash2, CheckCircle2, Zap,
@@ -1177,7 +1178,7 @@ export function GeneralPurchaseDetailPage() {
             {/* Printable Document Sheet */}
             <div className="p-8 overflow-y-auto print-container text-ink bg-white font-sans text-xs">
               <div className="border-b-2 border-slate-800 pb-4 mb-4 text-center">
-                <h1 className="text-xl font-bold uppercase tracking-wider text-ink">GARMENT MANUFACTURING ERP</h1>
+                <CompanyPrintHeading />
                 <p className="text-xs text-ink-secondary font-medium">General Procurement &amp; Inventory Management</p>
                 <div className="inline-block mt-2 px-4 py-1 rounded bg-brand-100 text-brand-900 font-bold text-sm tracking-wide">
                   {isPoMode ? 'GENERAL PURCHASE ORDER (PO)' : 'GENERAL GOODS RECEIPT NOTE (GRN)'}
