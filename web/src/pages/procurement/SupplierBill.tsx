@@ -37,6 +37,7 @@ const LOCKED_NEXT: Record<string, string[]> = { APPROVED: ['APPROVED', 'DISPUTED
 /** Paid is never picked here — an approved bill is marked paid with its payment reference. */
 const BILL_STATUS_OPTIONS = ['DRAFT', 'VERIFIED', 'APPROVED', 'DISPUTED', 'CANCELLED'];
 const PAYMENT_MODES = ['NEFT', 'RTGS', 'IMPS', 'CHEQUE', 'CASH', 'UPI', 'OTHER'];
+const modeLabel = (m: string) => (['CHEQUE', 'CASH', 'OTHER'].includes(m) ? humanize(m) : m);
 const NEW_BILL_TYPES = BILL_TYPES.filter((b) => !OWN_TAB_TYPES.includes(b.value));
 
 interface BillLineItem {
@@ -1365,7 +1366,7 @@ function MarkPaidPanel({ billId, bill, total, currencySymbol, onDone }: { billId
           <div>
             <label className={lbl} htmlFor="sb-pay-mode">Payment mode *</label>
             <select id="sb-pay-mode" value={f.payment_mode} onChange={(e) => setF((p) => ({ ...p, payment_mode: e.target.value }))} className={inp}>
-              {PAYMENT_MODES.map((m) => <option key={m} value={m}>{m === 'CHEQUE' || m === 'CASH' || m === 'OTHER' ? humanize(m) : m}</option>)}
+              {PAYMENT_MODES.map((m) => <option key={m} value={m}>{modeLabel(m)}</option>)}
             </select>
           </div>
           <div>
@@ -1434,7 +1435,7 @@ function PaymentDetails({ billId, bill, currencySymbol, onReversed }: { billId: 
         {bill?.paid_date || bill?.payment_ref ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {row('Paid on', bill?.paid_date ? fmtDate(bill.paid_date) : '')}
-            {row('Mode', bill?.payment_mode ? humanize(bill.payment_mode) : '')}
+            {row('Mode', bill?.payment_mode ? modeLabel(bill.payment_mode) : '')}
             {row('Bank ref / UTR', <span className="tabular-nums" id="sb-paid-ref">{bill?.payment_ref}</span>)}
             {row('Amount', bill?.paid_amount != null ? `${currencySymbol}${fmtDecimal(bill.paid_amount, 2)}` : '')}
             {row('Paid from', bill?.paid_bank_account_label)}
@@ -1615,7 +1616,7 @@ export function SupplierBillsPage() {
           },
           { key: 'paid_date', header: 'Paid on', render: (r: any) => (r.paid_date ? fmtDate(r.paid_date) : <span className="text-ink-muted">—</span>) },
           { key: 'payment_ref', header: 'UTR / Ref', render: (r: any) => (r.payment_ref || r.payment_mode
-            ? <span className="tabular-nums text-caption">{r.payment_ref || '—'}{r.payment_mode ? <span className="text-ink-muted"> · {humanize(r.payment_mode)}</span> : null}</span>
+            ? <span className="tabular-nums text-caption">{r.payment_ref || '—'}{r.payment_mode ? <span className="text-ink-muted"> · {modeLabel(r.payment_mode)}</span> : null}</span>
             : <span className="text-ink-muted">—</span>) },
           { key: 'status', header: 'Status', render: (r: any) => <StatusBadge value={r.status} /> },
         ]}

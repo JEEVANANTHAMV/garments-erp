@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { barcodeHtml } from '../../lib/printBarcode';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Printer, Plus, ScanLine, X, PackageCheck, Ban, Lock, Send, ChevronDown, ChevronRight, Trash2,
-  Layers, Boxes, Shirt, Weight, CheckCircle2, ListPlus, FileInput, Combine, FileSpreadsheet, Paperclip, History, Eye,
+  Layers, Boxes, Shirt, Weight, CheckCircle2, ListPlus, FileInput, Combine, FileSpreadsheet, Paperclip, History,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, Badge, Button, Input, Select, Textarea, Modal, FormSection, LoadingBlock, DataTable, StatusBadge, SearchInput, useDebounced } from '../../components/ui';
@@ -13,6 +12,7 @@ import { fmtDate, fmtDateTime, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { EwayBillButton } from '../../components/EwayBillButton';
+import { DocPdfActions, DocPdfModal } from '../../components/DocPdfActions';
 
 /**
  * Process Outward (DC) and Process Inward with bundle numbers.
@@ -230,6 +230,7 @@ export function ProcessDcPage() {
   const [q, setQ] = useState('');
   const dq = useDebounced(q);
   const [editing, setEditing] = useState<{ id?: number } | null>(null);
+  const [pdfId, setPdfId] = useState<number | null>(null);   // "Save, issue & print DC" opens the PDF
   const [converting, setConverting] = useState(false);
   const openId = params.get('dc') ? Number(params.get('dc')) : null;
 
@@ -335,13 +336,14 @@ export function ProcessDcPage() {
 
       {editing && (
         <DcEditor id={editing.id} stages={stages} onClose={() => setEditing(null)}
-          onSaved={(id, print) => { setEditing(null); load(); openDc(id); if (print) printDc(id, toast); }} />
+          onSaved={(id, print) => { setEditing(null); load(); openDc(id); if (print) setPdfId(id); }} />
       )}
       {openId && !editing && (
         <DcDetail id={openId} onClose={() => openDc(null)} onChanged={load}
           onEdit={(id) => setEditing({ id })} />
       )}
       {converting && <PanelConversionModal onClose={() => setConverting(false)} />}
+      {pdfId && <DocPdfModal url={`/process-dcs/${pdfId}/print`} title="Process DC" idPrefix="pdc-new" onClose={() => setPdfId(null)} />}
     </div>
   );
 }
@@ -1367,8 +1369,8 @@ function DcDetail({ id, onClose, onChanged, onEdit }: { id: number; onClose: () 
           <Button variant="secondary" disabled={busy} id="dc-return-btn" onClick={() => setReturning(true)}>Return unprocessed</Button>
         )}
         {dc.status !== 'CANCELLED' && <EwayBillButton sourceType="PROCESS_DC" sourceId={id} />}
-        <Button variant="secondary" onClick={() => printDc(id, toast, false)}><Eye size={13} className="inline mr-1" />Preview DC</Button>
-        <Button variant="secondary" onClick={() => printDc(id, toast)}><Printer size={13} className="inline mr-1" />Print DC</Button>
+        {/* A4 PDF on the shared print engine (Colour / Black & White) — client 05-Nov-2026 */}
+        <DocPdfActions url={`/process-dcs/${id}/print`} idPrefix="pdc" label="DC" title={`Process DC ${dc.challan_no}`} />
         {dc.status === 'DRAFT' && <Button variant="secondary" onClick={() => onEdit(id)}>Edit draft</Button>}
         {dc.status === 'DRAFT' && (
           <Button loading={busy} onClick={() => act(() => api.post(`/process-dcs/${id}/issue`), `DC ${dc.challan_no} issued`)}>
@@ -2010,78 +2012,6 @@ function InwardModal({ dcs, onClose, onDone }: { dcs: any[]; onClose: () => void
       </FormSection>
     </Modal>
   );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// DC print — challan listing bundles job-wise, grouped by colour / size
-// ════════════════════════════════════════════════════════════════════
-const esc = (v: unknown) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-
-async function printDc(id: number, toast: (m: string, k?: any) => void, autoPrint = true) {
-  const w = window.open('', '_blank', 'width=900,height=1000');
-  if (!w) { toast('Allow pop-ups to print the DC', 'error'); return; }
-  try {
-    const d = (await api.get(`/process-dcs/${id}/print`)).data.data;
-    const c = d.company ?? {}; const va = d.vendor_address ?? {};
-    const lines = (d.lines as any[]).map((l) => ({ ...l, io_no: l.job_io_no }));
-    const meta = new Map<string, any>((d.summary.jobs as any[]).map((j) => [j.io_no ?? '—', j]));
-    const body = groupByJob(lines).map((j, ji) => {
-      const m = meta.get(j.key) ?? {};
-      const title = [j.key === '—' ? 'No job' : j.key, m.buyer_name, m.buyer_po_no ? `PO ${m.buyer_po_no}` : '', m.style_codes?.length ? `Style ${m.style_codes.join(', ')}` : '']
-        .filter(Boolean).join(' · ');
-      const rows = groupByColorSize(j.rows).map((g) => g.sizes.map((s) => {
-        const qty = s.rows.reduce((a: number, l: any) => a + Number(l.qty), 0);
-        const assort = [...new Set(s.rows.map((l: any) => l.assort_color).filter(Boolean))].join(', ');
-        return `<tr><td>${esc(g.color)}${assort ? `<br/><small>${esc(assort)}</small>` : ''}</td><td>${esc(s.size)}</td><td class="bundles">${s.rows.map((l: any) => `${esc(l.bundle_no)} <small>(${l.qty})</small>`).join(', ')}</td>
-          <td class="r">${s.rows.length}</td><td class="r">${qty}</td></tr>`;
-      }).join('')).join('');
-      return `<tr class="grp"><td colspan="5">${ji + 1}. ${esc(title)}</td></tr>${rows}
-        <tr class="sub"><td colspan="3">Job total</td><td class="r">${m.bundles ?? j.rows.length}</td><td class="r">${m.qty ?? ''}</td></tr>`;
-    }).join('');
-    const sizes: string[] = d.summary.sizes;
-    const matrix = `<table class="grid"><thead><tr><th>Colour \\ Size</th>${sizes.map((s) => `<th class="r">${esc(s)}</th>`).join('')}<th class="r">Total PCS</th></tr></thead><tbody>
-      ${d.summary.colors.map((cl: any) => `<tr><td>${esc(cl.color_name)}</td>${cl.sizes.map((z: any) => `<td class="r">${z.qty || '—'}</td>`).join('')}<td class="r"><b>${cl.qty}</b></td></tr>`).join('')}
-      <tr class="sub"><td>Total</td>${d.summary.sizeTotals.map((z: any) => `<td class="r">${z.qty}</td>`).join('')}<td class="r">${d.summary.totals.qty}</td></tr></tbody></table>`;
-    const t = d.summary.totals;
-    w.document.write(`<!doctype html><html><head><title>${esc(d.challan_no)}</title><style>
-      body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:18px}
-      h1{font-size:16px;margin:0} h2{font-size:13px;margin:6px 0;text-align:center;letter-spacing:1px}
-      table{width:100%;border-collapse:collapse;margin-top:8px} th,td{border:1px solid #444;padding:3px 5px;vertical-align:top}
-      th{background:#eee;text-align:left} .r{text-align:right} .grp td{background:#222;color:#fff;font-weight:bold}
-      .sub td{background:#f2f2f2;font-weight:bold} .bundles{font-family:monospace;font-size:10.5px} small{color:#555}
-      .hdr{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:6px}
-      .meta td{border:none;padding:2px 4px} .sign{display:flex;justify-content:space-between;margin-top:48px}
-      .sign div{border-top:1px solid #111;width:30%;text-align:center;padding-top:4px} .note{font-size:10px;margin-top:8px}
-      @media print{button{display:none}}
-    </style></head><body>
-      <div class="hdr"><div><h1>${esc(c.legal_name || c.trade_name)}</h1>
-        <div>${esc([c.address_line1, c.address_line2, c.city, c.state, c.pincode].filter(Boolean).join(', '))}</div>
-        <div>GSTIN: ${esc(c.gstin || '—')} · Ph: ${esc(c.phone || '—')}</div></div>
-        <div style="text-align:right">${barcodeHtml(d.challan_no)}<b>DC No: ${esc(d.challan_no)}</b><br/>Date: ${esc(fmtDate(d.challan_date))}<br/>
-          ${d.ref_no ? `Ref / SR: ${esc(d.ref_no)}<br/>` : ''}Status: ${esc(human(d.status))}</div></div>
-      <h2>DELIVERY CHALLAN — JOB WORK (${esc(String(d.stage_name || '').toUpperCase())})</h2>
-      <table class="meta"><tr>
-        <td style="width:50%"><b>${d.unit_id ? 'To (in-house unit)' : 'To (contractor)'}:</b> ${esc(d.vendor_name)} (${esc(d.vendor_code || '')})<br/>
-          ${esc([va.address_line1, va.address_line2, va.address_line3, va.city, va.state, va.pincode].filter(Boolean).join(', '))}<br/>
-          GSTIN: ${esc(d.vendor_gstin || '—')} · Ph: ${esc(va.mobile || va.phone || d.vendor_phone || '—')}</td>
-        <td><b>Process:</b> ${esc(d.stage_name)} · <b>Jobs:</b> ${d.summary.jobs.length}<br/>
-          ${d.operations?.length ? `<b>Operations:</b> ${esc(d.operations.map((o: any) => o.op_name).join(', '))}<br/>` : ''}
-          ${!d.unit_id && d.rate != null ? `<b>Rate:</b> ₹${Number(d.rate).toFixed(2)} / PCS${d.total_amount != null ? ` · <b>Amount:</b> ₹${Number(d.total_amount).toFixed(2)}` : ''}<br/>` : ''}
-          <b>From / to location:</b> ${esc(d.from_location || '—')} → ${esc(d.to_location || '—')}<br/>
-          <b>Vehicle:</b> ${esc(d.vehicle_no || '—')} · <b>Driver:</b> ${esc(d.driver_name || '—')}<br/>
-          <b>Transporter:</b> ${esc(d.transporter || '—')} · <b>Expected return:</b> ${esc(fmtDate(d.expected_return))}</td>
-      </tr></table>
-      <table><thead><tr><th style="width:14%">Colour</th><th style="width:7%">Size</th><th>Bundle numbers (PCS)</th><th class="r" style="width:8%">Bundles</th><th class="r" style="width:9%">PCS</th></tr></thead>
-        <tbody>${body}<tr class="sub"><td colspan="3">GRAND TOTAL — ${d.summary.jobs.length} job(s)${t.weight_kg ? ` · ${Number(t.weight_kg).toFixed(2)} KG` : ''}</td><td class="r">${t.bundles}</td><td class="r">${t.qty}</td></tr></tbody></table>
-      ${matrix}
-      <p class="note">Goods sent for job work and to be returned after processing — not for sale. ${esc(d.remarks || '')}</p>
-      <div class="sign"><div>Prepared by</div><div>Checked / Security</div><div>Receiver's signature &amp; seal</div></div>
-      <button onclick="window.print()" style="margin-top:16px">Print</button>
-    </body></html>`);
-    w.document.close();
-    w.focus();
-    if (autoPrint) setTimeout(() => w.print(), 300);
-  } catch (e) { w.close(); toast(errMsg(e), 'error'); }
 }
 
 // ════════════════════════════════════════════════════════════════════

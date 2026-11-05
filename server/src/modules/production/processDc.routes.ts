@@ -18,6 +18,9 @@ import {
 } from './lineAllocationLink.js';
 import { postBundleSewingOutput, postCheckingQc } from './productionFloor.routes.js';
 import { dcBillBasis } from './billBasis.js';
+import { renderProcessDcPdf } from './processDcPrint.js';
+import { loadPrintCompany, resolvePrintTemplate } from '../../core/print/printCompany.js';
+import { countDcPrint, dcPrintQuery, docEway, istNowText, partyForPrint, printedBy, reprintLabel, sendPdf } from '../../core/print/dcPrint.js';
 
 /**
  * PCS a bundle can put on a DC that carries a line's output: what the stage
@@ -629,8 +632,28 @@ processDcRouter.get('/process-dcs/:id', requirePermission('PRODUCTION.VIEW'), ah
   res.json({ data: await loadDc(req.user!.companyId, Number(req.params.id)) });
 }));
 
-/** Print data: DC + company + vendor address. */
+/**
+ * GET /process-dcs/:id/print — the A4 DC PDF on the shared print engine (client 05-Nov-2026). ?template=colour|bw
+ * (else the company default), ?purpose=preview (default) | print | download — print / download of an issued DC is
+ * counted (2nd+ = "Reprint n", audited).
+ */
 processDcRouter.get('/process-dcs/:id/print', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const q = dcPrintQuery.parse(req.query);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) throw NotFound('DC not found');
+  const dc = await loadDc(cid, id);
+  const [company, party, eway, template, by] = await Promise.all([
+    loadPrintCompany(cid), dc.unit_id ? null : partyForPrint(cid, dc.vendor_id), docEway(cid, 'PROCESS_DC', id, { ewbNo: dc.eway_bill_no, vehicle: dc.vehicle_no, transporter: dc.transporter }),
+    resolvePrintTemplate(cid, q.template), printedBy(req),
+  ]);
+  const no = await countDcPrint(req, 'trx_jobwork_challan', id, dc.challan_no, q.purpose, dc.status !== 'DRAFT' && dc.status !== 'CANCELLED');
+  const pdf = await renderProcessDcPdf({ template, company, dc, party, eway, reprint: reprintLabel(no), printedAt: istNowText(), printedBy: by });
+  sendPdf(res, pdf, dc.challan_no, q);
+}));
+
+/** Print data (JSON): DC + company + vendor address (the PDF above replaced the browser print). */
+processDcRouter.get('/process-dcs/:id/print-data', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
   const cid = req.user!.companyId;
   const dc = await loadDc(cid, Number(req.params.id));
   const [company, vendorAddress] = await Promise.all([
