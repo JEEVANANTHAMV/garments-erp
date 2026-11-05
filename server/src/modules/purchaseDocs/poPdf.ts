@@ -37,6 +37,13 @@ function subLines(doc: PoDocument, l: PoLine, ioInColumn: boolean, headerIo: str
   return out;
 }
 
+/** A typed address block: its first line prints bold as the name when it reads like one (no door / pin numbers). */
+function addressBlock(heading: string, lines: string[], fallbackName: string) {
+  if (!lines.length) return { heading, name: fallbackName, lines: [] };
+  const first = lines[0];
+  return !/\d/.test(first) && first.length <= 80 ? { heading, name: first, lines: lines.slice(1) } : { heading, name: null, lines };
+}
+
 export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
   const cur = doc.currency.code || 'INR';
   const dec = Number.isFinite(doc.currency.decimals) ? doc.currency.decimals : 2;
@@ -47,7 +54,10 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
   const amtLabel = cur === 'INR' ? 'Amount' : `Amount (${cur})`;
   const rateLabel = cur === 'INR' ? 'Rate' : `Rate (${cur})`;
   const anyJob = doc.lines.some((l) => l.job);
-  const qtyText = (l: PoLine) => `${fmtQty(l.qty)} ${l.uom}`.trim();
+  // weights / lengths keep 3 decimals; counted units (PCS, NOS, SET …) print whole numbers when whole
+  const measured = (uom: string) => /^(kg|kgs|g|gm|gms|mtr|mtrs|m|yds?|ltr|l|cm|mm)$/i.test(uom);
+  const qtyNum = (q: number, uom: string) => (!measured(uom) && Number.isInteger(Math.round(q * 1000) / 1000) ? fmtQty(q, 0) : fmtQty(q));
+  const qtyText = (l: PoLine) => `${qtyNum(l.qty, l.uom)} ${l.uom}`.trim();
 
   const sn: Column = { key: 'sn', label: 'S.No', align: 'center', wrap: false };
   const io: Column = { key: 'io', label: 'IO No', align: 'left', weight: 0.6, maxWidth: 96 };
@@ -92,7 +102,7 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
   const totQty = doc.lines.reduce((s, l) => s + l.qty, 0);
   const totalVals: Record<string, string> = { amt: money(t.taxable) };
   if (uoms.size <= 1) totalVals.qty = doc.type === 'yarn' && columns.find((c) => c.key === 'qty')?.label === 'Weight (KG)'
-    ? fmtQty(totQty) : `${fmtQty(totQty)}${uoms.size === 1 ? ` ${[...uoms][0]}` : ''}`.trim();
+    ? fmtQty(totQty) : `${qtyNum(totQty, [...uoms][0] ?? '')}${uoms.size === 1 ? ` ${[...uoms][0]}` : ''}`.trim();
   const sumRows: KV[] = [['Taxable Value', money(t.taxable)]];
   for (const g of t.gstGroups.filter((x) => x.tax)) {
     if (doc.isInterstate) sumRows.push([`IGST @ ${fmtPct(g.rate)}%`, money(g.tax)]);
@@ -136,8 +146,8 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
     party: { heading: 'Supplier', name: doc.supplier.name, lines: supplierLines },
     details,
     addresses: [
-      { heading: 'Billing Address', name: bill[0] ?? doc.company.name, lines: bill.slice(1) },
-      { heading: doc.shipSameAsBilling ? 'Shipping / Delivery Address (same as billing)' : 'Shipping / Delivery Address', name: ship[0] ?? bill[0] ?? doc.company.name, lines: ship.slice(1) },
+      addressBlock('Billing Address', bill, doc.company.name),
+      addressBlock(doc.shipSameAsBilling ? 'Shipping / Delivery Address (same as billing)' : 'Shipping / Delivery Address', ship.length ? ship : bill, doc.company.name),
     ],
     table: {
       columns, rows, emptyText: 'No items on this purchase order',

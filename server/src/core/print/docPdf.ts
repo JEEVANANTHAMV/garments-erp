@@ -504,10 +504,16 @@ export function layoutColumns(pdf: Doc, cols: Column[], rows: Cell[][], total?: 
     w = [...min];
     let rem = W - sum(w);
     if (rem >= 0) {
-      // give wrap columns room up to their natural width, in proportion to what they lack × weight
-      const lack = wrapIdx.map((i) => Math.max(0, nat[i] - min[i]) * Math.max(0.2, weight(i)));
-      const tl = sum(lack);
-      if (tl > 0) wrapIdx.forEach((i, k) => { w[i] += Math.min(nat[i] - min[i], (rem * lack[k]) / tl); });
+      // water-filling: the spare width is shared by weight; a column whose whole text fits in its share gets exactly
+      // its natural width (short colour / size / IO columns stop wrapping) and the rest goes round again
+      let open = wrapIdx.filter((i) => nat[i] > w[i] + 0.5);
+      while (open.length && rem > 0.5) {
+        const tw = sum(open.map((i) => Math.max(0.2, weight(i))));
+        const done = open.filter((i) => nat[i] - w[i] <= (rem * Math.max(0.2, weight(i))) / tw);
+        if (!done.length) { open.forEach((i) => { w[i] += (rem * Math.max(0.2, weight(i))) / tw; }); rem = 0; break; }
+        for (const i of done) { rem -= nat[i] - w[i]; w[i] = nat[i]; }
+        open = open.filter((i) => !done.includes(i));
+      }
       rem = W - sum(w);
       if (rem > 0.5) { const tw = sum(wrapIdx.map(weight)) || 1; wrapIdx.forEach((i) => { w[i] += (rem * (weight(i) || 0)) / tw; }); }
       rem = W - sum(w);
