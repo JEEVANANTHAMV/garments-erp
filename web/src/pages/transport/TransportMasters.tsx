@@ -13,7 +13,7 @@ import { http, ApiError } from '../../lib/api';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { useToast } from '../../hooks/useToast';
 import { fmtDate, humanize } from '../../lib/format';
-import { errMsg } from './transportShared';
+import { errMsg, useTransportSettings } from './transportShared';
 
 const LIVE_TONE: Record<string, string> = { AVAILABLE: 'green', ASSIGNED: 'violet', IN_TRIP: 'blue', ON_TRIP: 'blue', MAINTENANCE: 'amber', ON_LEAVE: 'amber', INACTIVE: 'red' };
 const VEHICLE_TYPES = ['CAR', 'VAN', 'PICKUP', 'MINI_TRUCK', 'TRUCK', 'TWO_WHEELER', 'BUS', 'OTHER'].map((v) => ({ value: v, label: humanize(v) }));
@@ -172,18 +172,19 @@ export function TransportRequestTypesPage() {
   const { can } = useAuth();
   const list = useQuery({ queryKey: ['transport', 'request-types', 'all'], queryFn: async () => (await http.get<{ data: any[] }>('/transport/request-types?all=1')).data });
   const [edit, setEdit] = useState<any | null | undefined>(undefined);
+  const photoOn = !!useTransportSettings().data?.delivery_photo;
   const yn = (x: unknown) => (Number(x) ? <Badge tone="green">Required</Badge> : <span className="text-ink-muted">Optional</span>);
   const cols: Column<any>[] = [
     { key: 'type_name', header: 'Request type', render: (t) => <div><p className="font-semibold">{t.type_name}</p><p className="text-caption text-ink-secondary">{t.type_code}</p></div> },
     { key: 'requires_pickup', header: 'Pickup', render: (t) => yn(t.requires_pickup) },
     { key: 'requires_destination', header: 'Destination', render: (t) => yn(t.requires_destination) },
     { key: 'requires_material', header: 'Material details', render: (t) => yn(t.requires_material) },
-    { key: 'requires_proof', header: 'Delivery proof photo', render: (t) => yn(t.requires_proof) },
+    ...(photoOn ? [{ key: 'requires_proof', header: 'Delivery proof photo', render: (t: any) => yn(t.requires_proof) }] : []),
     { key: 'is_active', header: 'Active', render: (t) => (Number(t.is_active) ? 'Yes' : 'No') },
   ];
   return (
     <>
-      <PageHeader title="Transport Request Types" subtitle="Each type decides which request fields are mandatory and whether the driver must photograph the delivery"
+      <PageHeader title="Transport Request Types" subtitle={photoOn ? 'Each type decides which request fields are mandatory and whether the driver must photograph the delivery' : 'Each type decides which request fields are mandatory (delivery photos are off — Admin → Settings → TRANSPORT_DELIVERY_PHOTO)'}
         actions={can('TRANSPORT.MASTER') && <button className="btn-primary" onClick={() => setEdit(null)}><Plus size={15} /> New Type</button>} />
       <DataTable columns={cols} rows={list.data ?? []} loading={list.isLoading} error={list.error} rowKey={(t) => t.id} onRowClick={can('TRANSPORT.MASTER') ? (t) => setEdit(t) : undefined} />
       {edit !== undefined && <TypeForm t={edit} onClose={() => setEdit(undefined)} />}
@@ -191,6 +192,7 @@ export function TransportRequestTypesPage() {
   );
 }
 function TypeForm({ t, onClose }: { t: any | null; onClose: () => void }) {
+  const photoOn = !!useTransportSettings().data?.delivery_photo;
   const [f, setF] = useState<Record<string, any>>({
     type_code: t?.type_code ?? '', type_name: t?.type_name ?? '', requires_pickup: t ? Number(t.requires_pickup) : 1, requires_destination: t ? Number(t.requires_destination) : 1,
     requires_material: t ? Number(t.requires_material) : 0, requires_proof: t ? Number(t.requires_proof) : 0, sort_order: t?.sort_order ?? 0, is_active: t ? Number(t.is_active) : 1,
@@ -205,7 +207,7 @@ function TypeForm({ t, onClose }: { t: any | null; onClose: () => void }) {
         <Input label="Name" required value={f.type_name} onChange={(e) => setF({ ...f, type_name: e.target.value })} error={m.errors.type_name} />
         <Input label="Sort order" type="number" value={f.sort_order} onChange={(e) => setF({ ...f, sort_order: e.target.value })} />
         {chk('requires_pickup', 'Pickup location required')}{chk('requires_destination', 'Destination required')}{chk('requires_material', 'Material / parcel description required')}
-        {chk('requires_proof', 'Delivery proof photo required')}{chk('is_active', 'Active')}
+        {photoOn && chk('requires_proof', 'Delivery proof photo required')}{chk('is_active', 'Active')}
         {m.err && <p className="help-error">{m.err}</p>}
       </div>
     </Modal>

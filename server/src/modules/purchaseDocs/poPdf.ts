@@ -41,7 +41,9 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
   const cur = doc.currency.code || 'INR';
   const dec = Number.isFinite(doc.currency.decimals) ? doc.currency.decimals : 2;
   const money = (v: number) => fmtMoney(v, cur, dec);
-  const headerIo = doc.meta.find(([k]) => k === 'IO No')?.[1] ?? null;
+  const lineIos = [...new Set(doc.lines.map((l) => l.job).filter(Boolean))] as string[];
+  // the PO's IO (header), else the one IO all its lines are for
+  const headerIo = doc.meta.find(([k]) => k === 'IO No')?.[1] ?? (lineIos.length === 1 ? lineIos[0] : null);
   const amtLabel = cur === 'INR' ? 'Amount' : `Amount (${cur})`;
   const rateLabel = cur === 'INR' ? 'Rate' : `Rate (${cur})`;
   const anyJob = doc.lines.some((l) => l.job);
@@ -111,6 +113,10 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
   const details: KV[] = [['PO No.', doc.no], ['PO Date', fmtDate(doc.date)]];
   if (doc.deliveryDate) details.push(['Delivery Date', fmtDate(doc.deliveryDate)]);
   if (doc.paymentTerms) details.push(['Payment Terms', doc.paymentTerms]);
+  // material POs always show the IO No row ("-" when the PO is not for one IO; line IOs print under the item)
+  if (doc.type !== 'general' && !doc.meta.some(([k]) => k === 'IO No' || k === 'IO / Job No')) {
+    details.push(['IO No', headerIo ?? (lineIos.length ? 'As per lines' : '-')]);
+  }
   for (const [k, v] of doc.meta) details.push([k === 'IO / Job No' ? 'IO No' : k, v]);
   if (cur !== 'INR') details.push(['Currency', `${cur}${doc.exchangeRate && doc.exchangeRate !== 1 ? ` @ ${doc.exchangeRate}` : ''}`]);
   if (doc.status !== 'APPROVED') details.push(['Status', doc.status.charAt(0) + doc.status.slice(1).toLowerCase()]);

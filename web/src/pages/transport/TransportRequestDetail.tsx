@@ -2,13 +2,13 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, X, HelpCircle, Ban, Pencil, Truck, Paperclip, Trash2, Eye, FilePen } from 'lucide-react';
+import { Check, X, HelpCircle, Ban, Pencil, Truck, Paperclip, Trash2, Eye, FilePen, PackageCheck } from 'lucide-react';
 import { PageHeader, LoadingBlock, ErrorState, Modal, Input, Textarea, Spinner, ImageThumbnail } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
 import { http } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { humanize } from '../../lib/format';
-import { StatusPill, REQUEST_TONE, TRIP_TONE, PRIORITY_TONE, STOP_TONE, fmtIst, Timeline, Info, ReasonDialog, errMsg, toLocalInput, localToIso } from './transportShared';
+import { StatusPill, REQUEST_TONE, TRIP_TONE, PRIORITY_TONE, STOP_TONE, fmtIst, Timeline, Info, ReasonDialog, errMsg, toLocalInput, localToIso, nowLocalInput } from './transportShared';
 
 export function TransportRequestDetail() {
   const { id } = useParams();
@@ -19,6 +19,7 @@ export function TransportRequestDetail() {
   const q = useQuery({ queryKey: ['transport', 'request', id], queryFn: async () => (await http.get<{ data: any }>(`/transport/requests/${id}`)).data });
   const [dialog, setDialog] = useState<'' | 'approve' | 'reject' | 'clarify' | 'cancel'>('');
   const [amend, setAmend] = useState(false);
+  const [receiving, setReceiving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   if (q.isLoading) return <LoadingBlock />;
@@ -55,12 +56,23 @@ export function TransportRequestDetail() {
           {a.reject && <button className="btn-secondary text-red-700" onClick={() => setDialog('reject')} data-action="reject"><X size={14} /> Reject</button>}
           {a.approve && <button className="btn-primary" onClick={() => setDialog('approve')} data-action="approve"><Check size={14} /> Approve</button>}
           {a.assign && <button className="btn-primary" onClick={() => nav(`/transport/trips/new?requests=${r.id}`)} data-action="assign"><Truck size={14} /> Allocate vehicle</button>}
+          {a.confirm_received && <button className="btn-primary" onClick={() => setReceiving(true)} data-action="confirm-received"><PackageCheck size={14} /> Confirm material received</button>}
           {a.cancel && <button className="btn-ghost text-red-700" onClick={() => setDialog('cancel')} data-action="cancel"><Ban size={14} /> Cancel request</button>}
         </>} />
 
       {r.status === 'CLARIFICATION_REQUIRED' && (
         <div className="card mb-3 border-amber-300 bg-amber-50 p-3 text-body">
           <b>Clarification asked:</b> {r.clarification_question}{mine && ' — open "Answer clarification" to reply and resubmit.'}
+        </div>
+      )}
+      {a.confirm_received && (
+        <div className="card mb-3 border-emerald-300 bg-emerald-50 p-3 text-body" id="tr-await-receipt">
+          <b>Delivered.</b> {mine ? 'When the material reaches you, press "Confirm material received" (date-time, qty, condition).' : 'Waiting for the requester to confirm the material received.'}
+        </div>
+      )}
+      {r.status === 'RECEIVED' && (
+        <div className={`card mb-3 p-3 text-body ${r.received_condition && r.received_condition !== 'OK' ? 'border-amber-300 bg-amber-50' : 'border-emerald-300 bg-emerald-50'}`} id="tr-received">
+          <b>Material received</b> {fmtIst(r.received_at)} · {humanize(r.received_condition ?? 'OK')}{r.received_qty != null && ` · qty ${Number(r.received_qty)} ${r.package_uom ?? ''}`}{r.received_remarks && ` · ${r.received_remarks}`}
         </div>
       )}
       {r.status === 'REJECTED' && <div className="card mb-3 border-red-200 bg-red-50 p-3 text-body"><b>Rejected:</b> {r.rejection_reason}</div>}
@@ -110,7 +122,7 @@ export function TransportRequestDetail() {
                 </tbody>
               </table>
             )}
-            {!!r.proofs?.length && (
+            {r.delivery_photo && !!r.proofs?.length && (
               <div className="mt-3 flex flex-wrap gap-3">
                 {r.proofs.map((p: any) => (
                   <div key={p.id} className="flex items-center gap-2 text-small text-ink-secondary">
@@ -160,8 +172,46 @@ export function TransportRequestDetail() {
         onClose={() => setDialog('')} onConfirm={(t) => post('clarification', { question: t }, 'Question sent to the requester')} />
       <ReasonDialog open={dialog === 'cancel'} title={`Cancel ${r.request_no}`} label="Cancellation reason" confirmLabel="Cancel request" danger
         onClose={() => setDialog('')} onConfirm={(t) => post('cancel', { reason: t }, 'Request cancelled')} />
+      {receiving && <ReceivedDialog r={r} onClose={() => setReceiving(false)} onDone={() => { setReceiving(false); refresh(); toast('Material received — coordinator informed'); }} />}
       {amend && <AmendDialog r={r} onClose={() => setAmend(false)} onDone={() => { setAmend(false); refresh(); toast('Amendment saved'); }} />}
     </>
+  );
+}
+
+/** Requester confirms the material received (client 05-Nov-2026): date-time, qty, condition (remarks when not OK). */
+function ReceivedDialog({ r, onClose, onDone }: { r: any; onClose: () => void; onDone: () => void }) {
+  const [v, setV] = useState({ received_at: nowLocalInput(), received_qty: r.package_qty != null ? String(Number(r.package_qty)) : '', condition: 'OK', remarks: '' });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const needRemarks = v.condition !== 'OK';
+  return (
+    <Modal open onClose={onClose} title={`Material received — ${r.request_no}`} subtitle={r.material_description || r.purpose} size="sm"
+      footer={<>
+        <button className="btn-secondary" onClick={onClose} disabled={busy}>Back</button>
+        <button className="btn-primary" disabled={busy || !v.received_at || (needRemarks && v.remarks.trim().length < 3)} data-action="save-received" onClick={async () => {
+          setBusy(true); setErr('');
+          try {
+            await http.post(`/transport/requests/${r.id}/confirm-received`, {
+              received_at: localToIso(v.received_at), received_qty: v.received_qty === '' ? null : Number(v.received_qty),
+              condition: v.condition, remarks: v.remarks.trim() || null, row_version: r.row_version,
+            });
+            onDone();
+          } catch (e) { setErr(errMsg(e)); } finally { setBusy(false); }
+        }}>{busy && <Spinner size={14} />} Confirm received</button>
+      </>}>
+      <div className="space-y-3">
+        <Input label="Received date & time" type="datetime-local" value={v.received_at} max={nowLocalInput(5)} onChange={(e) => setV((p) => ({ ...p, received_at: e.target.value }))} data-field="received-at" />
+        <Input label={`Received qty${r.package_uom ? ` (${r.package_uom})` : ''}`} type="number" value={v.received_qty} placeholder="optional" onChange={(e) => setV((p) => ({ ...p, received_qty: e.target.value }))} data-field="received-qty" />
+        <div>
+          <label className="mb-1 block text-small font-medium text-ink-secondary" htmlFor="tr-received-condition">Condition</label>
+          <select id="tr-received-condition" className="input" value={v.condition} onChange={(e) => setV((p) => ({ ...p, condition: e.target.value }))}>
+            <option value="OK">OK — received in full, good condition</option>
+            <option value="SHORT">Short — less than sent</option>
+            <option value="DAMAGED">Damaged</option>
+          </select>
+        </div>
+        <Textarea label={needRemarks ? 'What is short / damaged' : 'Remarks (optional)'} required={needRemarks} value={v.remarks} onChange={(e) => setV((p) => ({ ...p, remarks: e.target.value }))} error={err || undefined} data-field="received-remarks" />
+      </div>
+    </Modal>
   );
 }
 

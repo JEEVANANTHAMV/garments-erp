@@ -7,8 +7,16 @@ import { humanize } from '../../lib/format';
 
 export const REQUEST_TONE: Record<string, string> = {
   DRAFT: 'slate', SUBMITTED: 'blue', UNDER_REVIEW: 'indigo', CLARIFICATION_REQUIRED: 'amber', APPROVED: 'green', REJECTED: 'red',
-  ASSIGNED: 'violet', IN_PROGRESS: 'blue', PICKUP_COMPLETED: 'blue', DELIVERED: 'green', COMPLETED: 'green', CANCELLED: 'red',
+  ASSIGNED: 'violet', IN_PROGRESS: 'blue', PICKUP_COMPLETED: 'blue', DELIVERED: 'green', COMPLETED: 'green', RECEIVED: 'emerald', CANCELLED: 'red',
 };
+/** Delivered / completed, waiting for the requester's "Confirm material received" (client 05-Nov-2026). */
+export const AWAITING_RECEIPT = ['DELIVERED', 'COMPLETED'];
+/** TRANSPORT_DELIVERY_PHOTO (Admin → Settings, default off): delivery / proof photos hidden and never required. */
+export const useTransportSettings = () => useQuery({
+  queryKey: ['transport', 'settings'],
+  queryFn: async () => (await http.get<{ data: { delivery_photo: boolean } }>('/transport/settings')).data,
+  staleTime: 60_000,
+});
 export const TRIP_TONE: Record<string, string> = {
   DRAFT: 'slate', ASSIGNED: 'violet', DRIVER_ACCEPTED: 'indigo', STARTED: 'blue', IN_PROGRESS: 'blue', COMPLETED: 'green', CANCELLED: 'red', EXCEPTION: 'amber',
 };

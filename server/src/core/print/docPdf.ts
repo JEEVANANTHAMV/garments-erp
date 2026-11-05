@@ -727,7 +727,8 @@ export async function renderDocPdf(s: DocSpec): Promise<Buffer> {
   const th = THEMES[s.template] ?? THEMES.COLOUR;
   const pdf = new PDFDocument({
     size: 'A4', layout: 'portrait', margin: 0, bufferPages: true,
-    info: { Title: T(s.meta?.title ?? `${s.title} ${s.docNo}`), Author: T(s.company.name), Subject: T(s.meta?.subject ?? s.title), Creator: T(s.company.name), Producer: T(s.company.name) },
+    info: { Title: T(s.meta?.title ?? `${s.title} ${s.docNo}`), Author: T(s.company.name), Subject: T(s.meta?.subject ?? s.title), Creator: T(s.company.name), Producer: T(s.company.name),
+      Keywords: `print-template:${s.template}` },
   });
   const chunks: Buffer[] = [];
   pdf.on('data', (b: Buffer) => chunks.push(b));

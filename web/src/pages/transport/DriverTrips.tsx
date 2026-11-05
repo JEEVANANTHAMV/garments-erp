@@ -13,7 +13,7 @@ import { PhotoCapture } from '../../components/PhotoCapture';
 import { http } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { humanize } from '../../lib/format';
-import { StatusPill, TRIP_TONE, STOP_TONE, PRIORITY_TONE, fmtIst, errMsg } from './transportShared';
+import { StatusPill, TRIP_TONE, STOP_TONE, PRIORITY_TONE, fmtIst, errMsg, useTransportSettings } from './transportShared';
 
 const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
@@ -203,7 +203,9 @@ function ServeModal({ stop, busy, onClose, onOk }: { stop: any; busy: boolean; o
   const [photo, setPhoto] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const delivery = pending.some((l: any) => l.service_type === 'DELIVERY');
-  const needsPhoto = pending.some((l: any) => l.service_type === 'DELIVERY' && Number(l.requires_proof));
+  // TRANSPORT_DELIVERY_PHOTO off (default, client 05-Nov-2026): no photo box, never required
+  const photoOn = !!useTransportSettings().data?.delivery_photo;
+  const needsPhoto = photoOn && pending.some((l: any) => l.service_type === 'DELIVERY' && Number(l.requires_proof));
   const upd = (i: number, p: object) => setLines((x: any[]) => x.map((l, k) => (k === i ? { ...l, ...p } : l)));
   const anyFailNoNote = lines.some((l: any) => l.result === 'FAILED' && !l.note.trim() && !note.trim());
   const blocked = (delivery && lines.some((l: any) => l.service_type === 'DELIVERY' && l.result !== 'FAILED') && !receiver.trim()) || (needsPhoto && lines.some((l: any) => l.result !== 'FAILED') && !photo) || anyFailNoNote;
@@ -230,7 +232,7 @@ function ServeModal({ stop, busy, onClose, onOk }: { stop: any; busy: boolean; o
           );
         })}
         {delivery && <Input label="Receiver name" required value={receiver} onChange={(e) => setReceiver(e.target.value)} data-field="receiver_name" />}
-        <PhotoCapture label={needsPhoto ? 'Proof photo' : 'Photo (optional)'} required={needsPhoto} value={photo} onChange={setPhoto} facing="environment" filePrefix="proof" />
+        {photoOn && <PhotoCapture label={needsPhoto ? 'Proof photo' : 'Photo (optional)'} required={needsPhoto} value={photo} onChange={setPhoto} facing="environment" filePrefix="proof" />}
         <Textarea label="Note" value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
     </Modal>

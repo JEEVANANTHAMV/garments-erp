@@ -14,7 +14,7 @@ import { useAuth } from '../../lib/auth';
 import { http } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { humanize } from '../../lib/format';
-import { StatusPill, TRIP_TONE, STOP_TONE, REQUEST_TONE, PRIORITY_TONE, fmtIst, toLocalInput, localToIso, Timeline, Info, ReasonDialog, errMsg } from './transportShared';
+import { StatusPill, TRIP_TONE, STOP_TONE, REQUEST_TONE, PRIORITY_TONE, fmtIst, toLocalInput, localToIso, nowLocalInput, Timeline, Info, ReasonDialog, errMsg } from './transportShared';
 
 const TRIP_STATUSES = ['DRAFT', 'ASSIGNED', 'DRIVER_ACCEPTED', 'STARTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'EXCEPTION'].map((s) => ({ value: s, label: humanize(s) }));
 
@@ -265,7 +265,7 @@ export function TripDetail() {
   const toast = useToast();
   const { can } = useAuth();
   const q = useQuery({ queryKey: ['transport', 'trip', id], queryFn: async () => (await http.get<{ data: any }>(`/transport/trips/${id}`)).data });
-  const [dialog, setDialog] = useState<'' | 'cancel' | 'exception' | 'reassign'>('');
+  const [dialog, setDialog] = useState<'' | 'cancel' | 'exception' | 'reassign' | 'delivered'>('');
   const [resolve, setResolve] = useState<any>(null);
   if (q.isLoading) return <LoadingBlock />;
   if (q.error) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
@@ -279,6 +279,7 @@ export function TripDetail() {
         actions={<>
           {a.assign && <button className="btn-secondary" onClick={() => nav(`/transport/trips/${id}/plan`)} data-action="replan"><Route size={14} /> Re-plan</button>}
           {a.reassign && <button className="btn-secondary" onClick={() => setDialog('reassign')} data-action="reassign"><RefreshCw size={14} /> Reassign driver / vehicle</button>}
+          {a.markDelivered && <button className="btn-primary" onClick={() => setDialog('delivered')} data-action="mark-delivered"><CheckCircle2 size={14} /> Mark delivered</button>}
           {a.exceptionClose && <button className="btn-secondary" onClick={() => setDialog('exception')} data-action="exception-close"><CheckCircle2 size={14} /> Close with exception</button>}
           {a.cancel && <button className="btn-ghost text-red-700" onClick={() => setDialog('cancel')} data-action="cancel-trip"><Ban size={14} /> Cancel trip</button>}
         </>} />
@@ -334,9 +335,9 @@ export function TripDetail() {
               </tbody>
             </table>
           </div>
-          {(t.issues.length > 0 || t.proofs.length > 0) && (
+          {(t.issues.length > 0 || (t.delivery_photo && t.proofs.length > 0)) && (
             <div className="card p-4">
-              <h3 className="mb-2 text-title font-semibold text-ink">Issues & proof</h3>
+              <h3 className="mb-2 text-title font-semibold text-ink">{t.delivery_photo ? 'Issues & proof' : 'Issues'}</h3>
               <ul className="space-y-1.5">
                 {t.issues.map((i: any) => (
                   <li key={i.id} className="flex flex-wrap items-center gap-2 text-body">
@@ -349,7 +350,7 @@ export function TripDetail() {
                 ))}
               </ul>
               <div className="mt-2 flex flex-wrap gap-3">
-                {t.proofs.map((p: any) => <div key={p.id} className="flex items-center gap-2 text-small"><ImageThumbnail url={p.file_url} title={`${p.request_no ?? ''} proof`} /><span>{p.request_no}<br />{p.receiver_name}</span></div>)}
+                {t.delivery_photo && t.proofs.map((p: any) => <div key={p.id} className="flex items-center gap-2 text-small"><ImageThumbnail url={p.file_url} title={`${p.request_no ?? ''} proof`} /><span>{p.request_no}<br />{p.receiver_name}</span></div>)}
               </div>
             </div>
           )}
@@ -362,8 +363,38 @@ export function TripDetail() {
         onConfirm={async (r) => { await http.post(`/transport/trips/${id}/close-exception`, { reason: r }); toast('Trip closed — unserved requests are back in the queue'); refresh(); }} />
       <ReasonDialog open={!!resolve} title="Resolve issue" label="Resolution note" confirmLabel="Resolve" onClose={() => setResolve(null)}
         onConfirm={async (r) => { await http.post(`/transport/trips/${id}/issues/${resolve.id}/resolve`, { note: r }); toast('Issue resolved'); refresh(); }} />
+      {dialog === 'delivered' && <MarkDeliveredDialog t={t} onClose={() => setDialog('')} onDone={() => { setDialog(''); toast('Trip marked delivered — requesters asked to confirm the material received'); refresh(); }} />}
       {dialog === 'reassign' && <ReassignDialog t={t} onClose={() => setDialog('')} onDone={() => { setDialog(''); toast('Reassigned — driver and requesters notified'); refresh(); }} />}
     </>
+  );
+}
+
+/** Coordinator records the delivery for a driver without a login / tab (client 05-Nov-2026); no photo is asked. */
+function MarkDeliveredDialog({ t, onClose, onDone }: { t: any; onClose: () => void; onDone: () => void }) {
+  const [v, setV] = useState({ delivered_at: nowLocalInput(), receiver_name: '', note: '', odometer: '' });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const pending = t.stops.flatMap((s: any) => s.lines.filter((l: any) => l.result === 'PENDING').map((l: any) => ({ ...l, stop: s })));
+  return (
+    <Modal open onClose={onClose} title={`Mark ${t.trip_no} delivered`} subtitle="For a driver without the app: every pending pickup / delivery is recorded as done and the trip is closed" size="sm"
+      footer={<>
+        <button className="btn-secondary" onClick={onClose} disabled={busy}>Back</button>
+        <button className="btn-primary" disabled={busy || !v.delivered_at} data-action="confirm-mark-delivered" onClick={async () => {
+          setBusy(true); setErr('');
+          try {
+            await http.post(`/transport/trips/${t.id}/mark-delivered`, { delivered_at: localToIso(v.delivered_at), receiver_name: v.receiver_name || null, note: v.note || null,
+              odometer: v.odometer === '' ? null : Number(v.odometer), row_version: t.row_version });
+            onDone();
+          } catch (e) { setErr(errMsg(e)); } finally { setBusy(false); }
+        }}>{busy && <Spinner size={14} />} Mark delivered</button>
+      </>}>
+      <div className="space-y-3">
+        <p className="text-small text-ink-secondary">{pending.length} pending line(s): {pending.map((l: any) => `${l.request_no} ${humanize(l.service_type).toLowerCase()}`).join(', ') || '—'}. The requesters then confirm the material received.</p>
+        <Input label="Delivered date & time" type="datetime-local" value={v.delivered_at} max={nowLocalInput(5)} onChange={(e) => setV({ ...v, delivered_at: e.target.value })} data-field="delivered-at" />
+        <Input label="Receiver name" value={v.receiver_name} onChange={(e) => setV({ ...v, receiver_name: e.target.value })} data-field="md-receiver" />
+        <Input label="End odometer" type="number" value={v.odometer} onChange={(e) => setV({ ...v, odometer: e.target.value })} />
+        <Textarea label="Note" value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} error={err || undefined} />
+      </div>
+    </Modal>
   );
 }
 

@@ -268,7 +268,9 @@ transportTripsRouter.get('/trips/:id', ah(async (req, res) => {
     reassign: can && ['ASSIGNED', 'DRIVER_ACCEPTED', 'EXCEPTION', 'STARTED', 'IN_PROGRESS'].includes(t.status),
     cancel: can && ['DRAFT', 'ASSIGNED', 'DRIVER_ACCEPTED', 'EXCEPTION'].includes(t.status),
     exceptionClose: can && ['STARTED', 'IN_PROGRESS'].includes(t.status),
-  } } });
+    // driver without a login / tab: the coordinator records the delivery (client 05-Nov-2026)
+    markDelivered: (can || has(req, P.APPROVE)) && ['ASSIGNED', 'DRIVER_ACCEPTED', 'STARTED', 'IN_PROGRESS'].includes(t.status),
+  }, delivery_photo: await deliveryPhotoOn(req.user!.companyId) } });
 }));
 
 /* ====================================================================== availability (planner) */

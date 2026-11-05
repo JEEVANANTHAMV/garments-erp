@@ -23,6 +23,7 @@ export function TransportDashboard() {
     ['Delayed requests', k.delayed, '/transport/requests?scope=all&queue=DELAYED', k.delayed > 0],
     ['Trips in progress', k.trips_running, '/transport/trips?status=STARTED,IN_PROGRESS'],
     ['Completed today', k.completed_today, '/transport/requests?scope=all&queue=COMPLETED_TODAY'],
+    ['Delivered – awaiting receipt', k.pending_receipt ?? 0, '/transport/requests?scope=all&queue=PENDING_RECEIPT'],
     ['Available vehicles', `${k.available_vehicles} / ${k.vehicles}`, '/transport/vehicles'],
     ['Available drivers', `${k.available_drivers} / ${k.drivers}`, '/transport/drivers'],
     ['Owned vs rental trips (month)', `${k.owned_trips_month} : ${k.rental_trips_month}`, '/gate/reports#vehicle-utilisation'],

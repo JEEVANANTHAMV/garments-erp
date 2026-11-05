@@ -20,9 +20,10 @@ import { StatusPill, REQUEST_TONE, PRIORITY_TONE, fmtIst, toLocalInput, nowLocal
 const QUEUE_TABS = [
   { key: 'NEW', label: 'New' }, { key: 'UNDER_REVIEW', label: 'Under review' }, { key: 'APPROVED_UNASSIGNED', label: 'Approved – unassigned' },
   { key: 'ASSIGNED', label: 'Assigned' }, { key: 'IN_PROGRESS', label: 'In progress' }, { key: 'DELAYED', label: 'Delayed' },
+  { key: 'PENDING_RECEIPT', label: 'Awaiting receipt' },
   { key: 'COMPLETED_TODAY', label: 'Completed today' }, { key: 'REJECTED', label: 'Rejected' }, { key: 'ALL', label: 'All' },
 ];
-const STATUS_OPTIONS = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'REJECTED', 'ASSIGNED', 'IN_PROGRESS', 'PICKUP_COMPLETED', 'DELIVERED', 'COMPLETED', 'CANCELLED']
+const STATUS_OPTIONS = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'REJECTED', 'ASSIGNED', 'IN_PROGRESS', 'PICKUP_COMPLETED', 'DELIVERED', 'COMPLETED', 'RECEIVED', 'CANCELLED']
   .map((s) => ({ value: s, label: s.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) }));
 
 export function TransportRequestsPage() {
@@ -75,7 +76,7 @@ export function TransportRequestsPage() {
           {can('TRANSPORT.REQUEST') && <button className="btn-primary" data-action="new-request" onClick={() => nav('/transport/requests/new')}><Plus size={15} /> New Vehicle Request</button>}
         </>} />
       {scope === 'all' && (
-        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-9" data-counters>
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-10" data-counters>
           {QUEUE_TABS.map((t) => (
             <button key={t.key} onClick={() => setQueue(t.key)} data-queue={t.key}
               className={clsx('card px-3 py-2 text-left transition-colors', queue === t.key ? 'border-brand-500 bg-brand-50' : 'hover:bg-surface-hover')}>
@@ -86,6 +87,16 @@ export function TransportRequestsPage() {
             </button>
           ))}
         </div>
+      )}
+      {(counters.MY_PENDING_RECEIPT ?? 0) > 0 && (
+        <button type="button" id="tr-my-pending-receipt" data-count={counters.MY_PENDING_RECEIPT}
+          onClick={() => { setScope('mine'); const n = new URLSearchParams(sp); n.set('scope', 'mine'); n.set('queue', 'PENDING_RECEIPT'); setSp(n, { replace: true }); }}
+          className="card mb-3 flex w-full items-center gap-2 border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-body text-emerald-800">
+          <b className="tabular-nums">{counters.MY_PENDING_RECEIPT}</b> of your request{counters.MY_PENDING_RECEIPT === 1 ? ' is' : 's are'} delivered — confirm the material received
+        </button>
+      )}
+      {scope === 'mine' && queue === 'PENDING_RECEIPT' && (
+        <p className="mb-2 text-small text-ink-secondary">Showing your delivered requests waiting for “Confirm material received”. <button className="text-brand-700 underline" onClick={() => setQueue('ALL')}>Show all</button></p>
       )}
       <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
         <SearchInput value={search} onChange={setSearch} placeholder="Request no, purpose, requester…" className="col-span-2" />
