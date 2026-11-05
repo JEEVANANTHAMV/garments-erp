@@ -85,7 +85,7 @@ export async function renderProcessDcPdf(o: {
     if (multiJob) {
       const ls = jg.flatMap((g) => g.rows);
       rows.push(row({
-        io: { text: `Job total ${io === '—' ? '' : io}`.trim(), bold: true },
+        item: { text: 'Job total', bold: true },
         nb: { text: int(ls.filter((l) => l.bundle_no).length), bold: true },
         pcs: { text: int(ls.reduce((a, l) => a + n(l.qty), 0)), bold: true },
         kg: hasWeight ? { text: kg(ls.reduce((a, l) => a + n(l.weight_kg), 0)), bold: true } : '',
@@ -102,7 +102,7 @@ export async function renderProcessDcPdf(o: {
   const notes: [string, string][] = [];
   const s = dc.summary;
   if (s?.colors?.length && s.sizes?.length) {
-    const txt = s.colors.map((c: any) => `${c.color_name}: ${c.sizes.filter((z: any) => n(z.qty)).map((z: any) => `${z.size_code} ${int(n(z.qty))}`).join(' · ')} = ${int(n(c.qty))}`).join('\n');
+    const txt = s.colors.map((c: any) => `${c.color_name === "—" ? "No colour" : c.color_name}: ${c.sizes.filter((z: any) => n(z.qty)).map((z: any) => `${z.size_code} ${int(n(z.qty))}`).join(' · ')} = ${int(n(c.qty))}`).join('\n');
     notes.push(['Colour / Size', `${txt}\nTotal: ${s.sizeTotals.filter((z: any) => n(z.qty)).map((z: any) => `${z.size_code} ${int(n(z.qty))}`).join(' · ')} = ${int(n(s.totals?.qty))} PCS`]);
   }
   if (dc.operations?.length) notes.push(['Operations', dc.operations.map((x: any) => x.op_name).join(', ')]);
@@ -115,7 +115,7 @@ export async function renderProcessDcPdf(o: {
   ];
   if (dc.ref_no) details.push(['Ref / SR No.', String(dc.ref_no)]);
   if (dc.jw_no) details.push(['Job Work Order', `${dc.jw_no}${dc.jw_line_seq ? ` / ${dc.jw_line_seq}` : ''}`]);
-  details.push(['From / To', `${dc.from_location || '-'} → ${dc.to_location || '-'}`]);
+  details.push(['From', dc.from_location || '-'], ['To', dc.to_location || '-']);
   details.push(['Vehicle No.', dc.vehicle_no || '-']);
   if (dc.driver_name) details.push(['Driver', String(dc.driver_name)]);
   if (dc.transporter) details.push(['Transporter', String(dc.transporter)]);

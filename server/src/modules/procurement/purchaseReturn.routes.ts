@@ -4,6 +4,9 @@ import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
 import { nextDocNumber } from '../../core/numbering.js';
+import { renderPurchaseReturnDcPdf } from './purchaseReturnPrint.js';
+import { loadPrintCompany, resolvePrintTemplate } from '../../core/print/printCompany.js';
+import { countDcPrint, dcPrintQuery, docEway, istNowText, partyForPrint, printedBy, reprintLabel, sendPdf } from '../../core/print/dcPrint.js';
 
 export const purchaseReturnRouter = Router();
 
@@ -195,6 +198,43 @@ purchaseReturnRouter.get('/purchase-returns/:id', requirePermission('PURCHASE.VI
   `, [id]);
 
   res.json({ data: { ...pr, lines, allocations } });
+}));
+
+/**
+ * GET /purchase-returns/:id/print — the Return DC as an A4 PDF on the shared print engine (client 05-Nov-2026).
+ * ?template=colour|bw (else the company default), ?purpose=preview|print|download (print / download of a generated
+ * DC is counted, 2nd+ = "Reprint n"). A valued challan: rate + taxable value + GST (the e-way bill is made from it).
+ */
+purchaseReturnRouter.get('/purchase-returns/:id/print', requirePermission('PURCHASE.VIEW'), ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const cid = req.user!.companyId;
+  const q = dcPrintQuery.parse(req.query);
+  const pr = await queryOne<any>(`
+    SELECT pr.*, sup.party_name AS supplier_name, po.po_no, grn.grn_no, w.warehouse_name
+      FROM trx_purchase_return pr
+      LEFT JOIN mst_party sup ON sup.id = pr.supplier_id
+      LEFT JOIN trx_purchase_order po ON po.id = pr.source_po_id
+      LEFT JOIN trx_grn grn ON grn.id = COALESCE(pr.source_grn_id, pr.grn_id)
+      LEFT JOIN mst_warehouse w ON w.id = pr.warehouse_id
+     WHERE pr.id = ? AND pr.company_id = ?`, [Number.isInteger(id) ? id : 0, cid]);
+  if (!pr) throw NotFound('Purchase Return not found');
+  const lines = await query<any>(`
+    SELECT prl.*, y.yarn_name, f.fabric_name, t.trim_name, c.color_name, u.code AS uom_code
+      FROM trx_purchase_return_line prl
+      LEFT JOIN mst_yarn y ON y.id = prl.yarn_id
+      LEFT JOIN mst_fabric f ON f.id = prl.fabric_id
+      LEFT JOIN mst_trim t ON t.id = prl.trim_id
+      LEFT JOIN mst_color c ON c.id = prl.color_id
+      LEFT JOIN cfg_uom u ON u.id = prl.uom_id
+     WHERE prl.return_id = ? ORDER BY prl.id`, [id]);
+  const [company, party, eway, template, by] = await Promise.all([
+    loadPrintCompany(cid), partyForPrint(cid, pr.supplier_id),
+    docEway(cid, 'PURCHASE_RETURN', id, { ewbNo: pr.eway_bill_no, vehicle: pr.vehicle_no, transporter: pr.transporter_name }),
+    resolvePrintTemplate(cid, q.template), printedBy(req),
+  ]);
+  const no = await countDcPrint(req, 'trx_purchase_return', id, pr.return_dc_no || pr.return_no, q.purpose, !!pr.return_dc_no && pr.status !== 'CANCELLED');
+  const pdf = await renderPurchaseReturnDcPdf({ template, company, pr, lines, party, eway, reprint: reprintLabel(no), printedAt: istNowText(), printedBy: by });
+  sendPdf(res, pdf, pr.return_dc_no || pr.return_no, q);
 }));
 
 // ---------------------------------------------------------------------------

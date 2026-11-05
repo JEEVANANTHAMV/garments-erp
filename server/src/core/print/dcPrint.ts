@@ -100,7 +100,7 @@ export const addressText = (v: unknown) => String(v ?? '').split(/\n/).map((x) =
 
 /**
  * The two address blocks every DC prints: billing = our company; shipping / delivery = the given name + lines,
- * falling back to our own address so it is never empty.
+ * falling back to our own name + address (as the knitting DC) so it is never empty.
  */
 export function dcAddresses(company: PrintCompany, ship: { heading?: string; name?: string | null; lines?: string[]; gstin?: string | null } | null): [PartyBlock, PartyBlock] {
   const lines = [...(ship?.lines ?? [])];
@@ -108,7 +108,7 @@ export function dcAddresses(company: PrintCompany, ship: { heading?: string; nam
   const has = lines.length > 0;
   return [
     { heading: 'Billing Address', name: company.name, lines: companyAddressLines(company) },
-    { heading: ship?.heading ?? 'Shipping / Delivery Address', name: has ? (ship?.name || company.name) : (ship?.name ? `${ship.name} (c/o ${company.name})` : company.name),
+    { heading: ship?.heading ?? 'Shipping / Delivery Address', name: has ? (ship?.name || company.name) : company.name,
       lines: has ? lines : companyAddressLines(company) },
   ];
 }
