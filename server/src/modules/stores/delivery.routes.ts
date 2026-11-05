@@ -2,11 +2,14 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute } from '../../config/db.js';
 import { ah } from '../../core/asyncHandler.js';
-import { BadRequest } from '../../core/errors.js';
+import { BadRequest, NotFound } from '../../core/errors.js';
 import { requireAny, requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { stockOf, moveStock, type Mat, type MoveCtx } from './stockPost.js';
+import { renderDeliveryDcPdf } from './deliveryPrint.js';
+import { loadPrintCompany, resolvePrintTemplate } from '../../core/print/printCompany.js';
+import { countDcPrint, dcPrintQuery, docEway, istNowText, partyForPrint, printedBy, reprintLabel, sendPdf } from '../../core/print/dcPrint.js';
 import {
   n, r4, cidOf, uidOf, todayStr, idOpt, strOpt, dateStr, reasonSchema, idParam, listQuery, listWhere, mustGet, needStatus,
   ITEM_NAME, ITEM_JOINS, styleOfSo,
@@ -116,6 +119,28 @@ deliveryRouter.get('/deliveries/:id', VIEW, ah(async (req, res) => {
   const d = await deliveryDoc(cidOf(req), idParam(req));
   if (!d) throw BadRequest('Delivery not found');
   res.json({ data: d });
+}));
+
+/**
+ * GET /deliveries/:id/print — the stock / general delivery DC as an A4 PDF on the shared print engine (client
+ * 05-Nov-2026). ?template=colour|bw, ?purpose=preview|print|download (print / download of an approved DC counted).
+ */
+deliveryRouter.get('/deliveries/:id/print', VIEW, ah(async (req, res) => {
+  const cid = cidOf(req);
+  const id = idParam(req);
+  const q = dcPrintQuery.parse(req.query);
+  const d = await deliveryDoc(cid, id);
+  if (!d) throw NotFound('Delivery not found');
+  const soIds = [...new Set((d.lines as any[]).map((l) => Number(l.so_id)).filter(Boolean))];
+  const ios = soIds.length ? await query<any>(`SELECT id, COALESCE(NULLIF(io_no, ''), so_no) io_no FROM trx_sales_order WHERE id IN (?) AND company_id = ?`, [soIds, cid]) : [];
+  for (const l of d.lines as any[]) l.io_no = ios.find((x) => Number(x.id) === Number(l.so_id))?.io_no ?? null;
+  const [company, party, eway, template, by] = await Promise.all([
+    loadPrintCompany(cid), partyForPrint(cid, d.party_id), docEway(cid, 'STOCK_DELIVERY', id, { ewbNo: d.eway_bill_no, vehicle: d.vehicle_no, docNo: d.doc_no }),
+    resolvePrintTemplate(cid, q.template), printedBy(req),
+  ]);
+  const no = await countDcPrint(req, 'trx_stock_delivery', id, d.doc_no, q.purpose, !['DRAFT', 'CANCELLED'].includes(String(d.status)));
+  const pdf = await renderDeliveryDcPdf({ template, company, h: d, party, eway, reprint: reprintLabel(no), printedAt: istNowText(), printedBy: by });
+  sendPdf(res, pdf, d.doc_no, q);
 }));
 
 deliveryRouter.post('/deliveries', CREATE, ah(async (req, res) => {
