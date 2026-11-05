@@ -137,7 +137,7 @@ export function TransportRequestDetail() {
           <div className="card p-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-title font-semibold text-ink">Attachments</h3>
-              {(mine || a.approve || a.reject) && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(r.status) && (
+              {(mine || a.approve || a.reject) && !['CANCELLED', 'REJECTED', 'COMPLETED', 'RECEIVED'].includes(r.status) && (
                 <>
                   <input ref={fileRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }} data-field="attachment" />
                   <button className="btn-secondary btn-sm" disabled={uploading} onClick={() => fileRef.current?.click()} data-action="add-attachment">{uploading ? <Spinner size={13} /> : <Paperclip size={13} />} Add</button>

@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { QuotationPicker, type QuoteValue } from '../../../components/ProcessPickers';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, ScanLine, Download, Save, CheckCircle2, Printer, Trash2, Ban, PackageCheck, Lock } from 'lucide-react';
+import { ArrowLeft, Plus, ScanLine, Download, Save, CheckCircle2, Trash2, Ban, PackageCheck, Lock } from 'lucide-react';
 import { useAuth } from '../../../lib/auth';
 import { http } from '../../../lib/api';
 import { useLookup, toOptions } from '../../../hooks/useLookup';
 import { useToast } from '../../../hooks/useToast';
 import { Button, Modal, Input, Select, Textarea, SearchInput, LoadingBlock } from '../../../components/ui';
 import { fmtDate, today } from '../../../lib/format';
-import { YpTitle, YpStatus, ReconCards, useJobs, useYarnTypes, errText, kg, n, r3, esc, printDoc, groupByJob, MODE_LABEL, type Job, type YarnLot } from './shared';
+import { DocPdfActions } from '../../../components/DocPdfActions';
+import { YpTitle, YpStatus, ReconCards, useJobs, useYarnTypes, errText, kg, n, r3, groupByJob, MODE_LABEL, type Job, type YarnLot } from './shared';
 import { isDyeing, quoteColour } from '../fabricProcess/shared';
 
 /**
@@ -186,20 +187,6 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     try { const r = await http.post<{ message: string }>(`/yarn-process/outward/${id}/${path}`, { reason }); toast((r as any).message, 'success'); void qc.invalidateQueries({ queryKey: ['yarn-process'] }); }
     catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
   };
-  const print = () => {
-    const vendor = suppliers.data?.find((s: any) => String(s.id) === head.vendor_id)?.label ?? d?.vendor_name ?? '';
-    const proc = pt?.name ?? head.process_code;
-    const body = groups.map((g) => `<tr class="grp"><td colspan="9">Job ${esc(g.io_no)}${g.rows[0].buyer_po_no ? ` · PO ${esc(g.rows[0].buyer_po_no)}` : ''}</td></tr>` +
-      g.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.yarn_name)}</td><td>${esc(r.shade)}</td><td>${esc(r.lot_no)}</td><td>${esc(r.cone_no)}</td><td class="r">${r.no_of_cones || ''}</td><td>${dyeing ? esc(r.target_shade) : ''}</td><td>${esc(r.grn_no)}</td><td class="r">${kg(r.qty_kg)}</td></tr>`).join('') +
-      `<tr class="sub"><td colspan="8">Job total</td><td class="r">${kg(g.rows.reduce((a, r) => a + n(r.qty_kg), 0))}</td></tr>`).join('');
-    printDoc(d?.ypo_no ?? 'Yarn Outward DC',
-      `<h1>DELIVERY CHALLAN — YARN ${esc(proc.toUpperCase())}</h1><table class="meta"><tr><td><b>DC No:</b> ${esc(d?.ypo_no ?? '(draft)')}</td><td><b>Date:</b> ${esc(fmtDate(head.ypo_date))}</td><td><b>Challan:</b> ${esc(head.challan_no || '—')}</td></tr>
-       <tr><td><b>Process unit:</b> ${esc(vendor)}</td><td><b>To:</b> ${esc(head.to_location || '—')}</td><td><b>Vehicle:</b> ${esc(head.vehicle_no || '—')}</td></tr></table>`,
-      `<table><thead><tr><th>#</th><th>Yarn</th><th>${dyeing ? 'Yarn colour' : 'Shade'}</th><th>Lot</th><th>Cone</th><th class="r">Cones</th><th>${dyeing ? 'Dye colour' : ''}</th><th>GRN</th><th class="r">KG</th></tr></thead><tbody>${body}
-       <tr class="sub"><td colspan="5">GRAND TOTAL — ${groups.length} job(s)</td><td class="r">${cones || ''}</td><td colspan="2"></td><td class="r">${kg(total)}</td></tr></tbody></table>
-       <p>Yarn sent for job work (${esc(proc)}) — to be returned after processing, not for sale. ${esc(head.remarks)}</p>`);
-  };
-
   if (id && detail.isLoading) return <LoadingBlock />;
   return (
     <div>
@@ -286,7 +273,9 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
         {d && (d.status === 'DRAFT' || (d.status === 'CONFIRMED' && !d.inwards?.some((i: any) => i.status !== 'CANCELLED'))) && can('YARN_PROCESS.CANCEL') && <Button variant="danger" loading={busy} onClick={() => act('cancel', `Cancel ${d.ypo_no}? Reason:`)}><Ban size={14} className="mr-1" /> Cancel DC</Button>}
         {d && ['CONFIRMED', 'PARTIALLY_RECEIVED'].includes(d.status) && can('YARN_PROCESS.CREATE') && <Button onClick={() => nav(`/production/yarn-process/inward?ypo=${id}`)}><PackageCheck size={14} className="mr-1" /> Receive (GRN)</Button>}
         {d && ['PARTIALLY_RECEIVED', 'COMPLETED'].includes(d.status) && can('YARN_PROCESS.CONFIRM') && <Button variant="secondary" loading={busy} onClick={() => act('close', `Close ${d.ypo_no}? KG still at the unit is written off as loss. Reason:`, true)}><Lock size={14} className="mr-1" /> Close DC</Button>}
-        <Button variant="secondary" disabled={!rows.length} onClick={print}><Printer size={14} className="mr-1" /> Print DC</Button>
+        {/* A4 PDF on the shared print engine (Colour / Black & White) — client 05-Nov-2026; prints the saved DC */}
+        <DocPdfActions url={id ? `/yarn-process/outward/${id}/print` : null} idPrefix="ypdc" label="DC" title={`Yarn Process DC ${d?.ypo_no ?? ''}`}
+          disabledHint="Save the DC (draft or confirmed) to print it" />
       </div>
 
       {picker && <LotPicker mode={picker} jobs={jobs.data ?? []} taken={rows} onClose={() => setPicker(null)}

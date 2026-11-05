@@ -65,7 +65,7 @@ export async function renderFabricProcessDcPdf(o: {
       rows.push(row({
         fab: { text: `Job total — ${j.rows.length} roll(s)`, bold: true },
         kg: { text: kg(j.rows.reduce((a, r) => a + n(r.weight_kg), 0)), bold: true },
-        mtr: hasMtr ? { text: mtr(j.rows.reduce((a, r) => a + n(r.meters), 0)), bold: true } : '',
+        mtr: hasMtr && j.rows.some((r) => n(r.meters) > 0) ? { text: mtr(j.rows.reduce((a, r) => a + n(r.meters), 0)), bold: true } : '',
       }));
     }
   }
@@ -96,7 +96,8 @@ export async function renderFabricProcessDcPdf(o: {
     // the gate scans the DC No. (Code 128) — the old challan carried the same barcode
     barcode: dc.status !== 'DRAFT' && dc.status !== 'CANCELLED' ? { value: dc.fpo_no, caption: 'Scan at gate' } : null,
     banner: dc.status === 'CANCELLED' && dc.cancel_reason ? `CANCELLED — ${dc.cancel_reason}` : null,
-    addresses: dcAddresses(co, { name: dc.vendor_name, lines: party?.address ?? [], gstin: party?.gstin ?? dc.vendor_gstin }),
+    // delivery: the process unit's address (party master), else the DC's "to process location", else ours
+    addresses: dcAddresses(co, { name: dc.vendor_name, lines: party?.address?.length ? party.address : (dc.to_location ? [String(dc.to_location)] : []), gstin: party?.gstin ?? dc.vendor_gstin }),
     eway: o.eway,
     table: { columns, rows, total: { label: `Grand Total — ${rolls.length} roll(s)`, values: total }, emptyText: 'No rolls on this DC' },
     summary: { notes },

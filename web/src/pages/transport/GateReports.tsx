@@ -16,7 +16,7 @@ const MONTH_AGO = ymd(new Date(Date.now() - 29 * 86_400_000));
 const FROM: ReportFilter = { key: 'from', label: 'From', type: 'date', default: MONTH_AGO };
 const TO: ReportFilter = { key: 'to', label: 'To', type: 'date', default: TODAY };
 const opt = (xs: string[]) => xs.map((x) => ({ value: x, label: x.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) }));
-const REQ_STATUS = opt(['SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'REJECTED', 'ASSIGNED', 'IN_PROGRESS', 'PICKUP_COMPLETED', 'DELIVERED', 'COMPLETED', 'CANCELLED']);
+const REQ_STATUS = opt(['SUBMITTED', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED', 'APPROVED', 'REJECTED', 'ASSIGNED', 'IN_PROGRESS', 'PICKUP_COMPLETED', 'DELIVERED', 'COMPLETED', 'RECEIVED', 'CANCELLED']);
 const TRIP_STATUS = opt(['ASSIGNED', 'DRIVER_ACCEPTED', 'STARTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'EXCEPTION']);
 const OWNERSHIP: ReportFilter = { key: 'ownership_type', label: 'Owned / rental', type: 'select', options: opt(['OWNED', 'RENTAL']) };
 const reqLink = (r: any) => `/transport/requests/${r.id}`;
@@ -77,6 +77,7 @@ export function GateReportsPage() {
           { key: 'pickup', header: 'Pickup' }, { key: 'destination', header: 'Destination' }, { key: 'package_qty', header: 'Pkgs', type: 'qty', total: true },
           { key: 'submitted_at', header: 'Submitted' }, { key: 'approver', header: 'Approved by' }, { key: 'approval_hours', header: 'Approval hrs', type: 'qty' },
           { key: 'ageing_hours', header: 'Ageing hrs', type: 'qty' }, { key: 'turnaround_hours', header: 'Turnaround hrs', type: 'qty' },
+          { key: 'received_at', header: 'Received (requester)' }, { key: 'received_condition', header: 'Received condition' },
           { key: 'trip_no', header: 'Trip' }, { key: 'vehicle_no', header: 'Vehicle' }, { key: 'ownership', header: 'Own / rent' }, { key: 'driver', header: 'Driver' }, { key: 'reason', header: 'Reject / cancel reason' },
         ],
       },

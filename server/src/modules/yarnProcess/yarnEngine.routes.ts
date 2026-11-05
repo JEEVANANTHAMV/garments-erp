@@ -13,6 +13,9 @@ import { s } from '../resources/schemas.js';
 import { assertJobLots } from '../stock/jobStock.routes.js';
 import { checkDcQuotation, useGateEntry } from '../../core/inwardControls.js';
 import { YP, can, r3, r2, n, EPS, date, processType, whName, partyName, coneHistory, lotRow, lotOut, lotGrn, lotIn } from './yarnEngine.common.js';
+import { renderYarnProcessDcPdf } from './yarnProcessDcPrint.js';
+import { loadPrintCompany, resolvePrintTemplate } from '../../core/print/printCompany.js';
+import { countDcPrint, dcPrintQuery, dmy, docEway, istNowText, partyForPrint, printedBy, reprintLabel, sendPdf } from '../../core/print/dcPrint.js';
 
 /**
  * Yarn Process engine (Garment_ERP_Yarn_Process_Developer_Document) — dyeing / winding / twisting
@@ -305,6 +308,44 @@ yarnEngineRouter.get('/yarn-process/outward/:id', requirePermission(YP.VIEW), ah
       WHERE l.ypo_id = ? ORDER BY l.io_no, l.id`, [id]);
   const inwards = await query<any>('SELECT id, inward_no, inward_date, good_kg, reject_kg, loss_kg, challan_no, status FROM trx_yarn_process_inward WHERE ypo_id = ? ORDER BY id', [id]);
   res.json({ data: { ...o, lines: lines.map((l) => ({ ...l, qty_kg: n(l.qty_kg), balance_kg: Math.max(0, n(l.balance_kg)) })), inwards, reconciliation: await reconciliation(id) } });
+}));
+
+/**
+ * GET /yarn-process/outward/:id/print — the yarn process DC as an A4 PDF on the shared print engine (client
+ * 05-Nov-2026). ?template=colour|bw (else the company default), ?purpose=preview|print|download (print / download of
+ * a confirmed DC is counted, 2nd+ = "Reprint n").
+ */
+yarnEngineRouter.get('/yarn-process/outward/:id/print', requirePermission(YP.VIEW), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const q = dcPrintQuery.parse(req.query);
+  const o = await queryOne<any>(
+    `SELECT o.*, v.party_name AS vendor_name, v.gstin AS vendor_gstin, pt.name AS process_name, pt.changes_shade, w.warehouse_name AS from_store, rp.reprocess_no
+       FROM trx_yarn_process_order o LEFT JOIN mst_party v ON v.id = o.vendor_id
+       LEFT JOIN mst_yarn_process_type pt ON pt.company_id = o.company_id AND pt.code = o.process_code
+       LEFT JOIN mst_warehouse w ON w.id = o.from_warehouse_id LEFT JOIN trx_yarn_reprocess rp ON rp.id = o.reprocess_id
+      WHERE o.id = ? AND o.company_id = ?`, [id, cid]);
+  if (!o) throw NotFound('Yarn process DC not found');
+  const lines = await query<any>(
+    `SELECT l.*, y.yarn_name, st.style_code, g.grn_no, yp.process_no
+       FROM trx_yarn_process_order_line l LEFT JOIN mst_yarn y ON y.id = l.yarn_id LEFT JOIN mst_style st ON st.id = l.style_id
+       LEFT JOIN trx_grn_line gl ON gl.id = l.grn_line_id LEFT JOIN trx_grn g ON g.id = gl.grn_id LEFT JOIN trx_yarn_process yp ON yp.id = l.process_id
+      WHERE l.ypo_id = ? ORDER BY l.io_no, l.id`, [id]);
+  const [company, party, eway, template, by] = await Promise.all([
+    loadPrintCompany(cid), partyForPrint(cid, o.vendor_id), docEway(cid, null, id, { docNo: o.ypo_no, vehicle: o.vehicle_no }),
+    resolvePrintTemplate(cid, q.template), printedBy(req),
+  ]);
+  const no = await countDcPrint(req, 'trx_yarn_process_order', id, o.ypo_no, q.purpose, o.status !== 'DRAFT' && o.status !== 'CANCELLED');
+  const pdf = await renderYarnProcessDcPdf({
+    template, company, party, eway, reprint: reprintLabel(no), printedAt: istNowText(), printedBy: by, meta: 'Yarn Process DC',
+    h: { dc_no: o.ypo_no, dc_date: dmy(o.ypo_date), status: o.status, process: o.process_name || o.process_code, dyeing: /DYE/i.test(String(o.process_code)) || !!o.changes_shade,
+      vendor_name: o.vendor_name, vendor_gstin: o.vendor_gstin, challan_no: o.challan_no, reprocess_no: o.reprocess_no, from_store: o.from_store,
+      to_location: o.to_location, vehicle_no: o.vehicle_no, expected_return: o.expected_return_date ? dmy(o.expected_return_date) : null,
+      remarks: o.remarks, cancel_reason: o.cancel_reason, issued_status: ['CONFIRMED'] },
+    lines: lines.map((l) => ({ io_no: l.io_no, buyer_po_no: l.buyer_po_no, style_code: l.style_code, process_no: l.process_no, yarn: l.yarn_name || '',
+      shade: l.shade, target_shade: l.target_shade || o.target_shade, lot_no: l.lot_no, cone_no: l.cone_no, cones: n(l.no_of_cones), grn_no: l.grn_no, kg: n(l.qty_kg) })),
+  });
+  sendPdf(res, pdf, o.ypo_no, q);
 }));
 
 /** POST /yarn-process/outward — Save Draft (no stock moved) or Confirm DC (lots issued). */
