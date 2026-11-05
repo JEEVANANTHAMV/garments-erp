@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { barcodeHtml } from '../../lib/printBarcode';
 import { Plus, Trash2, Truck, PackageCheck, Printer } from 'lucide-react';
 import { http } from '../../lib/api';
 import { fmtDate, fmtDecimal, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
+import { DocPdfModal } from '../../components/DocPdfActions';
 import { Modal, FormSection, Input, Select, Button, Badge, Checkbox } from '../../components/ui';
 
 /**
@@ -103,23 +103,8 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
     }
   };
 
-  const printDc = async (dcNo: string) => {
-    const d = (await http.get<{ data: any }>(`/yarn-process-dcs/${encodeURIComponent(dcNo)}`)).data;
-    const w = window.open('', '_blank', 'width=900,height=700');
-    if (!w) return;
-    const esc = (v: unknown) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.dc_no)}</title>
-      <style>body{font:12px Arial;margin:24px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #999;padding:5px}th{background:#eee}</style></head><body>${barcodeHtml(d.dc_no)}
-      <h2>${esc(d.process?.process_label ?? 'Yarn Process')} — Delivery Challan ${esc(d.dc_no)}</h2>
-      <p><b>Date:</b> ${esc(fmtDate(d.dc_date))} &nbsp; <b>Supplier / Vendor:</b> ${esc(d.vendor_name)} &nbsp; <b>Vehicle:</b> ${esc(d.vehicle_no ?? '—')}
-      &nbsp; <b>Jobs:</b> ${esc((d.jobs ?? []).length)}</p>
-      <table><thead><tr><th>#</th><th>Job (IO)</th><th>Process</th><th>Yarn</th><th>Lot (GRN)</th><th>Cones</th><th>KG</th></tr></thead><tbody>
-      ${d.lines.map((l: any, i: number) => { const j = (d.jobs ?? []).find((x: any) => Number(x.process_id) === Number(l.src_id)); return `<tr><td>${i + 1}</td><td>${esc(j?.io_no ?? l.io_no ?? '—')}</td><td>${esc(j?.process_no ?? '')}</td><td>${esc(l.yarn_code)} ${esc(l.yarn_name)}</td><td>${esc(l.lot_no ?? '')}${l.grn_no ? ` (${esc(l.grn_no)})` : ''}</td><td>${esc(l.no_of_cones)}</td><td>${esc(fmtDecimal(l.issued_qty_kg, 3))}</td></tr>`; }).join('')}
-      <tr><th colspan="5">Total</th><th>${esc(d.cones)}</th><th>${esc(fmtDecimal(d.issued_kg, 3))}</th></tr></tbody></table>
-      <p style="margin-top:40px">Receiver's signature ____________________ &nbsp;&nbsp; Authorised signatory ____________________</p>
-      <script>window.onload=()=>window.print()</script></body></html>`);
-    w.document.close();
-  };
+  // A4 PDF on the shared print engine (Colour / Black & White) — client 05-Nov-2026
+  const [pdfDc, setPdfDc] = useState<string | null>(null);
 
   const vendorOpts = parties.map((p: any) => ({ value: p.id, label: p.label }));
   const whOpts = warehouses.map((w: any) => ({ value: w.id, label: w.label }));
@@ -155,7 +140,7 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
               <td className="px-2 py-1"><Badge tone={d.status === 'RECEIVED' ? 'emerald' : d.status === 'PARTIAL_RECEIVED' ? 'amber' : 'blue'}>{d.status.replace(/_/g, ' ')}</Badge></td>
               <td className="px-2 py-1 text-right whitespace-nowrap">
                 {d.pending_kg > 0 && <Button size="sm" variant="secondary" onClick={() => openInward(d)}><PackageCheck size={12} className="mr-1" /> Inward</Button>}
-                <button className="ml-2 text-ink-secondary hover:text-ink" title="Print DC" onClick={() => printDc(d.dc_no)}><Printer size={13} /></button>
+                <button className="ml-2 text-ink-secondary hover:text-ink" title="Print DC" data-dc-print={d.dc_no} onClick={() => setPdfDc(d.dc_no)}><Printer size={13} /></button>
               </td>
             </tr>
           ))}
@@ -241,6 +226,7 @@ export function YarnProcessDcPanel({ process, yarns, parties, warehouses, onChan
           <div className="sm:pt-6"><Checkbox label="Post to yarn stock now (QC passed)" checked={inw.post_stock} disabled={inw.qc_status !== 'PASSED'} onChange={(v: boolean) => setInw({ ...inw, post_stock: v })} /></div>
         </FormSection>
       </Modal>
+      {pdfDc && <DocPdfModal url={`/yarn-process-dcs/${encodeURIComponent(pdfDc)}/print`} title={`Yarn process DC ${pdfDc}`} idPrefix="ypdc-old" onClose={() => setPdfDc(null)} />}
     </div>
   );
 }

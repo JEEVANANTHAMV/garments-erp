@@ -34,12 +34,13 @@ export async function renderYarnProcessDcPdf(o: {
   const hasCone = lines.some((l) => l.cone_no);
   const hasGrn = lines.some((l) => l.grn_no);
   const hasShade = lines.some((l) => l.shade);
+  const hasDye = lines.some((l) => l.target_shade);
   const columns: Column[] = [
     { key: 'sn', label: 'S.No', align: 'center', wrap: false },
     { key: 'io', label: 'IO No', bold: true, weight: 0.8, maxWidth: 120 },
     { key: 'yarn', label: 'Yarn', weight: 2.2 },
-    ...(hasShade || h.dyeing ? [{ key: 'shade', label: h.dyeing ? 'Yarn Colour' : 'Shade', weight: 0.7 } as Column] : []),
-    ...(h.dyeing ? [{ key: 'dye', label: 'Dye Colour', weight: 0.7 } as Column] : []),
+    ...(hasShade ? [{ key: 'shade', label: h.dyeing ? 'Yarn Colour' : 'Shade', weight: 0.7 } as Column] : []),
+    ...(h.dyeing && hasDye ? [{ key: 'dye', label: 'Dye Colour', weight: 0.7 } as Column] : []),
     { key: 'lot', label: 'Lot No.', weight: 0.5, maxWidth: 90 },
     ...(hasCone ? [{ key: 'cone', label: 'Cone No.', weight: 0.5, maxWidth: 90 } as Column] : []),
     { key: 'cones', label: 'Cones', align: 'right', wrap: false },

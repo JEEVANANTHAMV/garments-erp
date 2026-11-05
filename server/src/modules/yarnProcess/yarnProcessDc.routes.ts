@@ -10,6 +10,9 @@ import { s } from '../resources/schemas.js';
 import { assertEditable } from '../../core/processEngine.js';
 import { assertIssuable, insertProcessIssue } from './processFlow.routes.js';
 import { assertJobLots, resolveSoId } from '../stock/jobStock.routes.js';
+import { renderYarnProcessDcPdf } from './yarnProcessDcPrint.js';
+import { loadPrintCompany, resolvePrintTemplate } from '../../core/print/printCompany.js';
+import { countDcPrint, dcPrintQuery, dmy, docEway, istNowText, partyForPrint, printedBy, reprintLabel, sendPdf } from '../../core/print/dcPrint.js';
 
 /**
  * Yarn process DC — outward to the dyer / winder / twister and inward back
@@ -166,6 +169,47 @@ yarnProcessDcRouter.get('/yarn-process-dcs', requirePermission('PRODUCTION.VIEW'
   });
   const open = String(req.query.status ?? '') === 'OPEN';
   res.json({ success: true, data: open ? data.filter((d) => d.pending_kg > 0) : data });
+}));
+
+/**
+ * GET /yarn-process-dcs/:dcNo/print — the (older, per-process) yarn process DC as an A4 PDF on the shared print engine
+ * (client 05-Nov-2026). ?template=colour|bw, ?purpose=preview|print|download (print / download counted, 2nd+ = "Reprint n").
+ */
+yarnProcessDcRouter.get('/yarn-process-dcs/:dcNo/print', requirePermission('PRODUCTION.VIEW'), ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const dcNo = String(req.params.dcNo);
+  const q = dcPrintQuery.parse(req.query);
+  const lines = await query<any>(
+    `SELECT i.*, y.yarn_code, y.yarn_name, w.warehouse_name, p.party_name AS vendor_name, p.gstin AS vendor_gstin, g.grn_no,
+            yp.process_no, yp.process_type, yp.io_no AS process_io_no, so.buyer_po_no
+       FROM trx_process_issue i
+       LEFT JOIN mst_yarn y ON y.id = i.yarn_id
+       LEFT JOIN mst_warehouse w ON w.id = i.warehouse_id
+       LEFT JOIN mst_party p ON p.id = i.vendor_id
+       LEFT JOIN trx_grn_line gl ON gl.id = i.grn_line_id LEFT JOIN trx_grn g ON g.id = gl.grn_id
+       LEFT JOIN trx_yarn_process yp ON yp.id = i.src_id
+       LEFT JOIN trx_sales_order so ON so.id = yp.so_id
+      WHERE i.company_id = ? AND i.dc_no = ? AND i.src_type = 'YARN_PROCESS' ORDER BY i.src_id, i.id`, [cid, dcNo]);
+  if (!lines.length) throw NotFound(`Yarn process DC ${dcNo} not found`);
+  const l0 = lines[0];
+  const received = await queryOne<any>(`SELECT COALESCE(SUM(input_qty), 0) kg FROM trx_process_receipt WHERE company_id = ? AND ref_dc_no = ? AND src_type = 'YARN_PROCESS'`, [cid, dcNo]);
+  const issued = lines.reduce((a, l) => a + num(l.issued_qty_kg), 0);
+  const status = num(received?.kg) <= 0 ? 'ISSUED' : issued - num(received?.kg) > 0.0005 ? 'PARTIAL_RECEIVED' : 'RECEIVED';
+  const [company, party, eway, template, by] = await Promise.all([
+    loadPrintCompany(cid), partyForPrint(cid, l0.vendor_id), docEway(cid, null, Number(l0.id), { docNo: dcNo, vehicle: l0.vehicle_no }),
+    resolvePrintTemplate(cid, q.template), printedBy(req),
+  ]);
+  const no = await countDcPrint(req, 'trx_process_issue', Number(l0.id), dcNo, q.purpose, true);
+  const proc = PROC_LABEL[l0.process_type] ?? l0.process_type ?? 'Yarn Process';
+  const pdf = await renderYarnProcessDcPdf({
+    template, company, party, eway, reprint: reprintLabel(no), printedAt: istNowText(), printedBy: by, meta: 'Yarn Process DC',
+    h: { dc_no: dcNo, dc_date: dmy(l0.issue_date), status, process: proc, dyeing: l0.process_type === 'YARN_DYEING',
+      vendor_name: l0.vendor_name, vendor_gstin: l0.vendor_gstin, from_store: l0.warehouse_name, vehicle_no: l0.vehicle_no, issued_status: ['ISSUED'] },
+    // the old challan printed "code name" for the yarn and "lot (GRN)" — kept
+    lines: lines.map((l) => ({ io_no: l.io_no ?? l.process_io_no ?? null, buyer_po_no: l.buyer_po_no, process_no: l.process_no,
+      yarn: [l.yarn_code, l.yarn_name].filter(Boolean).join(' '), lot_no: l.lot_no, cones: num(l.no_of_cones), grn_no: l.grn_no, kg: num(l.issued_qty_kg) })),
+  });
+  sendPdf(res, pdf, dcNo, q);
 }));
 
 /** DC detail: lines grouped by job with each job's receipts and pending KG (inward is job-wise). */
