@@ -101,6 +101,9 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
     columns = [sn, ...(anyJob ? [io] : []), { key: 'item', label: 'Particulars', weight: 3 }, gst, qty, rate, amt];
     cells = (l) => ({ item: { text: l.description, sub: subLines(l, anyJob), bold: true } });
   }
+  // IO No / Style columns drop out only when no line has one (stock / general purchases)
+  const anyStyle = doc.lines.some((l) => l.style);
+  columns = columns.filter((c) => (c.key !== 'io' || anyJob) && (c.key !== 'style' || anyStyle));
   const rows: Cell[][] = doc.lines.map((l, i) => {
     const base: Record<string, Cell> = {
       sn: String(i + 1), io: l.job ?? '', style: l.style ?? '', gst: l.gstRate ? fmtPct(l.gstRate) : '', qty: qtyText(l),
