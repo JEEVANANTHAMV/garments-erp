@@ -44,12 +44,11 @@ function subLines(l: PoLine, ioInColumn: boolean) {
 /** HEADER_HIDDEN: per-line facts that must not print in the PO header (client 06-Nov-2026). */
 const HEADER_HIDDEN = /^(IO No|IO \/ Job No|Style|Order type)$/i;
 
-/** "30 Days Net" / "30 days credit" / "Net 30" → "30 Days"; anything else as typed. */
+/** "30 Days Net" → "30 Days", "30 days credit" → "30 days", "Net 30" → "30 Days"; anything else as typed. */
 export function paymentTermsText(v: string): string {
   const t = v.replace(/\b(net|credit)\b/gi, ' ').replace(/\s{2,}/g, ' ').replace(/^[\s,-]+|[\s,-]+$/g, '').trim();
   if (!t) return v.trim();
-  if (/^\d+$/.test(t)) return `${t} Days`;
-  return t.replace(/\b(\d+)\s*days?\b/gi, (_m, d) => `${d} Days`);
+  return /^\d+$/.test(t) ? `${t} Days` : t;   // otherwise exactly as typed (only Net / Credit dropped)
 }
 
 /** A typed address block: its first line prints bold as the name when it reads like one (no door / pin numbers). */
