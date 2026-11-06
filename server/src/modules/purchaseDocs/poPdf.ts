@@ -9,7 +9,7 @@
  * several IOs / styles, so neither prints in the header; no item codes; the typed description / specification and
  * the HSN print under the item):
  *   yarn    S.No | IO No | Style | Yarn | Count | Weight (KG) | Rate | Amount
- *   fabric  S.No | IO No | Style | Fabric | Colour | GST % | Qty | Rate | Amount
+ *   fabric  S.No | IO No | Style | Fabric Description | Colour | GST % | Qty | Rate | Amount
  *   trim    S.No | IO No | Style | Trims & Accessories | Colour | Size | GST % | Qty | Rate | Amount
  *   general S.No | [IO No] | Particulars | GST % | Qty | Rate | Amount
  * Header details: PO No / date / delivery date / payment terms (days only — "30 Days", not "30 Days Net") /
@@ -90,7 +90,7 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
       qty: kgOnly ? fmtQty(l.qty) : qtyText(l),
     });
   } else if (doc.type === 'fabric') {
-    columns = [sn, io, style, { key: 'item', label: 'Fabric', weight: 3 }, { key: 'color', label: 'Colour', weight: 0.8, maxWidth: 110 }, gst, qty, rate, amt];
+    columns = [sn, io, style, { key: 'item', label: 'Fabric Description', weight: 3 }, { key: 'color', label: 'Colour', weight: 0.8, maxWidth: 110 }, gst, qty, rate, amt];
     cells = (l) => ({ item: { text: l.description, sub: subLines(l, true), bold: true }, color: l.color ?? '' });
   } else if (doc.type === 'trim') {
     columns = [sn, io, style, { key: 'item', label: 'Trims & Accessories', weight: 3 }, { key: 'color', label: 'Colour', weight: 0.8, maxWidth: 100 },
@@ -100,12 +100,11 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
     columns = [sn, ...(anyJob ? [io] : []), { key: 'item', label: 'Particulars', weight: 3 }, gst, qty, rate, amt];
     cells = (l) => ({ item: { text: l.description, sub: subLines(l, anyJob), bold: true } });
   }
-  // IO No / Style columns drop out only when no line has one (stock / general purchases)
-  const anyStyle = doc.lines.some((l) => l.style);
-  columns = columns.filter((c) => (c.key !== 'io' || anyJob) && (c.key !== 'style' || anyStyle));
+  // yarn / fabric / trim POs ALWAYS print the IO No + Style columns ("-" when a line has none) — client 06-Nov-2026;
+  // only the general PO adds its IO column on demand (above)
   const rows: Cell[][] = doc.lines.map((l, i) => {
     const base: Record<string, Cell> = {
-      sn: String(i + 1), io: l.job ?? '', style: l.style ?? '', gst: l.gstRate ? fmtPct(l.gstRate) : '', qty: qtyText(l),
+      sn: String(i + 1), io: l.job || '-', style: l.style || '-', gst: l.gstRate ? fmtPct(l.gstRate) : '', qty: qtyText(l),
       rate: fmtRate(l.rate), amt: money(l.taxable), ...cells(l, i),
     };
     return columns.map((c) => base[c.key] ?? '');
