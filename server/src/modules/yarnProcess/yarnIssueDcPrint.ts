@@ -15,8 +15,10 @@ export interface KnitDcPrint {
   dc: {
     dc_no: string; dc_date: string; doc_status: string; contractor: string | null; contractor_address: string | null;
     contractor_gstin: string | null; contractor_phone?: string | null; vehicle_no: string | null; purpose: string | null; cancel_reason?: string | null;
+    /** typed on the DC — printed under the grid (client 06-Nov-2026: whatever is typed prints) */
+    remarks?: string | null;
   };
-  lines: { io_no: string; program_no: string | null; program_fabric: string | null; yarn: string; lot_no: string | null; cones: number; net_kg: number }[];
+  lines: { io_no: string; program_no: string | null; program_fabric: string | null; yarn: string; lot_no: string | null; cones: number; net_kg: number; remarks?: string | null }[];
   eway: null | {
     eway_bill_no: string | null; date_text: string | null; valid_until_text: string | null; expired: boolean; distance_km: number | null;
     transport_mode: string | null; transporter_name: string | null; transporter_gstin: string | null; vehicle_no: string | null;
@@ -91,7 +93,8 @@ export async function renderKnitDcPdf(d: KnitDcPrint): Promise<Buffer> {
         String(i + 1),
         l.io_no || '-',
         { text: l.program_no || '-', bold: true, sub: l.program_fabric ? [`Fabric: ${l.program_fabric}`] : null },
-        yarnNameForPrint(l.yarn) || '-',
+        // the line's typed remarks print under the yarn (client 06-Nov-2026)
+        { text: yarnNameForPrint(l.yarn) || '-', sub: l.remarks ? [String(l.remarks)] : null },
         l.lot_no ?? '',
         fmtInt(l.cones),
         fmtKg(l.net_kg),
@@ -102,7 +105,7 @@ export async function renderKnitDcPdf(d: KnitDcPrint): Promise<Buffer> {
       },
       emptyText: 'No yarn on this DC',
     },
-    summary: null,
+    summary: d.dc.remarks?.trim() ? { notes: [['Remarks', d.dc.remarks.trim()]] } : null,
     signatures: [{ label: 'Prepared By' }, { label: 'Checked By' }, { label: 'Received By (Contractor)' }],
     watermark: stamp,
     reprint: d.print.reprint_no > 1 ? `Reprint ${d.print.reprint_no}` : null,

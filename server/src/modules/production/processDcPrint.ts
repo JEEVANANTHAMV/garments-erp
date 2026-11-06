@@ -66,6 +66,8 @@ export async function renderProcessDcPdf(o: {
       const items = uniq(g.rows.map((l) => [l.style_code, l.description, l.part].filter(Boolean).join(' · ')));
       const assort = uniq(g.rows.map((l) => l.assort_color));
       const ops = uniq(g.rows.map((l) => l.operation_name));
+      // whatever was typed on the DC lines prints under the item (client 06-Nov-2026)
+      const notesTyped = uniq(g.rows.map((l) => String(l.remarks ?? '').trim()).filter(Boolean));
       const qty = g.rows.reduce((a, l) => a + n(l.qty), 0);
       const w = g.rows.reduce((a, l) => a + n(l.weight_kg), 0);
       rows.push(row({
@@ -73,7 +75,7 @@ export async function renderProcessDcPdf(o: {
         io: gi === 0
           ? { text: io === '—' ? '-' : io, sub: [m.buyer_name, m.buyer_po_no ? `PO ${m.buyer_po_no}` : null].filter(Boolean) as string[] }
           : (io === '—' ? '-' : io),
-        item: { text: items.join('\n') || '-', sub: [...(assort.length ? [`Assort: ${assort.join(', ')}`] : []), ...(ops.length ? [`Operation: ${ops.join(', ')}`] : [])] },
+        item: { text: items.join('\n') || '-', sub: [...(assort.length ? [`Assort: ${assort.join(', ')}`] : []), ...(ops.length ? [`Operation: ${ops.join(', ')}`] : []), ...notesTyped] },
         color: g.color === '—' ? '-' : g.color,
         size: g.size === '—' ? '-' : g.size,
         bundles: g.rows.map((l) => (l.bundle_no ? `${l.bundle_no} (${int(n(l.qty))})` : null)).filter(Boolean).join(', ') || '-',

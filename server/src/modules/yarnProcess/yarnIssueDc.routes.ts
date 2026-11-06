@@ -647,10 +647,10 @@ async function pdfData(cid: number, id: number, printedBy: string | null, reprin
     company,
     dc: { dc_no: h.dc_no, dc_date: dcDate, doc_status: h.doc_status, contractor: h.contractor_name_snapshot ?? h.vendor_name ?? null,
       contractor_address: h.contractor_address_snapshot ?? party?.address ?? null, contractor_gstin: h.contractor_gstin_snapshot ?? h.vendor_gstin ?? null,
-      contractor_phone: phone?.phone ?? null, vehicle_no: h.vehicle_no ?? null, purpose: h.purpose ?? DEFAULT_PURPOSE, cancel_reason: h.cancel_reason ?? null },
+      contractor_phone: phone?.phone ?? null, vehicle_no: h.vehicle_no ?? null, purpose: h.purpose ?? DEFAULT_PURPOSE, cancel_reason: h.cancel_reason ?? null, remarks: h.remarks ?? null },
     // IO No of the program (else the job snapshot), the program no + the program's fabric, the yarn name as on the DC
     lines: lines.map((l) => ({ io_no: l.io_no ?? l.job_no_snapshot ?? '', program_no: l.program_no ?? null, program_fabric: l.fabric_description_snapshot ?? null,
-      yarn: l.yarn_description_snapshot ?? l.yarn_name ?? '', lot_no: l.lot_no ?? null, cones: n(l.cones), net_kg: n(l.net_weight_kg) })),
+      yarn: l.yarn_description_snapshot ?? l.yarn_name ?? '', lot_no: l.lot_no ?? null, cones: n(l.cones), net_kg: n(l.net_weight_kg), remarks: l.remarks ?? null })),
     // e-way bill block only when the DC needs one (spec §15.3 / §16.3: no empty panel); QR only from the verified payload
     eway: e && e.is_required ? {
       eway_bill_no: e.eway_bill_no ?? null, date_text: v.eway_bill_datetime_text ?? null, valid_until_text: v.valid_until_text ?? null, expired: v.expired,
