@@ -8,7 +8,7 @@
  * Columns per PO type ("IO No", never "Job No"; client 06-Nov-2026: IO No + Style per line — one PO carries
  * several IOs / styles, so neither prints in the header; no item codes; the typed description / specification and
  * the HSN print under the item):
- *   yarn    S.No | IO No | Style | Yarn | Count | Weight (KG) | Rate | Amount
+ *   yarn    S.No | IO No | Style | Yarn Description | Count | Weight (KG) | Rate | Amount
  *   fabric  S.No | IO No | Style | Fabric Description | Colour | GST % | Qty | Rate | Amount
  *   trim    S.No | IO No | Style | Trims & Accessories | Colour | Size | GST % | Qty | Rate | Amount
  *   general S.No | [IO No] | Particulars | GST % | Qty | Rate | Amount
@@ -82,7 +82,7 @@ export function poDocSpec(doc: PoDocument, opts: PoPdfOptions): DocSpec {
   let cells: (l: PoLine, i: number) => Record<string, Cell>;
   if (doc.type === 'yarn') {
     const kgOnly = doc.lines.every((l) => !l.uom || /^kgs?$/i.test(l.uom));
-    columns = [sn, io, style, { key: 'item', label: 'Yarn', weight: 3 }, { key: 'count', label: 'Count', align: 'center', wrap: false },
+    columns = [sn, io, style, { key: 'item', label: 'Yarn Description', weight: 3 }, { key: 'count', label: 'Count', align: 'center', wrap: false },
       { ...qty, label: kgOnly ? 'Weight (KG)' : 'Weight / Qty' }, rate, amt];
     cells = (l) => ({
       item: { text: l.description, sub: subLines(l, true), bold: true },
