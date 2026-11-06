@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Save, UserCog, ShieldCheck, Building2, Users, ArrowRightLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, Save, UserCog, ShieldCheck, Building2, Users, ArrowRightLeft, Upload } from 'lucide-react';
 import clsx from 'clsx';
 import { DataTable } from '../../components/DataTable';
 import {
@@ -265,6 +265,70 @@ export function RolesPage() {
         )}
       </Modal>
     </>
+  );
+}
+
+/* ----------------------------------------------- Company logo (client 06-Nov-2026: printed on every PO / DC) */
+const LOGO_MAX_BYTES = 1024 * 1024;
+function CompanyLogoBox({ logoPath, onChange }: { logoPath: string | null; onChange: (row: any) => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [bust, setBust] = useState(0);
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/i.test(file.type)) { toast('Choose a PNG or JPG image', 'error'); return; }
+    if (file.size > LOGO_MAX_BYTES) { toast('The logo must be 1 MB or smaller', 'error'); return; }
+    setBusy(true);
+    try {
+      const data = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = () => reject(new Error('Could not read the file'));
+        r.readAsDataURL(file);
+      });
+      const res = await http.post<{ data: any }>('/admin/company/logo', { filename: file.name, data });
+      onChange(res.data);
+      setBust(Date.now());
+      toast('Logo saved — it prints on every PO and DC');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Could not upload the logo', 'error');
+    } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!window.confirm('Remove the company logo from all prints?')) return;
+    setBusy(true);
+    try {
+      const res = await http.del<{ data: any }>('/admin/company/logo');
+      onChange(res.data);
+      toast('Logo removed');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Could not remove the logo', 'error');
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-4 rounded border border-surface-border p-3" data-testid="company-logo-box">
+      <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded border border-surface-border bg-surface-alt">
+        {logoPath
+          ? <img src={`${logoPath}${bust ? `?v=${bust}` : ''}`} alt="Company logo" className="max-h-full max-w-full object-contain" data-testid="company-logo-img" />
+          : <Building2 size={28} className="text-ink-muted" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-body font-semibold text-ink">Company logo</div>
+        <div className="text-caption text-ink-muted">Printed on the left of every purchase order and delivery challan. PNG or JPG, up to 1 MB; a square logo prints best.</div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <label className={clsx('btn-secondary cursor-pointer', busy && 'pointer-events-none opacity-60')}>
+          {busy ? <Spinner size={14} /> : <Upload size={14} />} {logoPath ? 'Change logo' : 'Upload logo'}
+          <input type="file" accept="image/png,image/jpeg" className="hidden" data-testid="company-logo-input"
+            onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} />
+        </label>
+        {logoPath && (
+          <button type="button" className="btn-secondary" onClick={() => void remove()} disabled={busy}>
+            <Trash2 size={14} /> Remove
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -599,6 +663,14 @@ export function CompanyPage() {
               Editing: {company?.legal_name} ({company?.company_code})
             </h3>
           </div>
+          <CompanyLogoBox
+            logoPath={v.logo_path ?? null}
+            onChange={(row) => {
+              setV((x) => ({ ...x, logo_path: row?.logo_path ?? null }));
+              void qc.invalidateQueries({ queryKey: ['admin/company'] });
+              void qc.invalidateQueries({ queryKey: ['admin/companies'] });
+            }}
+          />
           <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { k: 'company_code', label: 'Company code', disabled: true },

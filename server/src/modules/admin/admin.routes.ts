@@ -1,7 +1,10 @@
 import { Router, type Request } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { query, queryOne, transaction, txExecute, txQuery, txQueryOne } from '../../config/db.js';
+import { query, queryOne, execute, transaction, txExecute, txQuery, txQueryOne } from '../../config/db.js';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Forbidden, Conflict } from '../../core/errors.js';
 import { requirePermission, requireAny } from '../../middleware/auth.js';
@@ -743,6 +746,56 @@ adminRouter.put('/company', requirePermission('COMPANY.UPDATE'), ah(async (req, 
   });
   await audit(req, 'mst_company', targetId, 'UPDATE', before, after);
   res.json({ data: after });
+}));
+
+// ======================================================== COMPANY LOGO (client 06-Nov-2026: logo on every PO / DC print)
+// PNG / JPEG only (checked by content, not the name), max 1 MB, must load in the PDF engine; saved under
+// uploads/company-logos/ and written to mst_company.logo_path (printCompany.logoFile reads it for every print).
+const LOGO_MAX = 1024 * 1024;
+const logoBody = z.object({ filename: z.string().trim().max(200).default('logo.png'), data: z.string().min(16).max(Math.ceil(LOGO_MAX * 1.4) + 100) });
+
+adminRouter.post('/company/logo', requirePermission('COMPANY.UPDATE'), ah(async (req, res) => {
+  const targetId = req.query.company_id ? z.coerce.number().int().positive().parse(req.query.company_id) : req.user!.companyId;
+  assertCanManageCompany(req, targetId);
+  const { data } = logoBody.parse(req.body);
+  const b64 = data.replace(/^data:[^;,]+;base64,/, '');
+  if (!/^[A-Za-z0-9+/=\s]+$/.test(b64)) throw BadRequest('The logo must be sent as a base64 image');
+  const buf = Buffer.from(b64, 'base64');
+  if (!buf.length) throw BadRequest('The logo file is empty');
+  if (buf.length > LOGO_MAX) throw BadRequest('The logo must be 1 MB or smaller');
+  const isPng = buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isJpg = buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  if (!isPng && !isJpg) throw BadRequest('The logo must be a PNG or JPG image');
+  // the print engine must be able to draw it (pdfkit rejects e.g. interlaced / odd PNGs)
+  try {
+    const { default: PDFDocument } = await import('pdfkit');
+    const probe = new PDFDocument({ autoFirstPage: true });
+    probe.image(buf, 0, 0, { fit: [50, 50] });
+    probe.end();
+  } catch {
+    throw BadRequest('This image cannot be printed — please save it again as a normal PNG or JPG and retry');
+  }
+  const before = await queryOne<any>(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
+  if (!before) throw NotFound('Company not found');
+  const dir = path.resolve(process.cwd(), 'uploads', 'company-logos');
+  fs.mkdirSync(dir, { recursive: true });
+  const name = `company_${targetId}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}${isPng ? '.png' : '.jpg'}`;
+  fs.writeFileSync(path.join(dir, name), buf);
+  const logoPath = `/uploads/company-logos/${name}`;
+  await execute(`UPDATE mst_company SET logo_path = ?, updated_by = ? WHERE id = ?`, [logoPath, req.user!.id, targetId]);
+  const after = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
+  await audit(req, 'mst_company', targetId, 'UPDATE', { logo_path: before.logo_path }, { logo_path: logoPath });
+  res.status(201).json({ data: after });
+}));
+
+adminRouter.delete('/company/logo', requirePermission('COMPANY.UPDATE'), ah(async (req, res) => {
+  const targetId = req.query.company_id ? z.coerce.number().int().positive().parse(req.query.company_id) : req.user!.companyId;
+  assertCanManageCompany(req, targetId);
+  const before = await queryOne<any>(`SELECT logo_path FROM mst_company WHERE id = ?`, [targetId]);
+  if (!before) throw NotFound('Company not found');
+  await execute(`UPDATE mst_company SET logo_path = NULL, updated_by = ? WHERE id = ?`, [req.user!.id, targetId]);
+  await audit(req, 'mst_company', targetId, 'UPDATE', { logo_path: before.logo_path }, { logo_path: null });
+  res.json({ data: await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [targetId]) });
 }));
 
 // ======================================================== NOTIFICATIONS
