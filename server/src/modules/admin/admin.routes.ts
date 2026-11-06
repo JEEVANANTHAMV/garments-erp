@@ -462,7 +462,10 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
   if (!req.user!.isSuperAdmin && !req.user!.permissions.has('COMPANY.CREATE')) {
     throw Forbidden('Creating a new company requires COMPANY.CREATE or Super Administrator');
   }
-  const body = companyCreateSchema.parse(req.body);
+  const { logo: logoUpload, ...createBody } = req.body ?? {};
+  const body = companyCreateSchema.parse(createBody);
+  // optional logo (06-Nov-2026) — checked before the company is created, stored right after
+  const logo = logoUpload ? await parseLogo(logoData.parse(logoUpload)) : null;
   if (body.gstin) {
     const g = body.gstin.toUpperCase();
     if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)) throw BadRequest('GSTIN must be 15 characters, e.g. 33ABCDE1234F1Z5');
@@ -612,6 +615,7 @@ adminRouter.post('/companies', requireAny('COMPANY.CREATE', 'COMPANY.VIEW'), ah(
     return { ...row, setup };
   });
 
+  if (logo) (created as any).logo_path = await storeLogo(Number((created as any).id), logo, req.user!.id);
   await audit(req, 'mst_company', (created as any).id, 'INSERT', undefined, created);
   res.status(201).json({ data: created });
 }));
@@ -752,12 +756,11 @@ adminRouter.put('/company', requirePermission('COMPANY.UPDATE'), ah(async (req, 
 // PNG / JPEG only (checked by content, not the name), max 1 MB, must load in the PDF engine; saved under
 // uploads/company-logos/ and written to mst_company.logo_path (printCompany.logoFile reads it for every print).
 const LOGO_MAX = 1024 * 1024;
-const logoBody = z.object({ filename: z.string().trim().max(200).default('logo.png'), data: z.string().min(16).max(Math.ceil(LOGO_MAX * 1.4) + 100) });
+const logoData = z.string().min(16).max(Math.ceil(LOGO_MAX * 1.4) + 100);
+const logoBody = z.object({ filename: z.string().trim().max(200).default('logo.png'), data: logoData });
 
-adminRouter.post('/company/logo', requirePermission('COMPANY.UPDATE'), ah(async (req, res) => {
-  const targetId = req.query.company_id ? z.coerce.number().int().positive().parse(req.query.company_id) : req.user!.companyId;
-  assertCanManageCompany(req, targetId);
-  const { data } = logoBody.parse(req.body);
+/** Checks an uploaded logo (base64 / data URI): PNG or JPG by content, ≤ 1 MB, drawable by the PDF engine. */
+async function parseLogo(data: string): Promise<{ buf: Buffer; ext: '.png' | '.jpg' }> {
   const b64 = data.replace(/^data:[^;,]+;base64,/, '');
   if (!/^[A-Za-z0-9+/=\s]+$/.test(b64)) throw BadRequest('The logo must be sent as a base64 image');
   const buf = Buffer.from(b64, 'base64');
@@ -775,14 +778,28 @@ adminRouter.post('/company/logo', requirePermission('COMPANY.UPDATE'), ah(async 
   } catch {
     throw BadRequest('This image cannot be printed — please save it again as a normal PNG or JPG and retry');
   }
-  const before = await queryOne<any>(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
-  if (!before) throw NotFound('Company not found');
+  return { buf, ext: isPng ? '.png' : '.jpg' };
+}
+
+/** Writes a checked logo under uploads/company-logos/ and sets mst_company.logo_path; returns the path. */
+async function storeLogo(companyId: number, logo: { buf: Buffer; ext: string }, userId: number): Promise<string> {
   const dir = path.resolve(process.cwd(), 'uploads', 'company-logos');
   fs.mkdirSync(dir, { recursive: true });
-  const name = `company_${targetId}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}${isPng ? '.png' : '.jpg'}`;
-  fs.writeFileSync(path.join(dir, name), buf);
+  const name = `company_${companyId}_${Date.now()}_${crypto.randomBytes(3).toString('hex')}${logo.ext}`;
+  fs.writeFileSync(path.join(dir, name), logo.buf);
   const logoPath = `/uploads/company-logos/${name}`;
-  await execute(`UPDATE mst_company SET logo_path = ?, updated_by = ? WHERE id = ?`, [logoPath, req.user!.id, targetId]);
+  await execute(`UPDATE mst_company SET logo_path = ?, updated_by = ? WHERE id = ?`, [logoPath, userId, companyId]);
+  return logoPath;
+}
+
+adminRouter.post('/company/logo', requirePermission('COMPANY.UPDATE'), ah(async (req, res) => {
+  const targetId = req.query.company_id ? z.coerce.number().int().positive().parse(req.query.company_id) : req.user!.companyId;
+  assertCanManageCompany(req, targetId);
+  const { data } = logoBody.parse(req.body);
+  const logo = await parseLogo(data);
+  const before = await queryOne<any>(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
+  if (!before) throw NotFound('Company not found');
+  const logoPath = await storeLogo(targetId, logo, req.user!.id);
   const after = await queryOne(`SELECT * FROM mst_company WHERE id = ?`, [targetId]);
   await audit(req, 'mst_company', targetId, 'UPDATE', { logo_path: before.logo_path }, { logo_path: logoPath });
   res.status(201).json({ data: after });
