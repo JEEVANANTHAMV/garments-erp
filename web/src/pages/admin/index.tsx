@@ -270,7 +270,8 @@ export function RolesPage() {
 
 /* ----------------------------------------------- Company logo (client 06-Nov-2026: printed on every PO / DC) */
 const LOGO_MAX_BYTES = 1024 * 1024;
-function CompanyLogoBox({ logoPath, onChange }: { logoPath: string | null; onChange: (row: any) => void }) {
+function CompanyLogoBox({ logoPath, companyId, onChange }: { logoPath: string | null; companyId: number | null; onChange: (row: any) => void }) {
+  const qs = companyId ? `?company_id=${companyId}` : '';
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [bust, setBust] = useState(0);
@@ -286,7 +287,7 @@ function CompanyLogoBox({ logoPath, onChange }: { logoPath: string | null; onCha
         r.onerror = () => reject(new Error('Could not read the file'));
         r.readAsDataURL(file);
       });
-      const res = await http.post<{ data: any }>('/admin/company/logo', { filename: file.name, data });
+      const res = await http.post<{ data: any }>(`/admin/company/logo${qs}`, { filename: file.name, data });
       onChange(res.data);
       setBust(Date.now());
       toast('Logo saved — it prints on every PO and DC');
@@ -298,7 +299,7 @@ function CompanyLogoBox({ logoPath, onChange }: { logoPath: string | null; onCha
     if (!window.confirm('Remove the company logo from all prints?')) return;
     setBusy(true);
     try {
-      const res = await http.del<{ data: any }>('/admin/company/logo');
+      const res = await http.del<{ data: any }>(`/admin/company/logo${qs}`);
       onChange(res.data);
       toast('Logo removed');
     } catch (e) {
@@ -307,7 +308,7 @@ function CompanyLogoBox({ logoPath, onChange }: { logoPath: string | null; onCha
   };
   return (
     <div className="mb-5 flex flex-wrap items-center gap-4 rounded border border-surface-border p-3" data-testid="company-logo-box">
-      <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded border border-surface-border bg-surface-alt">
+      <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded border border-surface-border bg-surface-muted">
         {logoPath
           ? <img src={`${logoPath}${bust ? `?v=${bust}` : ''}`} alt="Company logo" className="max-h-full max-w-full object-contain" data-testid="company-logo-img" />
           : <Building2 size={28} className="text-ink-muted" />}
@@ -354,6 +355,9 @@ export function CompanyPage() {
   const toast = useToast();
   const qc = useQueryClient();
   const [tab, setTab] = useState<'all' | 'active'>('all');
+  // company being edited on the details tab: null = the signed-in company; another id = super admin editing it
+  const [editCompanyId, setEditCompanyId] = useState<number | null>(null);
+  const [newLogo, setNewLogo] = useState<{ name: string; data: string } | null>(null);
   const [v, setV] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -392,10 +396,16 @@ export function CompanyPage() {
     queryFn: async () => (await http.get<{ data: any[] }>('/admin/companies')).data,
   });
 
+  const editQs = editCompanyId && editCompanyId !== company?.id ? `?company_id=${editCompanyId}` : '';
   const detail = useQuery({
-    queryKey: ['admin/company'],
-    queryFn: async () => (await http.get<{ data: any }>('/admin/company')).data,
+    queryKey: ['admin/company', editQs],
+    queryFn: async () => (await http.get<{ data: any }>(`/admin/company${editQs}`)).data,
   });
+  const openEdit = (id: number | null) => {
+    setEditCompanyId(id && id !== company?.id ? id : null);
+    setLoaded(false);
+    setTab('active');
+  };
 
   const allUsers = useQuery({
     queryKey: ['admin/users/all-for-mapping'],
@@ -420,7 +430,7 @@ export function CompanyPage() {
   const saveActive = async () => {
     setBusy(true);
     try {
-      await http.put('/admin/company', v);
+      await http.put(`/admin/company${editQs}`, v);
       toast('Company settings saved');
       void qc.invalidateQueries({ queryKey: ['admin/company'] });
       void qc.invalidateQueries({ queryKey: ['admin/companies'] });
@@ -440,7 +450,7 @@ export function CompanyPage() {
     }
     setCreateBusy(true);
     try {
-      const r = await http.post<{ data: { setup?: Record<string, number> } }>('/admin/companies', newCompany);
+      const r = await http.post<{ data: { setup?: Record<string, number> } }>('/admin/companies', newLogo ? { ...newCompany, logo: newLogo.data } : newCompany);
       const setup = r.data?.setup ?? {};
       const total = Object.values(setup).reduce((a, n) => a + Number(n || 0), 0);
       toast(`Company created and set up (${total} setup records). Use Switch to open it.`);
@@ -479,6 +489,7 @@ export function CompanyPage() {
             <button
               className="btn-primary"
               onClick={() => {
+                setNewLogo(null);
                 setNewCompany({
                   company_code: '',
                   legal_name: '',
@@ -514,10 +525,10 @@ export function CompanyPage() {
       <Tabs
         tabs={[
           { key: 'all', label: 'All Companies / நிறுவனங்கள்', count: companiesList.data?.length },
-          { key: 'active', label: `Active Company Settings (${company?.company_code ?? ''})` },
+          { key: 'active', label: `Company Details (${(detail.data?.company_code ?? company?.company_code) ?? ''})` },
         ]}
         active={tab}
-        onChange={(k) => setTab(k as 'all' | 'active')}
+        onChange={(k) => { if (k === 'active' && tab !== 'active') openEdit(null); else setTab(k as 'all' | 'active'); }}
       />
 
       {tab === 'all' && (
@@ -606,6 +617,14 @@ export function CompanyPage() {
                   const isCurrent = r.id === company?.id;
                   return (
                     <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {(isCurrent || !!user?.isSuperAdmin) && (
+                        <button type="button" data-co-edit={r.id}
+                          onClick={() => openEdit(r.id)}
+                          className="btn-secondary !px-2.5 !py-1 text-small gap-1 hover:border-brand-500 hover:text-brand-700"
+                          title="Edit company details and logo">
+                          <Pencil size={12} /> Edit
+                        </button>
+                      )}
                       {!isCurrent && !!user?.isSuperAdmin && !!r.is_active && (
                         <button type="button" data-co-provision={r.id}
                           onClick={() => void completeSetup(r)}
@@ -660,11 +679,12 @@ export function CompanyPage() {
           <div className="mb-4 flex items-center gap-2 border-b border-surface-border pb-3">
             <Building2 size={18} className="text-brand-600" />
             <h3 className="text-body-lg font-semibold text-ink">
-              Editing: {company?.legal_name} ({company?.company_code})
+              Editing: {v.legal_name ?? company?.legal_name} ({v.company_code ?? company?.company_code})
             </h3>
           </div>
           <CompanyLogoBox
             logoPath={v.logo_path ?? null}
+            companyId={editQs ? editCompanyId : null}
             onChange={(row) => {
               setV((x) => ({ ...x, logo_path: row?.logo_path ?? null }));
               void qc.invalidateQueries({ queryKey: ['admin/company'] });
@@ -725,6 +745,32 @@ export function CompanyPage() {
         }
       >
         <div className="space-y-4 py-1">
+          <div className="flex flex-wrap items-center gap-4 rounded border border-surface-border p-3" data-testid="new-company-logo">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded border border-surface-border bg-surface-muted">
+              {newLogo ? <img src={newLogo.data} alt="New company logo" className="max-h-full max-w-full object-contain" /> : <Building2 size={24} className="text-ink-muted" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-body font-semibold text-ink">Company logo (optional)</div>
+              <div className="text-caption text-ink-muted">{newLogo ? newLogo.name : 'Printed on every PO and DC. PNG or JPG, up to 1 MB — can also be added later via Edit.'}</div>
+            </div>
+            <div className="flex gap-2">
+              <label className="btn-secondary cursor-pointer">
+                <Upload size={14} /> {newLogo ? 'Change' : 'Choose logo'}
+                <input type="file" accept="image/png,image/jpeg" className="hidden" data-testid="new-company-logo-input"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!f) return;
+                    if (!/^image\/(png|jpe?g)$/i.test(f.type)) { toast('Choose a PNG or JPG image', 'error'); return; }
+                    if (f.size > LOGO_MAX_BYTES) { toast('The logo must be 1 MB or smaller', 'error'); return; }
+                    const rd = new FileReader();
+                    rd.onload = () => setNewLogo({ name: f.name, data: String(rd.result) });
+                    rd.readAsDataURL(f);
+                  }} />
+              </label>
+              {newLogo && <button type="button" className="btn-secondary" onClick={() => setNewLogo(null)}><Trash2 size={14} /> Remove</button>}
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="label font-semibold text-ink">Company Code * (e.g. TEX02)</label>
