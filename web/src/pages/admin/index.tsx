@@ -612,11 +612,11 @@ export function CompanyPage() {
                 key: '__actions',
                 header: '',
                 align: 'right',
-                width: 'w-48',
+                width: 'w-[19rem]',
                 render: (r: any) => {
                   const isCurrent = r.id === company?.id;
                   return (
-                    <div className="ml-auto flex max-w-[15rem] flex-wrap justify-end gap-1.5 whitespace-normal" onClick={(e) => e.stopPropagation()}>
+                    <div className="ml-auto flex max-w-[19rem] flex-wrap justify-end gap-1.5 whitespace-normal" onClick={(e) => e.stopPropagation()}>
                       {(isCurrent || !!user?.isSuperAdmin) && (
                         <button type="button" data-co-edit={r.id}
                           onClick={() => openEdit(r.id)}
