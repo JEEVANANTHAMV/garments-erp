@@ -1,6 +1,6 @@
 /**
  * Shared bits for every Delivery Challan PDF on the print engine (docPdf.ts) — client voice notes 05-Nov-2026:
- * one design for all DCs, billing (us) + shipping (the party / processor / unit) always printed and never empty,
+ * one design for all DCs, the supplier block with its address (no billing / shipping boxes — 06-Nov-2026),
  * Prepared By / Checked By / Received By, e-way bill details (+ QR only from a verified provider payload),
  * IO No (never Job No), no rate / amount (except a valued challan, decided by the caller).
  *
@@ -14,7 +14,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { query, queryOne, execute } from '../../config/db.js';
-import { companyAddressLines } from './printCompany.js';
 import type { EwaySpec, PartyBlock, PrintCompany } from './docPdf.js';
 
 const str = (v: unknown) => { const t = String(v ?? '').trim(); return t || null; };
@@ -99,18 +98,16 @@ export const partyIdLines = (p: { gstin?: string | null; phone?: string | null; 
 export const addressText = (v: unknown) => String(v ?? '').split(/\n/).map((x) => x.trim()).filter(Boolean);
 
 /**
- * The two address blocks every DC prints: billing = our company; shipping / delivery = the given name + lines,
- * falling back to our own name + address (as the knitting DC) so it is never empty.
+ * The party block of a DC (client 06-Nov-2026): no billing / shipping boxes on a DC — the supplier (process unit,
+ * contractor …) prints with its own address, GSTIN and phone; the e-way bill panel takes the old address row.
+ * No party / item codes on any DC or PO.
  */
-export function dcAddresses(company: PrintCompany, ship: { heading?: string; name?: string | null; lines?: string[]; gstin?: string | null } | null): [PartyBlock, PartyBlock] {
-  const lines = [...(ship?.lines ?? [])];
-  if (ship?.gstin && lines.length && !lines.some((l) => l.includes(ship.gstin!))) lines.push(`GSTIN: ${ship.gstin}`);
-  const has = lines.length > 0;
-  return [
-    { heading: 'Billing Address', name: company.name, lines: companyAddressLines(company) },
-    { heading: ship?.heading ?? 'Shipping / Delivery Address', name: has ? (ship?.name || company.name) : company.name,
-      lines: has ? lines : companyAddressLines(company) },
-  ];
+export function dcParty(heading: string, name: string | null | undefined, p: { address?: string[] | null; gstin?: string | null; phone?: string | null } | null): PartyBlock {
+  const lines = [...(p?.address ?? [])].map((x) => String(x ?? '').trim()).filter(Boolean);
+  const gstin = str(p?.gstin);
+  if (gstin && !lines.some((l) => l.includes(gstin))) lines.push(`GSTIN: ${gstin}`);
+  if (str(p?.phone)) lines.push(`Ph: ${str(p?.phone)}`);
+  return { heading, name: str(name) ?? '-', lines };
 }
 
 /** QR content only from a verified source: a QR string inside an official provider response (never MANUAL entry). */

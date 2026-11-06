@@ -9,7 +9,7 @@
  * goods came back).
  */
 import { renderDocPdf, type Cell, type Column, type EwaySpec, type PrintCompany, type PrintTemplate } from '../../core/print/docPdf.js';
-import { dcAddresses, dmy, humanStatus, partyIdLines, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
+import { dcParty, dmy, humanStatus, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
 const q3 = (v: number) => v.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
@@ -37,7 +37,7 @@ export async function renderDeliveryDcPdf(o: {
     const sub = [desc, [l.color_name ? `Colour: ${l.color_name}` : null, l.sizes ? `Sizes: ${l.sizes}` : null].filter(Boolean).join(' · ') || null,
       l.remarks ? `Note: ${l.remarks}` : null].filter(Boolean) as string[];
     const v: Record<string, Cell> = {
-      sn: String(i + 1), io: l.io_no || h.so_no || '-', item: { text: String(l.item_name || l.item_description || '-'), sub },
+      sn: String(i + 1), io: h.style_code && (!l.io_no || l.io_no === h.so_no) ? { text: l.io_no || h.so_no || '-', sub: `Style ${h.style_code}` } : (l.io_no || h.so_no || '-'), item: { text: String(l.item_name || l.item_description || '-'), sub },
       qty: q3(n(l.qty)), uom: l.uom_code || '', ret: q3(n(l.returned_qty)), bal: q3(n(l.qty) - n(l.returned_qty)),
     };
     return keys.map((k) => v[k] ?? '');
@@ -49,8 +49,7 @@ export async function renderDeliveryDcPdf(o: {
   const type = returnable ? 'Returnable' : `Non-returnable · ${Number(h.is_billable) ? 'Billable' : 'Non-billable (FOC)'}`;
   const details: [string, string][] = [['DC No.', h.doc_no], ['DC Date', dmy(h.doc_date)], ['DC Type', type]];
   if (h.party_dc_no) details.push(['Party DC No.', String(h.party_dc_no)]);
-  if (h.so_no) details.push(['IO No', String(h.so_no)]);
-  if (h.style_code) details.push(['Style', String(h.style_code)]);
+  // IO No / style are per line (a DC can carry several), never in the header (06-Nov-2026)
   if (h.warehouse_name) details.push(['From Location', String(h.warehouse_name)]);
   if (returnable && h.expected_return_date) details.push(['Return By', dmy(h.expected_return_date)]);
   details.push(['Vehicle No.', h.vehicle_no || '-']);
@@ -70,11 +69,10 @@ export async function renderDeliveryDcPdf(o: {
     title: 'DELIVERY CHALLAN',
     subtitle: `${general ? 'General Delivery' : 'Stock Delivery'} – ${returnable ? 'Returnable' : 'Non-returnable'}`,
     docNoLabel: 'DC No.', docNo: h.doc_no,
-    party: { heading: 'Delivered to (Party)', name: h.party_name ?? party?.name ?? '-', lines: partyIdLines(party) },
+    party: dcParty('Delivered To', h.party_name ?? party?.name, party),
     details,
     barcode: live ? { value: h.doc_no, caption: 'Scan at gate' } : null,
     banner: h.status === 'CANCELLED' && h.cancel_reason ? `CANCELLED — ${h.cancel_reason}` : null,
-    addresses: dcAddresses(co, { name: h.party_name ?? party?.name, lines: party?.address ?? [], gstin: party?.gstin }),
     eway: o.eway,
     // one UOM: a total row; mixed UOMs: the totals per UOM go in the notes
     table: { columns, rows, total: oneUom ? { label: 'Total', values: { qty: q3([...byUom.values()][0] ?? 0), uom: [...byUom.keys()][0] ?? '',

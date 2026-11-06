@@ -8,7 +8,7 @@
  * Dye Colour (dyeing only) | Lot No. | Cone No. | Cones | GRN No. | Wt (KG). Job totals when the DC has several jobs.
  */
 import { renderDocPdf, type Cell, type Column, type EwaySpec, type PrintCompany, type PrintTemplate } from '../../core/print/docPdf.js';
-import { dcAddresses, humanStatus, partyIdLines, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
+import { dcParty, humanStatus, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
 const kg = (v: number) => v.toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -101,13 +101,12 @@ export async function renderYarnProcessDcPdf(o: {
     title: 'DELIVERY CHALLAN',
     subtitle: `Yarn Process – ${h.process}`,
     docNoLabel: 'DC No.', docNo: h.dc_no,
-    party: { heading: 'Issued to (Process Unit)', name: h.vendor_name ?? party?.name ?? '-', lines: partyIdLines({ gstin: party?.gstin ?? h.vendor_gstin, phone: party?.phone }) },
+    // supplier = the process unit with its address (party master), else the DC's "to process location" (06-Nov-2026)
+    party: dcParty('Supplier', h.vendor_name ?? party?.name, { address: party?.address?.length ? party.address : (h.to_location ? [h.to_location] : []), gstin: party?.gstin ?? h.vendor_gstin, phone: party?.phone }),
     details,
     // the gate scans the DC No. (Code 128) — the old challan carried the same barcode
     barcode: live ? { value: h.dc_no, caption: 'Scan at gate' } : null,
     banner: h.status === 'CANCELLED' && h.cancel_reason ? `CANCELLED — ${h.cancel_reason}` : null,
-    // delivery: the process unit's address (party master), else the DC's "to process location", else ours
-    addresses: dcAddresses(co, { name: h.vendor_name, lines: party?.address?.length ? party.address : (h.to_location ? [h.to_location] : []), gstin: party?.gstin ?? h.vendor_gstin }),
     eway: o.eway,
     table: { columns, rows, total: { label: 'Grand Total', values: { cones: int(totCones), kg: kg(totKg) } }, emptyText: 'No yarn on this DC' },
     summary: { notes },

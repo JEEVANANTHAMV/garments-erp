@@ -8,7 +8,6 @@
  * stored / bought — no composition percentages) | Lot No. | Cones | Net Wt (KG). No rate, amount or gross weight.
  */
 import { renderDocPdf, type EwaySpec, type PrintCompany, type PrintTemplate } from '../../core/print/docPdf.js';
-import { companyAddressLines } from '../../core/print/printCompany.js';
 
 export interface KnitDcPrint {
   template: PrintTemplate;
@@ -44,10 +43,7 @@ export async function renderKnitDcPdf(d: KnitDcPrint): Promise<Buffer> {
   const co = d.company;
   const stamp = d.dc.doc_status === 'CANCELLED' ? 'CANCELLED' : d.dc.doc_status === 'DRAFT' ? 'DRAFT' : null;
   const contractorLines = [d.dc.contractor_gstin ? `GSTIN: ${d.dc.contractor_gstin}` : null, d.dc.contractor_phone ? `Ph: ${d.dc.contractor_phone}` : null].filter(Boolean) as string[];
-  // delivery address: the contractor's (as on the DC), never empty — falls back to our own address
-  const deliveryLines = d.dc.contractor_address
-    ? [...d.dc.contractor_address.split('\n').map((x) => x.trim()).filter(Boolean), ...contractorLines.filter((l) => l.startsWith('GSTIN'))]
-    : companyAddressLines(co);
+  const contractorAddress = String(d.dc.contractor_address ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
   const e = d.eway;
   const eway: EwaySpec | null = e ? {
     title: 'E-Way Bill',
@@ -74,15 +70,12 @@ export async function renderKnitDcPdf(d: KnitDcPrint): Promise<Buffer> {
     title: 'DELIVERY CHALLAN',
     subtitle: 'Knitting – Yarn Issue',
     docNoLabel: 'DC No.', docNo: d.dc.dc_no,
-    party: { heading: 'Issued to (Knitting Contractor)', name: d.dc.contractor ?? '-', lines: contractorLines },
+    // supplier = the knitting contractor with its address (as on the DC); no billing / shipping boxes (06-Nov-2026)
+    party: { heading: 'Supplier', name: d.dc.contractor ?? '-', lines: [...contractorAddress, ...contractorLines] },
     details,
     // the gate scans the DC No. (Code 128) to load the DC — approved DCs only
     barcode: d.dc.doc_status === 'APPROVED' ? { value: d.dc.dc_no, caption: 'Scan at gate' } : null,
     banner: d.dc.doc_status === 'CANCELLED' && d.dc.cancel_reason ? `CANCELLED — ${d.dc.cancel_reason}` : null,
-    addresses: [
-      { heading: 'Billing Address', name: co.name, lines: companyAddressLines(co) },
-      { heading: 'Shipping / Delivery Address', name: d.dc.contractor_address ? (d.dc.contractor ?? co.name) : co.name, lines: deliveryLines },
-    ],
     eway,
     table: {
       columns: [

@@ -1,7 +1,8 @@
 /**
  * ONE print engine for every business document (POs, DCs, invoices …) — client voice notes 05-Nov-2026:
  * "same design for everything", light professional colours (or classic black & white), OUR company logo + name +
- * address on top, no software branding, billing AND shipping address always printed, three signature panels,
+ * address on top, no software branding, billing AND shipping address on POs (DCs print only the supplier's own
+ * address + the e-way bill — 06-Nov-2026), title in a centred band under the company, three signature panels,
  * nothing ever cut (columns size to their content, text wraps, rows grow, pages break), e-way bill QR only from a
  * verified payload. A4 portrait, built-in Helvetica (clean, Tally-like; amounts say "Rs." / the currency code).
  *
@@ -20,7 +21,7 @@
  *                                                         // key / value pairs; the FIRST one is printed large
  *     barcode: { value: 'FDC-00012', caption: 'Scan at gate' },    // optional Code 128 under the details
  *     banner: 'CANCELLED — wrong lot',                    // optional one-line notice under the title band
- *     addresses: [                                        // ALWAYS two blocks: billing | shipping / delivery
+ *     addresses: [                                        // POs: billing | shipping / delivery (DCs: omit — 06-Nov)
  *       { heading: 'BILLING ADDRESS', name: company.name, lines: companyAddressLines(company) },
  *       { heading: 'SHIPPING / DELIVERY ADDRESS', name: party.name, lines: [...] },
  *     ],
@@ -116,7 +117,8 @@ export interface DocSpec {
   details: KV[];
   barcode?: { value: string; caption?: string } | null;
   banner?: string | null;
-  addresses: [PartyBlock, PartyBlock];
+  /** billing | shipping blocks (POs). DCs leave it out — the party block carries the supplier's address. */
+  addresses?: [PartyBlock, PartyBlock] | null;
   eway?: EwaySpec | null;
   table: TableSpec;
   summary?: SummarySpec | null;
@@ -224,48 +226,52 @@ function drawLogo(c: Ctx, x: number, y: number, size: number): boolean {
   try { c.pdf.image(c.s.company.logoFile, x, y, { fit: [size, size], align: 'center', valign: 'center' }); return true; } catch { return false; }
 }
 
+/**
+ * Colour header (client 06-Nov-2026): logo on the left, our company name / address / contact centred, and the
+ * document title moved off the top-right corner into a centred band under the rule ("PURCHASE ORDER · Yarn").
+ */
 function headerColour(c: Ctx) {
   const { pdf, th, s } = c;
   const co = s.company;
-  let y = M;
-  const LOGO = 50;
-  const hasLogo = drawLogo(c, X0, y, LOGO);
-  const tx = X0 + (hasLogo ? LOGO + 10 : 0);
-  pdf.font(B).fontSize(14);
-  const tW = pdf.widthOfString(T(s.title));
-  pdf.font(R).fontSize(9);
-  const titleW = Math.min(220, Math.max(110, tW, s.subtitle ? pdf.widthOfString(T(s.subtitle)) : 0) + 4);
-  const tw = X1 - titleW - 12 - tx;
-  pdf.font(B).fontSize(15).fillColor(th.accent).text(T(co.name), tx, y, { width: tw, lineGap: LG });
-  if (co.tradeName) pdf.font(R).fontSize(8).fillColor(th.muted).text(T(`(${co.tradeName})`), tx, pdf.y, { width: tw });
-  pdf.font(R).fontSize(8.4).fillColor(th.ink).text(T(co.address.join(', ')), tx, pdf.y + 2, { width: tw, lineGap: LG });
+  const y0 = M;
+  const LOGO = 52;
+  const hasLogo = drawLogo(c, X0, y0, LOGO);
+  const inset = hasLogo ? LOGO + 12 : 0;   // symmetric, so the text stays centred on the page
+  const tx = X0 + inset;
+  const tw = W - 2 * inset;
+  pdf.font(B).fontSize(15).fillColor(th.accent).text(T(co.name), tx, y0, { width: tw, align: 'center', lineGap: LG });
+  if (co.tradeName) pdf.font(R).fontSize(8).fillColor(th.muted).text(T(`(${co.tradeName})`), tx, pdf.y, { width: tw, align: 'center' });
+  pdf.font(R).fontSize(8.4).fillColor(th.ink).text(T(co.address.join(', ')), tx, pdf.y + 2, { width: tw, align: 'center', lineGap: LG });
   // contact items packed into lines without splitting an item ("GSTIN … | PAN … | Ph …" / "e-mail")
   pdf.font(R).fontSize(8.2).fillColor(th.muted);
-  const items = companyContact(co);
   const packed: string[] = [];
-  for (const it of items) {
+  for (const it of companyContact(co)) {
     const cur = packed.length ? `${packed[packed.length - 1]}   |   ${it}` : it;
     if (packed.length && pdf.widthOfString(T(cur)) <= tw) packed[packed.length - 1] = cur; else packed.push(it);
   }
-  if (packed.length) pdf.text(T(packed.join('\n')), tx, pdf.y + 1, { width: tw, lineGap: LG });
-  const leftBottom = pdf.y;
-  // document title (right)
-  pdf.font(B).fontSize(14).fillColor(th.accent).text(T(s.title), X1 - titleW, y + 2, { width: titleW, align: 'right', lineGap: LG });
-  if (s.subtitle) pdf.font(R).fontSize(9).fillColor(th.muted).text(T(s.subtitle), X1 - titleW, pdf.y + 1, { width: titleW, align: 'right' });
-  const rightBottom = pdf.y;
-  y = Math.max(leftBottom, rightBottom, hasLogo ? M + LOGO : 0) + 6;
+  if (packed.length) pdf.text(T(packed.join('\n')), tx, pdf.y + 1, { width: tw, align: 'center', lineGap: LG });
+  let y = Math.max(pdf.y, hasLogo ? y0 + LOGO : 0) + 6;
   hline(c, X0, X1, y, th.accent, 1.1);
-  if (th.gold) hline(c, X0, X0 + 80, y + 2, th.gold, 1);
-  c.y = y + 10;
+  if (th.gold) hline(c, A4_W / 2 - 40, A4_W / 2 + 40, y + 2, th.gold, 1);
+  y += 7;
+  // title band
+  const BAND = 20;
+  pdf.save().roundedRect(X0, y, W, BAND, th.radius).fill(th.soft).restore();
+  pdf.font(B).fontSize(11.5);
+  const tW = pdf.widthOfString(T(s.title), { characterSpacing: 0.8 });
+  const sub = s.subtitle ? `   ·   ${s.subtitle}` : '';
+  pdf.font(R).fontSize(9.4);
+  const sW = sub ? pdf.widthOfString(T(sub)) : 0;
+  const x = X0 + Math.max(0, (W - tW - sW) / 2);
+  pdf.font(B).fontSize(11.5).fillColor(th.accent).text(T(s.title), x, y + 5, { lineBreak: false, characterSpacing: 0.8 });
+  if (sub) pdf.font(R).fontSize(9.4).fillColor(th.muted).text(T(sub), x + tW, y + 6.4, { lineBreak: false });
+  c.y = y + BAND + th.gap;
 }
 
 function headerBw(c: Ctx) {
   const { pdf, th, s } = c;
   const co = s.company;
-  let y = M + 5;
-  const title = s.subtitle ? `${s.title} — ${s.subtitle}` : s.title;
-  pdf.font(B).fontSize(9.5).fillColor(th.ink).text(T(title.toUpperCase()), X0, y, { width: W, align: 'center', underline: true });
-  y = pdf.y + 4;
+  let y = M + 6;
   const LOGO = 46;
   const hasLogo = drawLogo(c, X0 + 6, y, LOGO);
   const inset = hasLogo ? LOGO + 14 : 10;
@@ -278,7 +284,12 @@ function headerBw(c: Ctx) {
   pdf.font(B).fontSize(8.4).text(T(left), X0 + 6, y, { width: W / 2 - 6 });
   const lb = pdf.y;
   pdf.font(B).fontSize(8.4).text(T(right), X0 + W / 2, y, { width: W / 2 - 6, align: 'right' });
-  c.y = Math.max(lb, pdf.y) + 4;
+  y = Math.max(lb, pdf.y) + 3;
+  // title strip under the company (client 06-Nov-2026: not in the top corner)
+  hline(c, X0, X1, y);
+  const title = s.subtitle ? `${s.title} — ${s.subtitle}` : s.title;
+  pdf.font(B).fontSize(10).fillColor(th.ink).text(T(title.toUpperCase()), X0, y + 4, { width: W, align: 'center', characterSpacing: 0.5 });
+  c.y = pdf.y + 3;
 }
 
 /** Page 2+: company, title, doc no and page x/y (page numbers are written once the count is known). */
@@ -413,7 +424,7 @@ function addressBox(c: Ctx) {
   const pad = 8;
   const top = c.y;
   const half = W / 2;
-  const [a, b] = s.addresses;
+  const [a, b] = s.addresses!;
   const hb = Math.max(partyLines(c, a, X0 + pad, top + pad, half - 2 * pad, true), partyLines(c, b, X0 + half + pad, top + pad, half - 2 * pad, true));
   const h = hb - top + pad - 2;
   box(c, X0, top, W, h, th.boxed ? null : null);
@@ -747,7 +758,7 @@ export async function renderDocPdf(s: DocSpec): Promise<Buffer> {
     if (th.boxed) headerBw(c); else headerColour(c);
     titleBand(c);
     detailsBox(c);
-    addressBox(c);
+    if (s.addresses) addressBox(c);
     if (s.eway) await ewayBox(c);
 
     // ---------------- table

@@ -11,7 +11,7 @@
  * Pkgs (rolls / cones / bags) | Qty | UOM | Rate | Taxable Value.
  */
 import { renderDocPdf, type Cell, type EwaySpec, type PrintCompany, type PrintTemplate } from '../../core/print/docPdf.js';
-import { dcAddresses, dmy, humanStatus, partyIdLines, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
+import { dcParty, dmy, humanStatus, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
 import { amountInWords, fmtMoney } from '../../core/print/printText.js';
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
@@ -76,12 +76,11 @@ export async function renderPurchaseReturnDcPdf(o: {
     title: 'DELIVERY CHALLAN',
     subtitle: 'Purchase Return',
     docNoLabel: 'DC No.', docNo: dcNo,
-    party: { heading: 'Returned to (Supplier)', name: pr.supplier_name ?? party?.name ?? '-', lines: partyIdLines(party, true) },
+    party: dcParty('Supplier', pr.supplier_name ?? party?.name, party),
     details,
     // the gate scans the DC No. to make the outward pass
     barcode: !draft && pr.status !== 'CANCELLED' ? { value: dcNo, caption: 'Scan at gate' } : null,
     banner: draft ? 'Return DC not generated yet — not valid for dispatch' : null,
-    addresses: dcAddresses(co, { name: pr.supplier_name ?? party?.name, lines: party?.address ?? [], gstin: party?.gstin }),
     eway: o.eway,
     table: {
       columns: [

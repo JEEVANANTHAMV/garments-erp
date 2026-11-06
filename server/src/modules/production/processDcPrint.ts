@@ -11,7 +11,7 @@
  * No rate / amount: the job-work rate is the processing charge, not the goods value (not a valued challan).
  */
 import { renderDocPdf, type Cell, type Column, type PrintCompany, type PrintTemplate } from '../../core/print/docPdf.js';
-import { dcAddresses, dmy, humanStatus, partyIdLines, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
+import { dcParty, dmy, humanStatus, statusWatermark, type PrintParty } from '../../core/print/dcPrint.js';
 import type { EwaySpec } from '../../core/print/docPdf.js';
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
@@ -122,7 +122,6 @@ export async function renderProcessDcPdf(o: {
   if (dc.expected_return) details.push(['Expected Return', dmy(dc.expected_return)]);
   if (dc.status !== 'ISSUED') details.push(['Status', humanStatus(dc.status)]);
 
-  const partyName = `${dc.vendor_name ?? '-'}${dc.vendor_code ? ` (${dc.vendor_code})` : ''}`;
   const shipLines = isUnit
     ? [dc.unit_address, dc.unit_city].map((x) => String(x ?? '').trim()).filter(Boolean)
     : party?.address ?? [];
@@ -134,12 +133,12 @@ export async function renderProcessDcPdf(o: {
     title: 'DELIVERY CHALLAN',
     subtitle: `Job Work – ${stage || 'Process'}${isUnit ? ' (In-house Unit)' : ''}`,
     docNoLabel: 'DC No.', docNo: dc.challan_no,
-    party: { heading: `Issued to (${role})`, name: partyName, lines: isUnit ? [] : partyIdLines({ gstin: party?.gstin ?? dc.vendor_gstin, phone: party?.phone ?? dc.vendor_phone }) },
+    // supplier (or our in-house unit) with its address; no party code, no billing / shipping boxes (06-Nov-2026)
+    party: dcParty(isUnit ? 'Unit' : 'Supplier', dc.vendor_name, { address: shipLines, gstin: isUnit ? null : (party?.gstin ?? dc.vendor_gstin), phone: isUnit ? null : (party?.phone ?? dc.vendor_phone) }),
     details,
     // the gate scans the DC No. (Code 128) to load the DC into the gate pass
     barcode: dc.status !== 'DRAFT' && dc.status !== 'CANCELLED' ? { value: dc.challan_no, caption: 'Scan at gate' } : null,
     banner: dc.status === 'CANCELLED' && dc.cancel_reason ? `CANCELLED — ${dc.cancel_reason}` : null,
-    addresses: dcAddresses(co, { name: dc.vendor_name, lines: shipLines, gstin: isUnit ? null : (party?.gstin ?? dc.vendor_gstin) }),
     eway: o.eway,
     table: { columns, rows, total: { label: 'Grand Total', values: totalValues }, emptyText: 'No items on this DC' },
     summary: { notes },

@@ -34,6 +34,8 @@ export interface PoLine {
   /** Yarn POs print the count in its own column. */
   count?: string | null;
   size?: string | null;
+  /** Style of the line (line style → its IO's style(s) → the PO's style) — printed per line, never in the header. */
+  style?: string | null;
 }
 
 export interface PoDocument {
@@ -128,6 +130,21 @@ async function soJobs(ids: unknown[]): Promise<Map<number, string>> {
   return new Map(rows.map((r) => [Number(r.id), String(r.io_no || r.so_no)]));
 }
 
+/** Style code(s) of each sales order ("F3037" / "F3037, F3040"), for the per-line Style column. */
+async function soStyles(ids: unknown[]): Promise<Map<number, string>> {
+  const clean = [...new Set(ids.map(Number).filter((x) => x > 0))];
+  if (!clean.length) return new Map();
+  const rows = await query<any>(
+    `SELECT sl.so_id, GROUP_CONCAT(DISTINCT st.style_code ORDER BY st.style_code SEPARATOR ', ') AS styles
+       FROM trx_sales_order_line sl JOIN mst_style st ON st.id = sl.style_id
+      WHERE sl.so_id IN (?) GROUP BY sl.so_id`, [clean]);
+  return new Map(rows.filter((r) => str(r.styles)).map((r) => [Number(r.so_id), String(r.styles)]));
+}
+
+/** A line's style: its own, else its IO's, else the PO header's (when the line is for the PO's IO / no IO). */
+const lineStyle = (l: any, po: any, styles: Map<number, string>) =>
+  str(l.line_style_code) ?? styles.get(Number(l.so_id)) ?? (!Number(l.so_id) || Number(l.so_id) === Number(po.so_id) ? str(po.style_code) : null);
+
 /** Supplier e-mail suggestions: purchase contacts first, then the party e-mail, primary contact, address e-mails. */
 export async function supplierEmails(supplierId: number, companyId: number): Promise<string[]> {
   const p = await queryOne<any>(`SELECT email FROM mst_party WHERE id = ? AND company_id = ?`, [supplierId, companyId]);
@@ -184,8 +201,9 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
 
   const rows = await query<any>(
     `SELECT l.*, u.code AS uom_code, y.yarn_name, y.hsn_code AS yarn_hsn, f.fabric_name, f.hsn_code AS fabric_hsn,
-            tr.trim_name, tr.hsn_code AS trim_hsn, c.color_name AS master_color, dm.party_name AS dyeing_mill
+            tr.trim_name, tr.hsn_code AS trim_hsn, c.color_name AS master_color, dm.party_name AS dyeing_mill, ls.style_code AS line_style_code
        FROM trx_purchase_order_line l
+       LEFT JOIN mst_style ls ON ls.id = l.style_id
        LEFT JOIN cfg_uom u ON u.id = l.uom_id
        LEFT JOIN mst_yarn y ON y.id = l.yarn_id
        LEFT JOIN mst_fabric f ON f.id = l.fabric_id
@@ -194,6 +212,7 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
        LEFT JOIN mst_party dm ON dm.id = l.dyeing_mill_id
       WHERE l.po_id = ? ORDER BY l.id`, [id]);
   const jobs = await soJobs(rows.map((r) => r.so_id));
+  const styles = await soStyles(rows.map((r) => r.so_id));
   const headerJob = str(po.io_no) ?? str(po.so_no) ?? str(po.internal_ir_no);
   const interstate = !!Number(po.is_interstate);
 
@@ -239,6 +258,7 @@ async function loadMaterialPo(type: 'yarn' | 'fabric', id: number, cid: number):
       taxable, gstRate, tax: lineTax(taxable, gstRate, storedTax),
       count: l.material_type === 'YARN' ? str(l.yarn_count_str) : null,
       color: l.material_type === 'FABRIC' ? (str(l.color_name) ?? str(l.master_color)) : null,
+      style: lineStyle(l, po, styles),
     };
   });
 
@@ -282,16 +302,17 @@ async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
       WHERE t.id = ? AND t.company_id = ?`, [id, cid]);
   if (!po) throw NotFound('Trim purchase order not found');
   const rows = await query<any>(
-    `SELECT l.*, tr.trim_name, tr.trim_code, tr.trim_type, tr.hsn_code AS trim_hsn, u.code AS uom_code
+    `SELECT l.*, tr.trim_name, tr.trim_code, tr.trim_type, tr.hsn_code AS trim_hsn, u.code AS uom_code, ls.style_code AS line_style_code
        FROM trx_trim_po_line l
+       LEFT JOIN mst_style ls ON ls.id = l.style_id
        LEFT JOIN mst_trim tr ON tr.id = l.trim_id
        LEFT JOIN cfg_uom u ON u.id = l.uom_id
       WHERE l.po_id = ? ORDER BY l.id`, [id]);
   const jobs = await soJobs(rows.map((r) => r.so_id));
+  const styles = await soStyles(rows.map((r) => r.so_id));
   const interstate = !!Number(po.is_interstate);
   const lines: PoLine[] = rows.map((l) => {
-    const details: string[] = [];
-    if (str(l.trim_code) && l.trim_code !== l.trim_name) details.push(`Code: ${l.trim_code}`);
+    const details: string[] = [];   // no item code on any PO / DC (client 06-Nov-2026) — the typed specification prints
     if (str(l.specification)) details.push(String(l.specification));
     const taxable = r2(num(l.amount) || num(l.order_qty) * num(l.rate));
     const gstRate = interstate ? (num(l.igst_rate) || num(l.gst_rate)) : num(l.gst_rate);
@@ -300,7 +321,7 @@ async function loadTrimPo(id: number, cid: number): Promise<PoDocument> {
       job: jobs.get(Number(l.so_id)) ?? str(po.io_no),
       hsn: str(l.trim_hsn), qty: num(l.order_qty), uom: String(l.uom_code ?? ''), rate: num(l.rate),
       taxable, gstRate, tax: lineTax(taxable, gstRate, num(l.tax_amount) || num(l.igst_amount)),
-      color: str(l.color_name), size: str(l.trim_size),
+      color: str(l.color_name), size: str(l.trim_size), style: lineStyle(l, po, styles),
     };
   });
   const status = String(po.status || 'APPROVED').toUpperCase();
