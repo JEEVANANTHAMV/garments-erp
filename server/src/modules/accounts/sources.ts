@@ -1,7 +1,7 @@
 import { query, queryOne, transaction, txQuery, txQueryOne, execute, type Tx } from '../../config/db.js';
 import { AppError, Unprocessable } from '../../core/errors.js';
 import {
-  createVoucher, ledgerForRole, partyLedger, bankLedger, r2, sourceKey,
+  createVoucher, ledgerForRole, partyLedger, bankLedger, repairPartyGroups, r2, sourceKey,
   type EntryInput, type VoucherInput, type VoucherType, type Actor,
 } from './voucherEngine.js';
 import { POSTING_EVENTS, ensureAccountsSetup } from './accountsSetup.js';
@@ -543,6 +543,7 @@ export interface ScanResult { created: number; issues: number; byEvent: Record<s
 /** Scan every enabled event of a company for final documents without a voucher. */
 export async function scanCompany(cid: number, userId: number | null, only?: string[]): Promise<ScanResult> {
   await ensureAccountsSetup(cid);
+  await transaction((tx) => repairPartyGroups(tx, cid));
   const rs = await rules(cid);
   const res: ScanResult = { created: 0, issues: 0, byEvent: {} };
   for (const s of SOURCES) {

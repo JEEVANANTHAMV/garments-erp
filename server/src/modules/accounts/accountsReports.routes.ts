@@ -204,10 +204,10 @@ accountsReportsRouter.get('/outstanding', VIEW, ah(async (req, res) => {
         MIN(IF(e.bill_ref_type = 'NEW', v.voucher_date, NULL)) bill_date, MAX(IF(e.bill_ref_type = 'NEW', e.bill_due_date, NULL)) due_date,
         MIN(v.voucher_date) first_date, ROUND(SUM(e.debit - e.credit), 2) amount, ROUND(SUM(COALESCE(e.fc_amount,0) * IF(e.debit > 0, 1, -1)), 2) fc
        FROM acc_voucher_entry e JOIN acc_voucher v ON v.id = e.voucher_id JOIN acc_ledger l ON l.id = e.ledger_id
-       JOIN acc_account_group g ON g.id = l.group_id
-      WHERE v.company_id = ? AND ${POSTED} AND v.voucher_date <= ? AND (g.group_code = ? OR l.party_id IS NOT NULL)
+       JOIN acc_account_group g ON g.id = l.group_id LEFT JOIN acc_account_group pg ON pg.id = g.parent_id
+      WHERE v.company_id = ? AND ${POSTED} AND v.voucher_date <= ? AND (g.group_code = ? OR pg.group_code = ?)
       GROUP BY l.id, l.ledger_name, e.bill_ref_no, e.bill_ref_type
-      HAVING ABS(amount) >= 0.01`, [cid, asOf, grp]);
+      HAVING ABS(amount) >= 0.01`, [cid, asOf, grp, grp]);
   // merge NEW + AGAINST of the same bill
   const bills = new Map<string, any>();
   for (const r of rows) {
@@ -224,7 +224,8 @@ accountsReportsRouter.get('/outstanding', VIEW, ah(async (req, res) => {
   }
   // opening balances of party ledgers = on account
   const ops = await query<any>(`SELECT l.id, l.ledger_name, IF(l.opening_dr_cr = 'DR', l.opening_balance, -l.opening_balance) amt, DATE_FORMAT(l.opening_date,'%Y-%m-%d') d
-      FROM acc_ledger l JOIN acc_account_group g ON g.id = l.group_id WHERE l.company_id = ? AND l.opening_balance <> 0 AND (g.group_code = ? OR l.party_id IS NOT NULL)`, [cid, grp]);
+      FROM acc_ledger l JOIN acc_account_group g ON g.id = l.group_id LEFT JOIN acc_account_group pg ON pg.id = g.parent_id
+     WHERE l.company_id = ? AND l.opening_balance <> 0 AND (g.group_code = ? OR pg.group_code = ?)`, [cid, grp, grp]);
   for (const o of ops) bills.set(`${o.id}|OPENING`, { ledger_id: o.id, ledger_name: o.ledger_name, bill_ref_no: 'Opening balance', kind: 'OPENING', bill_date: o.d, due_date: null, amount: r2(o.amt), fc: 0 });
   const sign = kind === 'payables' ? -1 : 1;   // payables shown positive when we owe (credit)
   const asOfT = new Date(`${asOf}T00:00:00Z`).getTime();
@@ -234,7 +235,6 @@ accountsReportsRouter.get('/outstanding', VIEW, ah(async (req, res) => {
     return { ...b, pending: r2(b.amount * sign), age_days: days, overdue_days: overdue != null && overdue > 0 ? overdue : 0,
       bucket: days <= 30 ? '0-30' : days <= 60 ? '31-60' : days <= 90 ? '61-90' : days <= 180 ? '91-180' : '180+' };
   });
-  // party filter: only parties of the right side (a buyer ledger never shows in payables unless it has a credit bill)
   const parties = new Map<number, { ledger_id: number; ledger_name: string; pending: number; buckets: Record<string, number> }>();
   for (const b of out) {
     const p = parties.get(b.ledger_id) ?? { ledger_id: b.ledger_id, ledger_name: b.ledger_name, pending: 0, buckets: {} as Record<string, number> };

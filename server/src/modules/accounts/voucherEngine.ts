@@ -82,16 +82,21 @@ export async function ledgerForRole(tx: Tx, cid: number, role: string): Promise<
 }
 
 /**
- * The party's ledger (one per party, bill-wise). Created on first use under Sundry Creditors (supplier / contractor)
- * or Sundry Debtors (buyer). The ledger name is the party name; a clash with another ledger adds the party code.
+ * The party's ledger (one per party, bill-wise). Created on first use under Sundry Debtors (buyer / customer) or
+ * Sundry Creditors (supplier / job worker / contractor / transporter) per the party master's roles. The ledger name is the party name; a clash with another ledger adds the party code.
  */
 export async function partyLedger(tx: Tx, cid: number, partyId: number, side: 'CREDITOR' | 'DEBTOR'): Promise<number> {
   const have = await txQueryOne<any>(tx, `SELECT id FROM acc_ledger WHERE company_id = ? AND party_id = ?`, [cid, partyId]);
   if (have) return Number(have.id);
   const p = await txQueryOne<any>(tx, `SELECT * FROM mst_party WHERE id = ? AND company_id = ?`, [partyId, cid]);
   if (!p) throw Unprocessable(`Party #${partyId} not found in this company`, { code: 'MAPPING' });
+  // the party master decides the group (a buyer-only party is a debtor even if a test bill names it as supplier);
+  // only a party with both roles takes the side of the document that first uses it
+  const buyer = Number(p.is_buyer) === 1 || Number(p.is_customer) === 1;
+  const supplier = Number(p.is_supplier) === 1 || Number(p.is_vendor) === 1 || Number(p.is_contractor) === 1 || Number(p.is_transporter) === 1;
+  const effSide = buyer && !supplier ? 'DEBTOR' : supplier && !buyer ? 'CREDITOR' : side;
   const grp = await txQueryOne<any>(tx, `SELECT id FROM acc_account_group WHERE company_id = ? AND group_code = ?`,
-    [cid, side === 'CREDITOR' ? 'SUNDRY_CREDITORS' : 'SUNDRY_DEBTORS']);
+    [cid, effSide === 'CREDITOR' ? 'SUNDRY_CREDITORS' : 'SUNDRY_DEBTORS']);
   if (!grp) throw Unprocessable('Account groups are not set up for this company (Sundry Debtors / Creditors missing)', { code: 'MAPPING' });
   const pname = String(p.party_name ?? p.name ?? p.legal_name ?? `Party ${partyId}`).trim().slice(0, 140);
   const pcode = String(p.party_code ?? p.code ?? partyId);
@@ -297,4 +302,21 @@ export async function reverseVoucher(tx: Tx, a: Actor, id: number, reason: strin
   await txExecute(tx, `UPDATE acc_voucher SET reversal_of_id = ? WHERE id = ?`, [id, rev.id]);
   await txExecute(tx, `UPDATE acc_voucher SET reversed_by_id = ? WHERE id = ?`, [rev.id, id]);
   return { original: v, reversal: rev };
+}
+
+/**
+ * Repair: a party ledger still in the system Sundry Debtors / Creditors group but on the wrong side for its roles
+ * (created before the role rule) moves to the right one. Balances are signed, so only the presentation changes.
+ * Ledgers moved by accounts into their own sub-groups are left alone.
+ */
+export async function repairPartyGroups(tx: Tx, cid: number) {
+  const r: any = await txExecute(tx, `UPDATE acc_ledger l
+      JOIN mst_party p ON p.id = l.party_id
+      JOIN acc_account_group cur ON cur.id = l.group_id AND cur.group_code IN ('SUNDRY_DEBTORS','SUNDRY_CREDITORS')
+      JOIN acc_account_group tgt ON tgt.company_id = l.company_id AND tgt.group_code =
+           IF((p.is_buyer = 1 OR p.is_customer = 1), 'SUNDRY_DEBTORS', 'SUNDRY_CREDITORS')
+     SET l.group_id = tgt.id
+   WHERE l.company_id = ? AND l.ledger_type = 'PARTY' AND tgt.id <> cur.id
+     AND ((p.is_buyer = 1 OR p.is_customer = 1) XOR (COALESCE(p.is_supplier,0) = 1 OR COALESCE(p.is_vendor,0) = 1 OR COALESCE(p.is_contractor,0) = 1 OR COALESCE(p.is_transporter,0) = 1))`, [cid]);
+  return Number(r?.affectedRows ?? 0);
 }
