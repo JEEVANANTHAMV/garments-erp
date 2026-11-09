@@ -42,10 +42,11 @@ export async function enqueueTally(tx: Tx, cid: number, voucherId: number) {
   return key;
 }
 
-/** Queue every posted voucher that has no queue row yet (after a Tally company is set up). */
+/** Queue every posted voucher that has no row for an ACTIVE Tally company yet (after set-up, or after switching company). */
 export async function enqueueBacklog(cid: number) {
   const ids = await query<any>(`SELECT v.id FROM acc_voucher v WHERE v.company_id = ? AND v.status IN ('POSTED','REVERSED')
-      AND NOT EXISTS (SELECT 1 FROM acc_tally_queue q WHERE q.voucher_id = v.id) ORDER BY v.voucher_date, v.id LIMIT 5000`, [cid]);
+      AND NOT EXISTS (SELECT 1 FROM acc_tally_queue q JOIN acc_tally_company t ON t.id = q.tally_company_id AND t.is_active = 1
+                       WHERE q.voucher_id = v.id) ORDER BY v.voucher_date, v.id LIMIT 5000`, [cid]);
   let n = 0;
   for (const r of ids) {
     const k = await transaction((tx) => enqueueTally(tx, cid, Number(r.id)));
