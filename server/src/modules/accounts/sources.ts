@@ -629,6 +629,10 @@ export function startAccountsScanner() {
     if (running) return;
     running = true;
     try {
+      // default set-up (groups, ledgers, posting switches) for every company — also ones nobody has opened Accounts in yet
+      for (const c of await query<any>(`SELECT id FROM mst_company WHERE is_active = 1`)) {
+        try { await ensureAccountsSetup(Number(c.id)); } catch (err) { console.error('[accounts] setup failed for company', c.id, (err as Error).message); }
+      }
       const cos = await query<any>(`SELECT c.id, COALESCE(s.setting_value, '10') mins FROM mst_company c
           LEFT JOIN cfg_system_setting s ON s.company_id = c.id AND s.setting_key = 'ACC_AUTO_SWEEP_MIN'
          WHERE c.is_active = 1 AND EXISTS (SELECT 1 FROM acc_posting_rule r WHERE r.company_id = c.id AND r.mode <> 'OFF')`);
