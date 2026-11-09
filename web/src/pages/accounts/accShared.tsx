@@ -51,7 +51,7 @@ export function TallyStatus({ value }: { value?: string | null }) {
 
 export const SOURCE_LABEL: Record<string, string> = {
   SUPPLIER_BILL: 'Bills Inward', KNITTING_BILL: 'Knitting bill', FABRIC_PROCESS_BILL: 'Fabric process bill', YARN_PROCESS_BILL: 'Yarn process bill',
-  CONTRACTOR_BILL: 'Contractor bill', CONTRACTOR_PAYMENT: 'Contractor payment', CONTRACTOR_ADVANCE: 'Contractor advance',
+  CONTRACTOR_BILL: 'Contractor bill', CONTRACTOR_PAYMENT: 'Contractor payment', CONTRACTOR_ADVANCE: 'Contractor advance', CONTRACTOR_CREDIT_NOTE: 'Contractor credit note',
   PURCHASE_CREDIT_NOTE: 'Purchase return', COMMERCIAL_INVOICE: 'Commercial invoice', REALISATION: 'Bank realisation', EXPORT_BENEFIT: 'Export incentive',
 };
 
@@ -135,4 +135,25 @@ export function todayIst() {
 export function fyStart(d = todayIst()) {
   const [y, m] = d.split('-').map(Number);
   return `${m >= 4 ? y : y - 1}-04-01`;
+}
+
+/** File → base64 (no data: prefix) for JSON uploads. */
+export function fileToBase64(f: File): Promise<string> {
+  return new Promise((ok, bad) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).replace(/^data:[^,]*,/, ''));
+    r.onerror = () => bad(r.error);
+    r.readAsDataURL(f);
+  });
+}
+
+/** GET that returns a file (template download). */
+export async function getDownload(url: string, fallbackName: string) {
+  const r = await api.get(url, { responseType: 'blob' });
+  const cd = String(r.headers['content-disposition'] ?? '');
+  const name = /filename="([^"]+)"/.exec(cd)?.[1] ?? fallbackName;
+  const href = URL.createObjectURL(r.data as Blob);
+  const a = document.createElement('a');
+  a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 2000);
 }

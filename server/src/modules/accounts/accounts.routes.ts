@@ -14,6 +14,8 @@ import {
 import { ensureAccountsSetup, POSTING_ROLES, POSTING_EVENTS } from './accountsSetup.js';
 import { SOURCES, sourceByEvent, scanCompany, pendingDocuments, staleVouchers, voucherFromSource } from './sources.js';
 import { enqueueTally, enqueueBacklog, exportXml, healthCheck, submitQueueRow } from './tally.js';
+import { tallyLedgersRouter } from './tallyLedgers.js';
+import { openingRouter } from './opening.js';
 
 /**
  * Accounts module (client spec "Complete Accounts & TallyPrime", voice note 09-Nov-2026). Mounted at /api/accounts.
@@ -50,6 +52,8 @@ const parse = <T extends z.ZodTypeAny>(s: T, body: unknown): z.infer<T> => {
 };
 
 accountsRouter.use(ah(async (req, _res, next) => { await ensureAccountsSetup(cidOf(req)); next(); }));
+accountsRouter.use(tallyLedgersRouter);   // /tally/companies/:id/ledgers*, /tally/ledger-map/:id
+accountsRouter.use(openingRouter);        // /opening*
 
 // ================================================================ dashboard
 accountsRouter.get('/dashboard', VIEW, ah(async (req, res) => {

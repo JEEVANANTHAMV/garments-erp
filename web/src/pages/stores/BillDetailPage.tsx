@@ -280,7 +280,7 @@ function Followups({ b, onNew }: { b: any; onNew: () => void }) {
 }
 
 function Posting({ b }: { b: any }) {
-  if (!b.postings.length) return <div className="py-6 text-center text-body text-ink-secondary">Not sent to accounting. An approved bill is queued automatically; the accounts package is not connected yet (MANUAL adapter) — accounts enters the voucher no after posting.</div>;
+  if (!b.postings.length) return <div className="py-6 text-center text-body text-ink-secondary">Not sent to accounting yet. An approved bill is queued automatically. With the ACCOUNTS adapter it is marked posted when the linked bill's voucher is posted in Accounts (and sent to Tally from there); with MANUAL, accounts enters the voucher no.</div>;
   return (
     <div className="space-y-3">{b.postings.map((p: any) => (
       <div key={p.id} className="rounded-lg border border-surface-border p-3 text-body">

@@ -15,10 +15,11 @@ import { http } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
 import { errMsg, inr, postDownload, VOUCHER_TYPE_LABEL } from './accShared';
+import { TallyLedgerMatch } from './TallyLedgerMatch';
 
 const TABS = [
   { key: 'waiting', label: 'Waiting', status: 'PENDING' }, { key: 'sent', label: 'Sent / exported', status: 'PROCESSING' },
-  { key: 'problems', label: 'Problems', status: 'FAILED,UNKNOWN' }, { key: 'posted', label: 'In Tally', status: 'POSTED' }, { key: 'setup', label: 'Set-up', status: '' },
+  { key: 'problems', label: 'Problems', status: 'FAILED,UNKNOWN' }, { key: 'posted', label: 'In Tally', status: 'POSTED' }, { key: 'ledgers', label: 'Ledger matching', status: '' }, { key: 'setup', label: 'Set-up', status: '' },
 ];
 
 export function TallyPage() {
@@ -70,7 +71,7 @@ export function TallyPage() {
   return (
     <div>
       <PageHeader title="Tally" breadcrumb={['Accounts']} subtitle="Posted vouchers mirrored to TallyPrime. The ERP keeps the books; Tally receives the same vouchers (no stock items)."
-        actions={ops && tab !== 'setup' && <>
+        actions={ops && tab !== 'setup' && tab !== 'ledgers' && <>
           {tab === 'waiting' && <Button variant="secondary" loading={busy === 'backlog'} onClick={() => void run('backlog', async () => (await http.post<{ message: string }>('/accounts/tally/enqueue-backlog')).message)}><ListPlus size={14} />Queue older vouchers</Button>}
           {(tab === 'waiting' || tab === 'problems') && xmlRows.length > 0 && <Button variant="secondary" onClick={() => setSel(new Set(xmlRows.map((r) => r.id)))}>Select all</Button>}
           {sel.size > 0 && (tab === 'waiting' || tab === 'problems' || tab === 'sent') && (
@@ -81,7 +82,7 @@ export function TallyPage() {
         </>} />
       <Tabs tabs={TABS.map((x) => ({ key: x.key, label: x.label }))} active={tab} onChange={(k) => { setSel(new Set()); setSp({ tab: k }, { replace: true }); }} />
       <div className="mt-3">
-        {tab === 'setup' ? <TallySetup /> : (
+        {tab === 'ledgers' ? <TallyLedgerMatch /> : tab === 'setup' ? <TallySetup /> : (
           <DataTable columns={cols} rows={rows} loading={queue.isLoading} error={queue.error} rowKey={(r) => r.id} onRowClick={(r) => nav(`/accounts/vouchers/${r.voucher_id}`)}
             emptyTitle={tab === 'problems' ? 'No problems' : 'Nothing here'} emptyMessage={tab === 'waiting' ? 'Posted vouchers appear here when a Tally company is set up (tab Set-up).' : undefined} />)}
       </div>

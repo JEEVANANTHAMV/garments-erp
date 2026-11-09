@@ -131,6 +131,7 @@ export const POSTING_EVENTS: { code: string; label: string; voucher: string }[] 
   { code: 'CONTRACTOR_BILL.APPROVE', label: 'Contractor bill approved → Purchase (job work)', voucher: 'PURCHASE' },
   { code: 'CONTRACTOR_PAYMENT.POST', label: 'Contractor payment → Payment', voucher: 'PAYMENT' },
   { code: 'CONTRACTOR_ADVANCE.POST', label: 'Contractor advance paid → Payment', voucher: 'PAYMENT' },
+  { code: 'CONTRACTOR_CREDIT_NOTE.POST', label: 'Contractor credit note → Purchase (job work)', voucher: 'PURCHASE' },
   { code: 'PURCHASE_CREDIT_NOTE.ISSUE', label: 'Purchase return credit note → Debit Note', voucher: 'DEBIT_NOTE' },
   { code: 'COMMERCIAL_INVOICE.FINAL', label: 'Commercial invoice final → Sales', voucher: 'SALES' },
   { code: 'REALISATION.POST', label: 'Bank realisation → Receipt', voucher: 'RECEIPT' },

@@ -13,7 +13,7 @@ import { http } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
-import { errMsg, drcr, useLedgerOptions, LedgerSelect, VOUCHER_TYPE_LABEL } from './accShared';
+import { errMsg, drcr, inr, useLedgerOptions, LedgerSelect, VOUCHER_TYPE_LABEL, fileToBase64, getDownload, fyStart } from './accShared';
 
 // ================================================================ ledgers & groups
 export function AccountsLedgersPage() {
@@ -219,7 +219,7 @@ export function AccountsSettingsPage() {
   return (
     <div>
       <PageHeader title="Accounts settings" breadcrumb={['Accounts']} subtitle="Which ledgers automatic vouchers use, which documents post automatically, voucher numbering and the period lock." />
-      <Tabs tabs={[{ key: 'roles', label: 'Posting ledgers' }, { key: 'rules', label: 'Automatic posting' }, { key: 'types', label: 'Voucher types' }, { key: 'lock', label: 'Period lock' }, { key: 'options', label: 'Books options' }]}
+      <Tabs tabs={[{ key: 'roles', label: 'Posting ledgers' }, { key: 'rules', label: 'Automatic posting' }, { key: 'types', label: 'Voucher types' }, { key: 'opening', label: 'Opening balances' }, { key: 'lock', label: 'Period lock' }, { key: 'options', label: 'Books options' }]}
         active={tab} onChange={(k) => setSp({ tab: k }, { replace: true })} />
       <div className="mt-3">
         {tab === 'roles' && <RolesTab />}
@@ -227,6 +227,7 @@ export function AccountsSettingsPage() {
         {tab === 'types' && <TypesTab />}
         {tab === 'lock' && <LockTab />}
         {tab === 'options' && <OptionsTab />}
+        {tab === 'opening' && <OpeningTab />}
       </div>
     </div>
   );
@@ -381,6 +382,85 @@ function OptionsTab() {
           {admin && mins !== null && <Button onClick={() => void save({ scan_minutes: Number(mins) || 0 })}>Save</Button>}
         </div>
       </Field>
+    </div>
+  );
+}
+
+function OpeningTab() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { can } = useAuth();
+  const admin = can('ACCOUNTS.ADMIN');
+  const cur = useQuery({ queryKey: ['accounts', 'opening'], queryFn: async () => (await http.get<{ data: any }>('/accounts/opening')).data });
+  const cos = useQuery({ queryKey: ['accounts', 'tally', 'companies'], queryFn: async () => (await http.get<{ data: any[] }>('/accounts/tally/companies')).data });
+  const [asOn, setAsOn] = useState(fyStart());
+  const [source, setSource] = useState<'FILE' | 'TALLY'>('FILE');
+  const [file, setFile] = useState<File | null>(null);
+  const [tcId, setTcId] = useState('');
+  const [plan, setPlan] = useState<any>(null);
+  const [busy, setBusy] = useState('');
+  const body = async () => ({ as_on: asOn, source, ...(source === 'FILE'
+    ? { filename: file?.name, content_base64: file ? await fileToBase64(file) : undefined }
+    : { tally_company_id: Number(tcId || cos.data?.[0]?.id) || undefined }) });
+  const preview = async () => {
+    setBusy('preview'); setPlan(null);
+    try { setPlan((await http.post<{ data: any }>('/accounts/opening/preview', await body())).data); } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(''); }
+  };
+  const apply = async () => {
+    setBusy('apply');
+    try { const r = await http.post<{ message: string }>('/accounts/opening/apply', await body()); toast(r.message); setPlan(null); void qc.invalidateQueries({ queryKey: ['accounts'] }); }
+    catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(''); }
+  };
+  const c = cur.data;
+  return (
+    <div className="space-y-3">
+      <div className="card grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
+        <div><p className="text-caption text-ink-secondary">Ledgers with opening</p><p className="text-title font-semibold tabular-nums">{c?.ledgers?.length ?? '—'}</p></div>
+        <div><p className="text-caption text-ink-secondary">Total Dr / Cr</p><p className="tabular-nums">{c ? `${inr(c.total_dr)} / ${inr(c.total_cr)}` : '—'}</p></div>
+        <div><p className="text-caption text-ink-secondary">Difference</p><p className={`tabular-nums ${c && Math.abs(c.difference) > 0.009 ? 'text-status-error-text' : 'text-status-success-text'}`}>{c ? inr(c.difference) : '—'}</p></div>
+        <div><p className="text-caption text-ink-secondary">Pending bills (bill-wise)</p><p className="tabular-nums">{c?.bills?.length ?? '—'}</p></div>
+      </div>
+      {admin && (
+        <div className="card space-y-3 p-4">
+          <p className="text-body">Bring in balances on the books-beginning date: from the Excel template (every ledger + a "Pending bills" sheet for party bills), or from the balances in the loaded Tally ledger list. Preview checks every row before anything changes.</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <Field label="Books beginning (as on)"><Input id="acc-ob-date" type="date" value={asOn} onChange={(e) => setAsOn(e.target.value)} /></Field>
+            <Field label="From"><Select id="acc-ob-source" value={source} onChange={(e) => { setSource(e.target.value as 'FILE' | 'TALLY'); setPlan(null); }}
+              options={[{ value: 'FILE', label: 'Excel template' }, { value: 'TALLY', label: 'Tally ledger list balances' }]} /></Field>
+            {source === 'FILE' ? (
+              <Field label="Filled template" className="md:col-span-2">
+                <div className="flex gap-2">
+                  <input id="acc-ob-file" type="file" accept=".xlsx,.xls" className="input" onChange={(e) => { setFile(e.target.files?.[0] ?? null); setPlan(null); }} />
+                  <Button variant="secondary" onClick={() => void getDownload('/accounts/opening/template.xlsx', 'opening-balances.xlsx')}>Download template</Button>
+                </div>
+              </Field>) : (
+              <Field label="Tally company" className="md:col-span-2"><Select value={tcId || String(cos.data?.[0]?.id ?? '')} onChange={(e) => setTcId(e.target.value)}
+                options={(cos.data ?? []).map((t) => ({ value: String(t.id), label: t.tally_company_name }))} /></Field>)}
+          </div>
+          <div className="flex gap-2">
+            <Button id="acc-ob-preview" variant="secondary" loading={busy === 'preview'} disabled={source === 'FILE' && !file} onClick={() => void preview()}>Preview</Button>
+            {plan && !plan.errors.length && <Button id="acc-ob-apply" loading={busy === 'apply'} onClick={() => void apply()}>Apply {plan.ledgers.length} ledger(s)</Button>}
+          </div>
+          {plan && (
+            <div className="space-y-2" id="acc-ob-plan">
+              {plan.errors.length > 0 && <div className="rounded bg-status-error-background p-3 text-body text-status-error-text">
+                <p className="font-semibold">{plan.errors.length} error(s) — fix the file and preview again</p>
+                <ul className="list-disc pl-5">{plan.errors.slice(0, 30).map((e: any, i: number) => <li key={i}>{e.row}: {e.message}</li>)}</ul></div>}
+              {plan.warnings.map((w: string, i: number) => <p key={i} className="rounded bg-status-pending-background px-3 py-2 text-body text-status-pending-label">{w}</p>)}
+              <p className="text-body">{plan.ledgers.length} ledger(s), {plan.bills.length} pending bill(s) · Dr {inr(plan.total_dr)} · Cr {inr(plan.total_cr)}</p>
+              <div className="max-h-96 overflow-auto rounded border border-surface-border">
+                <table className="w-full"><thead><tr><th className="th">Ledger</th><th className="th text-right">Opening</th><th className="th text-right">Bills</th></tr></thead>
+                  <tbody>{plan.ledgers.map((l: any) => <tr key={l.ledger_id}><td className="td">{l.ledger_name}</td><td className="td text-right tabular-nums">{drcr(l.amount)}</td><td className="td text-right tabular-nums">{l.bills || ''}</td></tr>)}</tbody></table>
+              </div>
+            </div>)}
+        </div>)}
+      {c?.bills?.length > 0 && (
+        <div className="card overflow-x-auto">
+          <p className="border-b border-surface-border px-4 py-2 font-semibold">Pending bills on the books-beginning date</p>
+          <table className="w-full"><thead><tr><th className="th">Party</th><th className="th">Bill</th><th className="th">Date</th><th className="th">Due</th><th className="th text-right">Amount</th></tr></thead>
+            <tbody>{c.bills.map((b: any) => <tr key={b.id}><td className="td">{b.ledger_name}</td><td className="td">{b.bill_ref_no}</td><td className="td tabular-nums">{b.bill_date ?? ''}</td>
+              <td className="td tabular-nums">{b.due_date ?? ''}</td><td className="td text-right tabular-nums">{drcr(b.amount)}</td></tr>)}</tbody></table>
+        </div>)}
     </div>
   );
 }

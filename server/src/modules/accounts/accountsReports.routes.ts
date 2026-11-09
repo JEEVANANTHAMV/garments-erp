@@ -226,7 +226,23 @@ accountsReportsRouter.get('/outstanding', VIEW, ah(async (req, res) => {
   const ops = await query<any>(`SELECT l.id, l.ledger_name, IF(l.opening_dr_cr = 'DR', l.opening_balance, -l.opening_balance) amt, DATE_FORMAT(l.opening_date,'%Y-%m-%d') d
       FROM acc_ledger l JOIN acc_account_group g ON g.id = l.group_id LEFT JOIN acc_account_group pg ON pg.id = g.parent_id
      WHERE l.company_id = ? AND l.opening_balance <> 0 AND (g.group_code = ? OR pg.group_code = ?)`, [cid, grp, grp]);
-  for (const o of ops) bills.set(`${o.id}|OPENING`, { ledger_id: o.id, ledger_name: o.ledger_name, bill_ref_no: 'Opening balance', kind: 'OPENING', bill_date: o.d, due_date: null, amount: r2(o.amt), fc: 0 });
+  // bill-wise openings (acc_opening_bill) are bills like any other — later payments "against" them knock them off;
+  // whatever of a ledger's opening is not in bills stays "Opening balance" (on account)
+  const obills = await query<any>(`SELECT b.ledger_id, l.ledger_name, b.bill_ref_no, DATE_FORMAT(b.bill_date,'%Y-%m-%d') d, DATE_FORMAT(b.due_date,'%Y-%m-%d') due, b.amount
+      FROM acc_opening_bill b JOIN acc_ledger l ON l.id = b.ledger_id WHERE b.company_id = ?`, [cid]);
+  const inBills = new Map<number, number>();
+  for (const o of obills) {
+    const key = `${o.ledger_id}|B|${o.bill_ref_no}`;
+    const b = bills.get(key) ?? { ledger_id: o.ledger_id, ledger_name: o.ledger_name, bill_ref_no: o.bill_ref_no, kind: 'BILL', bill_date: null, due_date: null, amount: 0, fc: 0 };
+    b.amount = r2(b.amount + Number(o.amount));
+    b.bill_date = o.d ?? b.bill_date; b.due_date = o.due ?? b.due_date;
+    bills.set(key, b);
+    inBills.set(Number(o.ledger_id), r2((inBills.get(Number(o.ledger_id)) ?? 0) + Number(o.amount)));
+  }
+  for (const o of ops) {
+    const rest = r2(Number(o.amt) - (inBills.get(Number(o.id)) ?? 0));
+    if (Math.abs(rest) >= 0.01) bills.set(`${o.id}|OPENING`, { ledger_id: o.id, ledger_name: o.ledger_name, bill_ref_no: 'Opening balance', kind: 'OPENING', bill_date: o.d, due_date: null, amount: rest, fc: 0 });
+  }
   const sign = kind === 'payables' ? -1 : 1;   // payables shown positive when we owe (credit)
   const asOfT = new Date(`${asOf}T00:00:00Z`).getTime();
   const out = [...bills.values()].filter((b) => Math.abs(b.amount) >= 0.01).map((b) => {

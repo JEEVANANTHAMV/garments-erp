@@ -1095,6 +1095,8 @@ billTrackerRouter.post('/bill-tracker/:id/mark-posted', BT_POST, ah(async (req, 
   const b = z.object({ voucher_no: z.string().trim().min(1, 'Enter the voucher no from the accounts package').max(60), voucher_date: dateStr, voucher_id: strOpt(80),
     remarks: strOpt(255) }).parse(req.body);
   if (b.voucher_date > istToday()) throw BadRequest('The voucher date cannot be in the future');
+  // through Accounts the bill is posted by its Accounts voucher (sent to Tally from there) — a typed voucher no would mean a second entry
+  if ((await adapterFor(cid)).code === 'ACCOUNTS') throw BadRequest('Bills are posted through the Accounts module — approve the linked bill\'s voucher in Accounts; this updates automatically');
   const p = await transaction(async (tx) => {
     const bill = await lockBill(tx, cid, id);
     if (bill.workflow_status !== 'APPROVED') throw BadRequest('Only an approved bill can be posted');

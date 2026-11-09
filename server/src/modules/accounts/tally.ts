@@ -90,8 +90,10 @@ export function voucherXml(v: any, key: string) {
 }
 
 /** Group + ledger masters used by the vouchers (ACTION Create: Tally skips / reports existing names, never duplicates). */
-async function mastersXml(cid: number, voucherIds: number[]) {
+async function mastersXml(cid: number, voucherIds: number[], tallyCompanyId: number) {
   if (!voucherIds.length) return '';
+  // ledgers already in this Tally company (from its loaded ledger list) are not sent again
+  const known = new Set((await query<any>(`SELECT LOWER(tally_name) n FROM acc_tally_ledger WHERE tally_company_id = ?`, [tallyCompanyId])).map((r) => String(r.n)));
   const leds = await query<any>(
     `SELECT DISTINCT l.*, COALESCE(l.tally_name, l.ledger_name) tname, COALESCE(g.tally_name, g.group_name) gname
        FROM acc_ledger l JOIN acc_account_group g ON g.id = l.group_id
@@ -102,7 +104,7 @@ async function mastersXml(cid: number, voucherIds: number[]) {
       WHERE g.company_id = ? AND g.is_system = 0 ORDER BY g.parent_id IS NOT NULL, g.id`, [cid]);
   const gx = groups.map((g) => `<TALLYMESSAGE xmlns:UDF="TallyUDF"><GROUP NAME="${esc(g.gname)}" ACTION="Create"><NAME.LIST><NAME>${esc(g.gname)}</NAME></NAME.LIST>`
     + `<PARENT>${esc(g.pname ?? '')}</PARENT><ISSUBLEDGER>No</ISSUBLEDGER><AFFECTSGROSSPROFIT>${Number(g.affects_gross_profit) ? 'Yes' : 'No'}</AFFECTSGROSSPROFIT></GROUP></TALLYMESSAGE>`).join('');
-  const lx = leds.map((l) => `<TALLYMESSAGE xmlns:UDF="TallyUDF"><LEDGER NAME="${esc(l.tname)}" ACTION="Create"><NAME.LIST><NAME>${esc(l.tname)}</NAME></NAME.LIST>`
+  const lx = leds.filter((l) => !known.has(String(l.tname).toLowerCase())).map((l) => `<TALLYMESSAGE xmlns:UDF="TallyUDF"><LEDGER NAME="${esc(l.tname)}" ACTION="Create"><NAME.LIST><NAME>${esc(l.tname)}</NAME></NAME.LIST>`
     + `<PARENT>${esc(l.gname)}</PARENT><ISBILLWISEON>${Number(l.is_bill_wise) ? 'Yes' : 'No'}</ISBILLWISEON>`
     + (l.gstin ? `<PARTYGSTIN>${esc(l.gstin)}</PARTYGSTIN>` : '')
     + (l.ledger_type === 'TAX' && l.tax_kind ? `<TAXTYPE>${l.tax_kind === 'TDS' ? 'TDS' : l.tax_kind === 'TCS' ? 'TCS' : 'GST'}</TAXTYPE>${['CGST', 'SGST', 'IGST'].includes(l.tax_kind) ? `<GSTDUTYHEAD>${l.tax_kind === 'SGST' ? 'SGST/UTGST' : l.tax_kind}</GSTDUTYHEAD>` : ''}` : '')
@@ -126,7 +128,7 @@ export async function exportXml(cid: number, queueIds: number[]) {
   const vids = qs.map((q) => Number(q.voucher_id));
   const vs = await voucherData(cid, vids);
   const keyOf = new Map(qs.map((q) => [Number(q.voucher_id), q.idempotency_key as string]));
-  const masters = await mastersXml(cid, vids);
+  const masters = await mastersXml(cid, vids, Number(qs[0].tally_company_id));
   const vouchers = vs.map((v) => voucherXml(v, keyOf.get(Number(v.id))!)).join('');
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<!-- C-ONE ERP → TallyPrime: ${vs.length} voucher(s) for "${esc(companies[0])}". Import: Gateway of Tally → Import → Masters, then Vouchers (same file). -->\n`
     + `<ROOT>${envelope(companies[0], 'All Masters', masters)}${envelope(companies[0], 'Vouchers', vouchers)}</ROOT>`;
@@ -148,7 +150,8 @@ export function parseTallyResponse(xml: string, http: number): TallyResult {
   return { outcome: 'UNKNOWN', http, message: 'Tally answered without CREATED / ALTERED counts', raw: xml.slice(0, 4000) };
 }
 
-async function httpPost(tc: any, body: string): Promise<{ status: number; text: string; ms: number }> {
+/** POST an XML request to the Tally server of a destination (also used to read Tally's ledger list). */
+export async function tallyRequest(tc: any, body: string): Promise<{ status: number; text: string; ms: number }> {
   if (!tc.host) throw Unprocessable('Tally host is not set', { code: 'MAPPING' });
   const url = /^https?:\/\//i.test(tc.host) ? tc.host.replace(/\/$/, '') : `http://${tc.host}:${tc.port || 9000}`;
   const headers: Record<string, string> = { 'content-type': 'text/xml; charset=utf-8' };
@@ -171,7 +174,7 @@ export async function healthCheck(cid: number, tallyCompanyId: number) {
   try {
     const body = '<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>List of Companies</ID></HEADER>'
       + '<BODY><DESC><STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES></DESC></BODY></ENVELOPE>';
-    const r = await httpPost(tc, body);
+    const r = await tallyRequest(tc, body);
     const found = r.text.toLowerCase().includes(String(tc.tally_company_name).toLowerCase());
     ok = r.status === 200 && found;
     msg = r.status !== 200 ? `HTTP ${r.status}` : found ? `Connected in ${r.ms} ms — company "${tc.tally_company_name}" is open in Tally` : `Connected, but company "${tc.tally_company_name}" is not loaded in Tally`;
@@ -221,12 +224,12 @@ export async function submitQueueRow(cid: number, queueId: number, actor: number
   if (!claimed) return { skipped: true };
   const tc = await queryOne<any>(`SELECT * FROM acc_tally_company WHERE id = ?`, [claimed.tally_company_id]);
   const [v] = await voucherData(cid, [Number(claimed.voucher_id)]);
-  const masters = await mastersXml(cid, [Number(claimed.voucher_id)]);
+  const masters = await mastersXml(cid, [Number(claimed.voucher_id)], Number(claimed.tally_company_id));
   const vx = envelope(tc.tally_company_name, 'Vouchers', voucherXml(v, claimed.idempotency_key));
   let result: TallyResult; let ms = 0;
   try {
-    if (masters) await httpPost(tc, envelope(tc.tally_company_name, 'All Masters', masters));
-    const r = await httpPost(tc, vx);
+    if (masters) await tallyRequest(tc, envelope(tc.tally_company_name, 'All Masters', masters));
+    const r = await tallyRequest(tc, vx);
     ms = r.ms;
     result = parseTallyResponse(r.text, r.status);
   } catch (err) {

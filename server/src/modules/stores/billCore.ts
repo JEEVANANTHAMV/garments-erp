@@ -443,7 +443,13 @@ export const MANUAL_ADAPTER: PostingAdapter = {
   async submit() { return { outcome: 'MANUAL', summary: 'Waiting for accounts to post the voucher and enter its number' }; },
   async lookup() { return null; },
 };
-export const ADAPTERS: Record<string, PostingAdapter> = { MANUAL: MANUAL_ADAPTER };
+/** Accounts module (09-Nov-2026): the posting completes when Accounts posts the linked bill's voucher (accounts/billSync.ts). */
+export const ACCOUNTS_ADAPTER: PostingAdapter = {
+  code: 'ACCOUNTS', automatic: false,
+  async submit() { return { outcome: 'MANUAL', summary: 'Posted by the Accounts module when the linked bill\'s voucher is posted' }; },
+  async lookup() { return null; },
+};
+export const ADAPTERS: Record<string, PostingAdapter> = { MANUAL: MANUAL_ADAPTER, ACCOUNTS: ACCOUNTS_ADAPTER };
 export async function adapterFor(cid: number) {
   const s = await queryOne<any>(`SELECT setting_value v FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'BT_POSTING_ADAPTER'`, [cid]);
   return ADAPTERS[String(s?.v ?? 'MANUAL').toUpperCase()] ?? MANUAL_ADAPTER;

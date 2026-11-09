@@ -6,6 +6,7 @@ import {
 } from './voucherEngine.js';
 import { POSTING_EVENTS, ensureAccountsSetup } from './accountsSetup.js';
 import { enqueueTally } from './tally.js';
+import { syncBillTracker } from './billSync.js';
 
 /**
  * ERP document → voucher adapters (spec §3.1, §4.1, §5) and the scan that turns final documents into vouchers.
@@ -68,6 +69,8 @@ async function billVoucher(tx: Tx, cid: number, b: {
   cr?: { role: string; amount: number }[];      // TDS / deductions
   /** Part of the party credit that knocks off earlier advances (bill-wise "against" the advance refs). */
   advanceAdjusted?: number;
+  /** Part of the bill paid to the party but recoverable from them (contractor excess kept as advance) → party Dr as an advance. */
+  partyAdvance?: { amount: number; ref: string | null };
   source: VoucherInput['source'];
 }): Promise<VoucherInput> {
   const e: EntryInput[] = [];
@@ -102,6 +105,10 @@ async function billVoucher(tx: Tx, cid: number, b: {
     if (left > 0) e.push({ ledger_id: b.partyLedgerId, credit: left, bill_ref_type: 'ON_ACCOUNT', narration: 'Advance adjusted (no open advance found)' });
   }
   if (party - adv > 0) e.push({ ledger_id: b.partyLedgerId, credit: r2(party - adv), bill_ref_type: 'NEW', bill_ref_no: b.billRef, bill_due_date: b.dueDate || null });
+  if (b.partyAdvance && r2(b.partyAdvance.amount) > 0) {
+    e.push({ ledger_id: b.partyLedgerId, debit: r2(b.partyAdvance.amount), bill_ref_type: b.partyAdvance.ref ? 'ADVANCE' : 'ON_ACCOUNT', bill_ref_no: b.partyAdvance.ref,
+      narration: 'Excess over our rate kept as advance (recoverable)' });
+  }
   const dr = r2(e.reduce((t, l) => t + Number(l.debit || 0), 0));
   const cr = r2(e.reduce((t, l) => t + Number(l.credit || 0), 0));
   const diff = r2(cr - dr);
@@ -300,7 +307,7 @@ function processBillSource(o: { event: string; module: string; table: string; li
 const contractorBill = simpleSource({
   event: 'CONTRACTOR_BILL.APPROVE', module: 'CONTRACTOR_BILL', postingEvent: 'APPROVE', label: 'Contractor bill',
   link: (id) => `/production/contractor-bills/${id}`,
-  table: 'trx_contractor_bill', noCol: 'bill_no', dateCol: 'bill_date', amountExpr: 't.net_amount + COALESCE(t.advance_adjusted,0)',
+  table: 'trx_contractor_bill', noCol: 'bill_no', dateCol: 'bill_date', amountExpr: 't.net_amount + COALESCE(t.advance_adjusted,0) - COALESCE(t.excess_as_advance,0)',
   eligibleWhere: `t.status = 'APPROVED'`,
   build: async (tx, cid, id) => {
     const b = await txQueryOne<any>(tx, `SELECT t.*, DATE_FORMAT(t.bill_date,'%Y-%m-%d') d FROM trx_contractor_bill t WHERE t.id = ? AND t.company_id = ?`, [id, cid]);
@@ -309,13 +316,17 @@ const contractorBill = simpleSource({
       `SELECT c.io_no, l.amount FROM trx_contractor_bill_line l LEFT JOIN trx_jobwork_challan c ON c.id = l.challan_id WHERE l.bill_id = ?`, [id]);
     const ioMap = await soIdsByIo(tx, cid, lines.map((l) => l.io_no));
     const parts = lines.map((l) => ({ so_id: ioMap.get(String(l.io_no ?? '').trim()) ?? null, amount: Number(l.amount || 0) }));
+    const excessRef = Number(b.excess_as_advance || 0) > 0 ? await txQueryOne<any>(tx,
+      `SELECT advance_no FROM trx_contractor_advance WHERE bill_id = ? AND source = 'BILL_EXCESS' AND status <> 'CANCELLED' ORDER BY id DESC LIMIT 1`, [id]) : null;
     const vendor = await partyLedger(tx, cid, Number(b.vendor_id), 'CREDITOR');
     // Advances were paid to the contractor's ledger (Dr party), so the bill credits the party before the advance deduction.
     return billVoucher(tx, cid, {
       type: 'PURCHASE', date: b.d, partyLedgerId: vendor, partyAmount: Number(b.net_amount || 0) + Number(b.advance_adjusted || 0),
       advanceAdjusted: Number(b.advance_adjusted || 0),
+      // excess over our rate paid but kept as advance: not stitching cost — a recoverable advance (the BILL_EXCESS advance)
+      partyAdvance: Number(b.excess_as_advance || 0) > 0 ? { amount: Number(b.excess_as_advance), ref: excessRef?.advance_no ?? null } : undefined,
       billRef: String(b.bill_no), refNo: b.bill_no, narration: `Contractor bill ${b.bill_no}${b.period_from ? ` (${String(b.period_from).slice(0, 10)} – ${String(b.period_to ?? '').slice(0, 10)})` : ''}`,
-      expense: splitByJob(Number(b.gross_amount || 0), parts).map((s) => ({ role: 'JOBWORK_STITCHING', amount: s.amount, so_id: s.so_id })),
+      expense: splitByJob(r2(Number(b.gross_amount || 0) - Number(b.excess_as_advance || 0)), parts).map((s) => ({ role: 'JOBWORK_STITCHING', amount: s.amount, so_id: s.so_id })),
       gst: gstSplit(Number(b.gst_amount || 0), 0, 0, 0, !!Number(b.is_interstate)),
       cr: [
         { role: 'TDS_PAYABLE', amount: Number(b.tds_amount || 0) },
@@ -354,6 +365,34 @@ const contractorAdvance = simpleSource({
     const money = await payLedger(tx, cid, null, a.pay_mode);
     return payVoucher('PAYMENT', a.d, vendor, money, Number(a.amount), { type: 'ADVANCE', no: a.advance_no },
       `Advance ${a.advance_no} to contractor${a.ref_no ? ` ref ${a.ref_no}` : ''}`, a.ref_no, { module: 'CONTRACTOR_ADVANCE', id, no: a.advance_no, event: 'POST' });
+  },
+});
+
+/** CGST + SGST when the party is in our state (or has no GSTIN), IGST otherwise — for documents that carry one GST figure. */
+async function gstByState(tx: Tx, cid: number, partyId: number, gst: number) {
+  if (!r2(gst)) return { cgst: 0, sgst: 0, igst: 0 };
+  const c = await txQueryOne<any>(tx, `SELECT COALESCE(state_gst_code, LEFT(gstin, 2)) st FROM mst_company WHERE id = ?`, [cid]);
+  const p = await txQueryOne<any>(tx, `SELECT LEFT(gstin, 2) st FROM mst_party WHERE id = ?`, [partyId]);
+  return gstSplit(gst, 0, 0, 0, !!(p?.st && c?.st && String(p.st) !== String(c.st)));
+}
+
+/** Contractor credit note (extra amount owed to the contractor) → Purchase: stitching Dr (+ GST) / contractor Cr. */
+const contractorCreditNote = simpleSource({
+  event: 'CONTRACTOR_CREDIT_NOTE.POST', module: 'CONTRACTOR_CREDIT_NOTE', postingEvent: 'POST', label: 'Contractor credit note',
+  link: () => `/production/contractor-accounts`,
+  table: 'trx_contractor_credit_note', noCol: 'cn_no', dateCol: 'cn_date', amountExpr: 't.amount + COALESCE(t.tax, 0)', eligibleWhere: `t.status = 'OPEN'`,
+  build: async (tx, cid, id) => {
+    const c = await txQueryOne<any>(tx, `SELECT t.*, DATE_FORMAT(t.cn_date,'%Y-%m-%d') d FROM trx_contractor_credit_note t WHERE t.id = ? AND t.company_id = ?`, [id, cid]);
+    if (!c) throw DATA('Credit note not found');
+    const so = c.io_no ? (await soIdsByIo(tx, cid, [c.io_no])).get(String(c.io_no).trim()) ?? null : null;
+    const vendor = await partyLedger(tx, cid, Number(c.vendor_id), 'CREDITOR');
+    return billVoucher(tx, cid, {
+      type: 'PURCHASE', date: c.d, partyLedgerId: vendor, partyAmount: r2(Number(c.amount || 0) + Number(c.tax || 0)), billRef: String(c.cn_no), refNo: c.cn_no,
+      narration: `Contractor credit note ${c.cn_no}${c.io_no ? ` · IO ${c.io_no}` : ''}${c.reason ? ` — ${String(c.reason).slice(0, 200)}` : ''}`,
+      expense: [{ role: 'JOBWORK_STITCHING', amount: Number(c.amount || 0), so_id: so }],
+      gst: await gstByState(tx, cid, Number(c.vendor_id), Number(c.tax || 0)),
+      source: { module: 'CONTRACTOR_CREDIT_NOTE', id, no: c.cn_no, event: 'POST' },
+    });
   },
 });
 
@@ -504,7 +543,7 @@ export const SOURCES: SourceDef[] = [
   processBillSource({ event: 'YARN_PROCESS_BILL.POST', module: 'YARN_PROCESS_BILL', table: 'trx_yarn_process_bill', lineTable: 'trx_yarn_process_bill_line',
     role: 'JOBWORK_YARN_PROCESS', label: 'Yarn process bill', link: '/procurement/bills-inward?tab=YARN_PROCESS&id=', hasSo: false, hasRecovery: true }),
   // advances before bills: a contractor bill knocks off the advances already in the books
-  contractorAdvance, contractorBill, contractorPayment, purchaseCreditNote, commercialInvoice, realisation, benefitReceipt,
+  contractorAdvance, contractorBill, contractorCreditNote, contractorPayment, purchaseCreditNote, commercialInvoice, realisation, benefitReceipt,
 ];
 export const sourceByEvent = (e: string) => SOURCES.find((s) => s.event === e);
 for (const s of SOURCES) if (!POSTING_EVENTS.some((e) => e.code === s.event)) throw new Error(`accounts: no POSTING_EVENTS row for ${s.event}`);
@@ -562,6 +601,7 @@ export async function scanCompany(cid: number, userId: number | null, only?: str
       }
     }
   }
+  try { await syncBillTracker(cid); } catch (err) { console.error('[accounts] bill tracker sync', cid, (err as Error).message); }
   // issues whose document is no longer pending (cancelled / already posted elsewhere) are cleared
   await execute(`DELETE i FROM acc_posting_issue i
                   WHERE i.company_id = ? AND EXISTS (SELECT 1 FROM acc_voucher v WHERE v.company_id = i.company_id
