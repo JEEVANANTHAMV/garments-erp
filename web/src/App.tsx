@@ -178,6 +178,12 @@ import {
   LedgerAccountsPage, TaxRatesPage,
 } from './pages/finance';
 
+/* Accounts (books + Tally, 09-Nov-2026) */
+import {
+  VouchersPage as AccVouchersPage, VoucherDetailPage as AccVoucherDetailPage, AccountsDashboardPage, AccountsInboxPage,
+  RealisationsPage, RealisationDetailPage, AccountsLedgersPage, AccountsSettingsPage, TallyPage, AccountsReportsPage,
+} from './pages/accounts';
+
 /* Reports */
 import { ReportsPage, AuditPage } from './pages/reports';
 import ClientReportsAPage from './pages/reports/ClientReportsA';
@@ -557,6 +563,22 @@ export default function App() {
                   <Route path="incentives" element={<ExportIncentivesPage />} />
                   <Route path="ledger-accounts" element={<LedgerAccountsPage />} />
                   <Route path="tax-rates" element={<TaxRatesPage />} />
+                </Route>
+
+                {/* Accounts */}
+                <Route path="accounts">
+                  <Route index element={<AccountsDashboardPage />} />
+                  <Route path="inbox" element={<AccountsInboxPage />} />
+                  <Route path="vouchers" element={<AccVouchersPage />} />
+                  <Route path="vouchers/new" element={<AccVoucherDetailPage />} />
+                  <Route path="vouchers/:id" element={<AccVoucherDetailPage />} />
+                  <Route path="realisations" element={<RealisationsPage />} />
+                  <Route path="realisations/new" element={<RealisationDetailPage />} />
+                  <Route path="realisations/:id" element={<RealisationDetailPage />} />
+                  <Route path="ledgers" element={<AccountsLedgersPage />} />
+                  <Route path="settings" element={<AccountsSettingsPage />} />
+                  <Route path="tally" element={<TallyPage />} />
+                  <Route path="reports" element={<AccountsReportsPage />} />
                 </Route>
 
                 {/* Reports */}

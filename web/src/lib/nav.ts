@@ -269,10 +269,21 @@ export const NAV: NavSection[] = [
   {
     label: '12 · Finance', group: 'FINANCE & REPORTS', menu: 'Finance', icon: Wallet,
     items: [
-      { label: 'Vouchers',          to: '/finance/vouchers', icon: Landmark, perms: ['FINANCE.VIEW'] },
-      { label: 'Receipts',          to: '/finance/receipts', icon: Wallet, perms: ['FINANCE.VIEW'] },
-      { label: 'Payments',          to: '/finance/payments', icon: Coins, perms: ['FINANCE.VIEW'] },
+      // Accounts module (books + Tally mirror, 09-Nov-2026)
+      { label: 'Accounts',          to: '/accounts', icon: Landmark, perms: ['ACCOUNTS.VIEW', 'ACCOUNTS.ENTRY', 'ACCOUNTS.APPROVE', 'ACCOUNTS.ADMIN'] },
+      { label: 'Accounts Inbox',    to: '/accounts/inbox', icon: ListChecks, perms: ['ACCOUNTS.VIEW', 'ACCOUNTS.ENTRY', 'ACCOUNTS.APPROVE', 'ACCOUNTS.ADMIN'] },
+      { label: 'Vouchers',          to: '/accounts/vouchers', icon: FileText, perms: ['ACCOUNTS.VIEW', 'ACCOUNTS.ENTRY', 'ACCOUNTS.APPROVE', 'ACCOUNTS.ADMIN'] },
+      { label: 'New Voucher',       to: '/accounts/vouchers/new', icon: FileText, perms: ['ACCOUNTS.ENTRY'], hidden: true, parent: '/accounts/vouchers' },
+      { label: 'Bank Realisation',  to: '/accounts/realisations', icon: Wallet, perms: ['ACCOUNTS.VIEW', 'ACCOUNTS.ENTRY', 'ACCOUNTS.APPROVE', 'ACCOUNTS.ADMIN'] },
+      { label: 'Books & Reports',   to: '/accounts/reports', icon: BarChart3, perms: ['ACCOUNTS.VIEW', 'ACCOUNTS.ENTRY', 'ACCOUNTS.APPROVE', 'ACCOUNTS.ADMIN'] },
+      { label: 'Ledgers & Groups',  to: '/accounts/ledgers', icon: Layers, perms: ['ACCOUNTS.VIEW', 'ACCOUNTS.ENTRY', 'ACCOUNTS.APPROVE', 'ACCOUNTS.ADMIN'] },
+      { label: 'Tally',             to: '/accounts/tally', icon: RefreshCw, perms: ['ACCOUNTS.TALLY', 'ACCOUNTS.ADMIN', 'ACCOUNTS.VIEW'] },
+      { label: 'Accounts Settings', to: '/accounts/settings', icon: Settings2, perms: ['ACCOUNTS.ADMIN', 'ACCOUNTS.VIEW'] },
       { label: 'Export Benefits',   to: '/finance/incentives', icon: TrendingUp, perms: ['FINANCE.VIEW'] },
+      // old generic screens (did not match their tables; replaced by Accounts) — kept routable, off the menu
+      { label: 'Vouchers (old)',    to: '/finance/vouchers', icon: Landmark, perms: ['FINANCE.VIEW'], hidden: true },
+      { label: 'Receipts (old)',    to: '/finance/receipts', icon: Wallet, perms: ['FINANCE.VIEW'], hidden: true },
+      { label: 'Payments (old)',    to: '/finance/payments', icon: Coins, perms: ['FINANCE.VIEW'], hidden: true },
     ],
   },
   {
@@ -325,7 +336,7 @@ export const NAV: NavSection[] = [
       { label: 'Packing Rules',      to: '/logistics/packing/rules', icon: ListChecks, perms: ['PACKING.VIEW'] },
       { label: 'Defect Master',      to: '/quality/defects', icon: Shield, perms: ['QC.VIEW'] },
       { label: 'T&A Templates',      to: '/tna/templates', icon: Layers, perms: ['SALES_ORDER.VIEW', 'PRODUCTION.VIEW'] },
-      { label: 'Ledger Accounts',    to: '/finance/ledger-accounts', icon: Landmark, perms: ['FINANCE.VIEW'] },
+      { label: 'Ledger Accounts (old)', to: '/finance/ledger-accounts', icon: Landmark, perms: ['FINANCE.VIEW'], hidden: true },  // replaced by Accounts → Ledgers & Groups
       { label: 'Tax Rates',          to: '/finance/tax-rates', icon: Receipt, perms: ['FINANCE.VIEW'] },
     ],
   },

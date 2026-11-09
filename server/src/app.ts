@@ -89,6 +89,8 @@ import { transportMastersRouter } from './modules/transport/transportMasters.rou
 import { transportRequestsRouter } from './modules/transport/transportRequests.routes.js';
 import { transportTripsRouter, driverRouter } from './modules/transport/transportTrips.routes.js';
 import { gateReportsRouter, transportDashboardRouter } from './modules/transport/gateReports.routes.js';
+import { accountsRouter } from './modules/accounts/accounts.routes.js';
+import { accountsReportsRouter } from './modules/accounts/accountsReports.routes.js';
 
 export function createApp() {
   const app = express();
@@ -219,6 +221,9 @@ export function createApp() {
   api.use('/transport', transportDashboardRouter); // /transport/dashboard (coordinator KPIs)
   api.use('/driver', driverRouter);                // /driver/trips (own trips only), /driver/stops/:id/arrive|complete
   api.use('/gate-reports', gateReportsRouter);     // /gate-reports/visitors, transport-requests, trip-sheet, vehicle- / driver-utilisation …
+  // Accounts module (spec Complete Accounts & TallyPrime, 09-Nov-2026): books, vouchers from ERP documents, realisation, Tally mirror
+  api.use('/accounts/reports', accountsReportsRouter);
+  api.use('/accounts', accountsRouter);
 
   // Metadata-driven resources.
   const registry = [...masterResources, ...transactionResources];

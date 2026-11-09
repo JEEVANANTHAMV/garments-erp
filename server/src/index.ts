@@ -1,6 +1,8 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { pingDb, pool } from './config/db.js';
+import { startAccountsScanner } from './modules/accounts/sources.js';
+import { startTallyWorker } from './modules/accounts/tally.js';
 
 async function main() {
   try {
@@ -16,6 +18,9 @@ async function main() {
   const server = app.listen(env.port, () => {
     console.log(`[api] Garment ERP API listening on http://localhost:${env.port}`);
     console.log(`[api] environment: ${env.nodeEnv}`);
+    // accounts: background scan of final ERP documents into vouchers + Tally HTTP connector worker
+    startAccountsScanner();
+    startTallyWorker();
   });
 
   const shutdown = (signal: string) => {
