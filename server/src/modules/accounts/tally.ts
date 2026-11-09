@@ -36,10 +36,11 @@ export async function enqueueTally(tx: Tx, cid: number, voucherId: number) {
   const pick = exact.length === 1 ? exact[0] : dest.length === 1 ? dest[0] : null;
   if (!pick) throw Unprocessable(`More than one active Tally company matches FY ${v.fy_code} — keep one active per year (Accounts → Tally set-up)`, { code: 'MAPPING' });
   const key = `ERP-${cid}-V${voucherId}`;
-  await txExecute(tx, `INSERT IGNORE INTO acc_tally_queue (company_id, tally_company_id, voucher_id, idempotency_key, status, next_retry_at)
+  const ins: any = await txExecute(tx, `INSERT IGNORE INTO acc_tally_queue (company_id, tally_company_id, voucher_id, idempotency_key, status, next_retry_at)
                        VALUES (?,?,?,?, 'PENDING', NOW())`, [cid, pick.id, voucherId, key]);
-  await txExecute(tx, `UPDATE acc_voucher SET tally_status = 'PENDING' WHERE id = ? AND tally_status IN ('NOT_SENT','FAILED')`, [voucherId]);
-  return key;
+  // the voucher's Tally status follows the active destination (a new destination after a company switch starts at PENDING)
+  if (Number(ins?.affectedRows)) await txExecute(tx, `UPDATE acc_voucher SET tally_status = 'PENDING', tally_voucher_no = NULL WHERE id = ?`, [voucherId]);
+  return Number(ins?.affectedRows) ? key : null;
 }
 
 /** Queue every posted voucher that has no row for an ACTIVE Tally company yet (after set-up, or after switching company). */
