@@ -6,8 +6,8 @@ import { openSecret } from '../../core/secretBox.js';
  * TallyPrime mirror (spec §6, §9): queue, XML builder, connectors.
  *
  *  - Every POSTED voucher of a company with an active Tally company gets one acc_tally_queue row (unique per destination +
- *    idempotency key ERP-<company>-V<voucher>). Tally receives the key as the voucher REMOTEID, so importing the same
- *    voucher again (retry, re-imported file) updates that voucher in Tally instead of creating a second one.
+ *    idempotency key ERP-<company>-V<voucher>, sent as REMOTEID). TallyPrime does not keep that REMOTEID on new vouchers, so the
+ *    HTTP connector protects against duplicates by voucher type + ERP number instead (see "duplicate protection").
  *  - Connector XML_FILE (default until the client's Tally API is confirmed): accounts download the XML (ledgers + vouchers),
  *    import it in Tally (Gateway → Import Data → Vouchers), then mark the rows posted (Tally voucher no optional).
  *  - Connector HTTP: Tally's XML server (Tally → F1 Settings → Connectivity → TallyPrime acts as Server, port 9000).
@@ -73,12 +73,20 @@ async function voucherData(cid: number, ids: number[]) {
 
 const BILLTYPE: Record<string, string> = { NEW: 'New Ref', AGAINST: 'Agst Ref', ADVANCE: 'Advance', ON_ACCOUNT: 'On Account' };
 
+/** Bill due date as Tally's credit period ("30 Days" from the voucher date). A plain yyyymmdd date is dropped by Tally (blank due date). */
+export function creditPeriod(vdate: string | Date | null | undefined, due: string | Date | null | undefined) {
+  if (!vdate || !due) return '';
+  const day = (d: string | Date) => d instanceof Date ? Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) : Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`);
+  const days = Math.round((day(due) - day(vdate)) / 86_400_000);
+  return Number.isFinite(days) && days > 0 ? `<BILLCREDITPERIOD>${days} Days</BILLCREDITPERIOD>` : '';
+}
+
 export function voucherXml(v: any, key: string) {
   const lines = v.entries.map((e: any) => {
     const dr = Number(e.debit) > 0;
     const a = dr ? -Number(e.debit) : Number(e.credit);   // Tally: debit = negative amount, ISDEEMEDPOSITIVE Yes
     const bill = Number(e.is_bill_wise) && e.bill_ref_type
-      ? `<BILLALLOCATIONS.LIST><NAME>${esc(e.bill_ref_type === 'ON_ACCOUNT' ? '' : e.bill_ref_no ?? '')}</NAME><BILLTYPE>${BILLTYPE[e.bill_ref_type] ?? 'On Account'}</BILLTYPE>${e.due && e.bill_ref_type === 'NEW' ? `<BILLCREDITPERIOD>${ymd(e.due)}</BILLCREDITPERIOD>` : ''}<AMOUNT>${amt(a)}</AMOUNT></BILLALLOCATIONS.LIST>`
+      ? `<BILLALLOCATIONS.LIST><NAME>${esc(e.bill_ref_type === 'ON_ACCOUNT' ? '' : e.bill_ref_no ?? '')}</NAME><BILLTYPE>${BILLTYPE[e.bill_ref_type] ?? 'On Account'}</BILLTYPE>${e.bill_ref_type === 'NEW' ? creditPeriod(v.vdate, e.due) : ''}<AMOUNT>${amt(a)}</AMOUNT></BILLALLOCATIONS.LIST>`
       : '';
     return `<ALLLEDGERENTRIES.LIST><LEDGERNAME>${esc(e.lname)}</LEDGERNAME><ISDEEMEDPOSITIVE>${dr ? 'Yes' : 'No'}</ISDEEMEDPOSITIVE><AMOUNT>${amt(a)}</AMOUNT>${bill}</ALLLEDGERENTRIES.LIST>`;
   }).join('');
@@ -150,20 +158,92 @@ export function parseTallyResponse(xml: string, http: number): TallyResult {
   return { outcome: 'UNKNOWN', http, message: 'Tally answered without CREATED / ALTERED counts', raw: xml.slice(0, 4000) };
 }
 
+/**
+ * Tally's XML server works on ONE request at a time, and a slow or stuck request blocks everything behind it (seen on the
+ * client's TallyPrime 7.1, 14-Nov-2026). So every request to the same Tally server waits for the previous one to finish —
+ * the worker, "Test connection" and "Fetch ledgers" never hit Tally in parallel.
+ */
+const tallyLane = new Map<string, Promise<unknown>>();
+
 /** POST an XML request to the Tally server of a destination (also used to read Tally's ledger list). */
-export async function tallyRequest(tc: any, body: string): Promise<{ status: number; text: string; ms: number }> {
+export async function tallyRequest(tc: any, body: string, timeoutMs?: number): Promise<{ status: number; text: string; ms: number }> {
   if (!tc.host) throw Unprocessable('Tally host is not set', { code: 'MAPPING' });
   const url = /^https?:\/\//i.test(tc.host) ? tc.host.replace(/\/$/, '') : `http://${tc.host}:${tc.port || 9000}`;
+  const prev = tallyLane.get(url) ?? Promise.resolve();
+  const run = prev.catch(() => undefined).then(() => sendToTally(tc, url, body, timeoutMs));
+  tallyLane.set(url, run.catch(() => undefined));
+  return run;
+}
+
+async function sendToTally(tc: any, url: string, body: string, timeoutMs?: number): Promise<{ status: number; text: string; ms: number }> {
   const headers: Record<string, string> = { 'content-type': 'text/xml; charset=utf-8' };
   const secret = openSecret(tc.secret_enc);
   if (secret) headers.authorization = secret.includes(':') ? `Basic ${Buffer.from(secret).toString('base64')}` : `Bearer ${secret}`;
   const t0 = Date.now();
   const ctl = new AbortController();
-  const to = setTimeout(() => ctl.abort(), Number(tc.timeout_ms) || 20000);
+  const to = setTimeout(() => ctl.abort(), timeoutMs ?? (Number(tc.timeout_ms) || 20000));
   try {
     const r = await fetch(url, { method: 'POST', body, headers, signal: ctl.signal });
     return { status: r.status, text: await r.text(), ms: Date.now() - t0 };
   } finally { clearTimeout(to); }
+}
+
+// ------------------------------------------------------------------ duplicate protection
+/*
+ * TallyPrime does NOT keep the REMOTEID we send on a new voucher (it stores its own GUID — verified on the client's
+ * TallyPrime 7.1), so REMOTEID alone cannot stop a second copy after a timeout or retry. Instead:
+ *   1. the ERP voucher number is kept in Tally — the voucher type must number "Automatic (Manual Override)" or "Manual";
+ *   2. before every send the worker looks the voucher up in Tally by type + number on its date; found → marked posted,
+ *      never sent again;
+ *   3. if the lookup itself fails, nothing is sent (retry later) — a missed lookup must never become a duplicate.
+ * Requests are small (one voucher type list, one day of vouchers) so Tally answers fast.
+ */
+const LOOKUP_MS = 15000;
+const KEEPS_OUR_NUMBER = new Set(['automatic (manual override)', 'manual']);
+const formulaText = (s: unknown) => String(s ?? '').replace(/"/g, '');
+
+function collectionXml(company: string, id: string, type: string, fetch: string, o: { inner?: string; after?: string; vars?: string } = {}) {
+  return `<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>${id}</ID></HEADER><BODY><DESC>`
+    + `<STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT><SVCURRENTCOMPANY>${esc(company)}</SVCURRENTCOMPANY>${o.vars ?? ''}</STATICVARIABLES>`
+    + `<TDL><TDLMESSAGE><COLLECTION NAME="${id}" ISMODIFY="No"><TYPE>${type}</TYPE><FETCH>${fetch}</FETCH>${o.inner ?? ''}</COLLECTION>${o.after ?? ''}</TDLMESSAGE></TDL></DESC></BODY></ENVELOPE>`;
+}
+
+/** Numbering method per Tally voucher type name (lower-case keys). */
+export async function tallyVoucherTypes(tc: any): Promise<Map<string, string>> {
+  const r = await tallyRequest(tc, collectionXml(tc.tally_company_name, 'ERPVchTypes', 'VoucherType', 'Name, NumberingMethod'), LOOKUP_MS);
+  if (r.status !== 200) throw new Error(`Tally answered HTTP ${r.status}`);
+  const out = new Map<string, string>();
+  for (const m of r.text.matchAll(/<VOUCHERTYPE NAME="([^"]*)"[^>]*>([\s\S]*?)<\/VOUCHERTYPE>/gi)) {
+    out.set(xmlText(m[1]).toLowerCase(), xmlText(/<NUMBERINGMETHOD[^>]*>([^<]*)</i.exec(m[2])?.[1] ?? ''));
+  }
+  return out;
+}
+const xmlText = (s: string) => s.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();
+
+/** Problem with a voucher type's numbering (null = fine). */
+export function numberingProblem(types: Map<string, string>, vchType: string) {
+  const m = types.get(String(vchType).toLowerCase());
+  if (m === undefined) return `Voucher type "${vchType}" does not exist in Tally`;
+  if (!KEEPS_OUR_NUMBER.has(m.toLowerCase())) return `Tally voucher type "${vchType}" numbers vouchers "${m || 'automatically'}" — set Method of Voucher Numbering to "Automatic (Manual Override)" (Alt+G → Alter → Voucher Type) so the ERP number is kept and re-sends can be matched`;
+  return null;
+}
+
+/** Find a voucher in Tally by type + number on its date. Returns its Tally master id, or null when not there. Throws when Tally cannot answer. */
+export async function findTallyVoucher(tc: any, vchType: string, vchNo: string, date: string): Promise<{ masterId: string | null } | null> {
+  const d = ymd(date);
+  const xml = collectionXml(tc.tally_company_name, 'ERPVchFind', 'Voucher', 'VoucherNumber, VoucherTypeName, MasterId', {
+    inner: '<FILTER>ERPVchFindF</FILTER>',
+    after: `<SYSTEM TYPE="Formulae" NAME="ERPVchFindF">$VoucherNumber = "${esc(formulaText(vchNo))}" AND $VoucherTypeName = "${esc(formulaText(vchType))}"</SYSTEM>`,
+    vars: `<SVFROMDATE>${d}</SVFROMDATE><SVTODATE>${d}</SVTODATE>`,
+  });
+  const r = await tallyRequest(tc, xml, LOOKUP_MS);
+  if (r.status !== 200) throw new Error(`Tally answered HTTP ${r.status}`);
+  const hit = [...r.text.matchAll(/<VOUCHER\b[^>]*>([\s\S]*?)<\/VOUCHER>/gi)].find((m) => {
+    const no = /<VOUCHERNUMBER[^>]*>([^<]*)</i.exec(m[1])?.[1];
+    return no !== undefined && xmlText(no) === String(vchNo).trim();
+  });
+  if (!hit) return null;
+  return { masterId: /<MASTERID[^>]*>\s*([^<]*?)\s*</i.exec(hit[1])?.[1] ?? null };
 }
 
 export async function healthCheck(cid: number, tallyCompanyId: number) {
@@ -178,6 +258,18 @@ export async function healthCheck(cid: number, tallyCompanyId: number) {
     const found = r.text.toLowerCase().includes(String(tc.tally_company_name).toLowerCase());
     ok = r.status === 200 && found;
     msg = r.status !== 200 ? `HTTP ${r.status}` : found ? `Connected in ${r.ms} ms — company "${tc.tally_company_name}" is open in Tally` : `Connected, but company "${tc.tally_company_name}" is not loaded in Tally`;
+    if (ok) {
+      // the voucher types the ERP sends must keep the ERP number (duplicate protection)
+      const types = await tallyVoucherTypes(tc);
+      typeCache.set(Number(tc.id), { at: Date.now(), types });
+      const used = await query<any>(`SELECT DISTINCT tally_voucher_type t FROM acc_voucher_type WHERE company_id = ? AND tally_voucher_type IS NOT NULL`, [cid]);
+      const bad = used.map((u) => numberingProblem(types, u.t)).filter(Boolean) as string[];
+      if (bad.length) {
+        ok = false;
+        const names = used.filter((u) => numberingProblem(types, u.t)).map((u) => `"${u.t}"`).join(', ');
+        msg += `. Fix before posting — voucher type(s) ${names}: ${bad.some((b) => b.includes('does not exist')) ? 'missing in Tally or ' : ''}not set to keep the ERP number. In Tally: Alt+G → Alter → Voucher Type → Method of Voucher Numbering = "Automatic (Manual Override)"`;
+      } else msg += '; voucher numbering OK';
+    }
   } catch (err) {
     msg = (err as Error).name === 'AbortError' ? 'Timed out — Tally did not answer' : `Cannot reach Tally: ${(err as Error).message}`;
   }
@@ -188,18 +280,19 @@ export async function healthCheck(cid: number, tallyCompanyId: number) {
 const BACKOFF_MIN = [1, 5, 15, 60, 240];
 const MAX_ATTEMPTS = 6;
 
-async function finishQueue(q: any, r: TallyResult, actor: number | null, req?: string, ms?: number) {
+async function finishQueue(q: any, r: TallyResult, actor: number | null, req?: string, ms?: number, vchNo?: string) {
   await transaction(async (tx) => {
     await txExecute(tx, `INSERT INTO acc_tally_log (queue_id, action, outcome, request_payload, response_payload, http_status, duration_ms, message, actor_id)
                          VALUES (?, 'SUBMIT', ?, ?, ?, ?, ?, ?, ?)`, [q.id, r.outcome, req ?? null, r.raw ?? null, r.http ?? null, ms ?? null, r.message ?? null, actor]);
     const attempts = Number(q.attempts) + 1;
     if (r.outcome === 'POSTED') {
-      await txExecute(tx, `UPDATE acc_tally_queue SET status = 'POSTED', attempts = ?, locked_at = NULL, tally_voucher_id = ?, posted_at = NOW(),
-                              last_error = NULL, last_error_code = NULL WHERE id = ?`, [attempts, r.lastVchId ?? null, q.id]);
-      await txExecute(tx, `UPDATE acc_voucher SET tally_status = 'POSTED' WHERE id = ?`, [q.voucher_id]);
+      await txExecute(tx, `UPDATE acc_tally_queue SET status = 'POSTED', attempts = ?, locked_at = NULL, tally_voucher_id = ?, tally_voucher_no = COALESCE(?, tally_voucher_no),
+                              posted_at = NOW(), last_error = NULL, last_error_code = NULL, next_retry_at = NULL WHERE id = ?`, [attempts, r.lastVchId ?? null, vchNo ?? null, q.id]);
+      await txExecute(tx, `UPDATE acc_voucher SET tally_status = 'POSTED', tally_voucher_no = COALESCE(?, tally_voucher_no) WHERE id = ?`, [vchNo ?? null, q.voucher_id]);
     } else {
       const status = r.outcome === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED';
-      const retryIn = r.outcome === 'FAILED' && r.http && r.http >= 500 && attempts < MAX_ATTEMPTS ? BACKOFF_MIN[Math.min(attempts - 1, BACKOFF_MIN.length - 1)] : null;
+      // UNKNOWN is retried too: every try looks the voucher up in Tally before sending
+      const retryIn = (r.outcome === 'UNKNOWN' || (r.http && r.http >= 500)) && attempts < MAX_ATTEMPTS ? BACKOFF_MIN[Math.min(attempts - 1, BACKOFF_MIN.length - 1)] : null;
       await txExecute(tx, `UPDATE acc_tally_queue SET status = ?, attempts = ?, locked_at = NULL, last_error = ?, last_error_code = ?,
                               next_retry_at = ${retryIn ? 'DATE_ADD(NOW(), INTERVAL ? MINUTE)' : 'NULL'} WHERE id = ?`,
         retryIn ? [status, attempts, (r.message ?? '').slice(0, 1000), r.outcome, retryIn, q.id] : [status, attempts, (r.message ?? '').slice(0, 1000), r.outcome, q.id]);
@@ -208,7 +301,19 @@ async function finishQueue(q: any, r: TallyResult, actor: number | null, req?: s
   });
 }
 
-/** Send one queue row through the HTTP connector. Safe to repeat: REMOTEID = idempotency key. */
+const typeCache = new Map<number, { at: number; types: Map<string, string> }>();
+async function cachedVoucherTypes(tc: any) {
+  const c = typeCache.get(Number(tc.id));
+  if (c && Date.now() - c.at < 60_000) return c.types;   // short: a numbering change in Tally is seen within a minute
+  const types = await tallyVoucherTypes(tc);
+  typeCache.set(Number(tc.id), { at: Date.now(), types });
+  return types;
+}
+
+/**
+ * Send one queue row through the HTTP connector. Safe to repeat: the voucher is looked up in Tally first (type + ERP number)
+ * and only sent when Tally does not have it.
+ */
 export async function submitQueueRow(cid: number, queueId: number, actor: number | null) {
   const claimed = await transaction(async (tx) => {
     const q = await txQueryOne<any>(tx, `SELECT q.*, t.connector FROM acc_tally_queue q JOIN acc_tally_company t ON t.id = q.tally_company_id
@@ -224,21 +329,34 @@ export async function submitQueueRow(cid: number, queueId: number, actor: number
   if (!claimed) return { skipped: true };
   const tc = await queryOne<any>(`SELECT * FROM acc_tally_company WHERE id = ?`, [claimed.tally_company_id]);
   const [v] = await voucherData(cid, [Number(claimed.voucher_id)]);
-  const masters = await mastersXml(cid, [Number(claimed.voucher_id)], Number(claimed.tally_company_id));
   const vx = envelope(tc.tally_company_name, 'Vouchers', voucherXml(v, claimed.idempotency_key));
-  let result: TallyResult; let ms = 0;
+  let result: TallyResult; let ms = 0; let sending = false; let req: string | undefined;
   try {
-    if (masters) await tallyRequest(tc, envelope(tc.tally_company_name, 'All Masters', masters));
-    const r = await tallyRequest(tc, vx);
-    ms = r.ms;
-    result = parseTallyResponse(r.text, r.status);
+    const problem = numberingProblem(await cachedVoucherTypes(tc), v.tally_voucher_type);
+    if (problem) {
+      typeCache.delete(Number(tc.id));   // re-read after the user fixes Tally and retries
+      result = { outcome: 'FAILED', message: problem };
+    } else {
+      const found = await findTallyVoucher(tc, v.tally_voucher_type, v.voucher_no, v.vdate);
+      if (found) {
+        result = { outcome: 'POSTED', lastVchId: found.masterId, message: `Already in Tally (${v.tally_voucher_type} ${v.voucher_no}) — matched, not sent again` };
+      } else {
+        const masters = await mastersXml(cid, [Number(claimed.voucher_id)], Number(claimed.tally_company_id));
+        if (masters) await tallyRequest(tc, envelope(tc.tally_company_name, 'All Masters', masters));
+        sending = true; req = vx;
+        const r = await tallyRequest(tc, vx);
+        ms = r.ms;
+        result = parseTallyResponse(r.text, r.status);
+      }
+    }
   } catch (err) {
     const aborted = (err as Error).name === 'AbortError';
-    // refused / DNS = the request never reached Tally → retryable FAILED; timeout = may have reached Tally → UNKNOWN
-    result = aborted ? { outcome: 'UNKNOWN', message: 'Timed out waiting for Tally — re-send is safe (same REMOTEID updates, not duplicates)' }
-      : { outcome: 'FAILED', http: 503, message: `Cannot reach Tally: ${(err as Error).message}` };
+    // a timeout while SENDING may have reached Tally → UNKNOWN (the next try looks it up first, so it is never doubled);
+    // anything else (refused, timeout on a lookup) never created a voucher → retryable FAILED
+    result = aborted && sending ? { outcome: 'UNKNOWN', message: 'Timed out waiting for Tally — the next try checks Tally first, so it is never posted twice' }
+      : { outcome: 'FAILED', http: 503, message: aborted ? 'Tally did not answer in time (it may be busy or showing a message on screen)' : `Cannot reach Tally: ${(err as Error).message}` };
   }
-  await finishQueue(claimed, result, actor, vx, ms);
+  await finishQueue(claimed, result, actor, req, ms, v?.voucher_no);
   return { skipped: false, outcome: result.outcome, message: result.message };
 }
 
@@ -252,7 +370,7 @@ export function startTallyWorker() {
     busy = true;
     try {
       const rows = await query<any>(`SELECT q.id, q.company_id FROM acc_tally_queue q JOIN acc_tally_company t ON t.id = q.tally_company_id AND t.is_active = 1 AND t.connector = 'HTTP'
-          WHERE (q.status = 'PENDING' OR (q.status = 'FAILED' AND q.next_retry_at IS NOT NULL AND q.attempts < ${MAX_ATTEMPTS}))
+          WHERE (q.status = 'PENDING' OR (q.status IN ('FAILED','UNKNOWN') AND q.next_retry_at IS NOT NULL AND q.attempts < ${MAX_ATTEMPTS}))
             AND (q.next_retry_at IS NULL OR q.next_retry_at <= NOW()) ORDER BY q.id LIMIT 50`);
       for (const r of rows) {
         try { await submitQueueRow(Number(r.company_id), Number(r.id), null); } catch (err) { console.error('[tally] submit', r.id, (err as Error).message); }
