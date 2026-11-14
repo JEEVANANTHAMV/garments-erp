@@ -155,10 +155,12 @@ export interface TallyResult { outcome: 'POSTED' | 'FAILED' | 'UNKNOWN'; created
 export function parseTallyResponse(xml: string, http: number): TallyResult {
   const num = (tag: string) => { const m = new RegExp(`<${tag}>\\s*(-?\\d+)\\s*</${tag}>`, 'i').exec(xml); return m ? Number(m[1]) : null; };
   const created = num('CREATED'); const altered = num('ALTERED'); const errors = num('ERRORS');
-  const lineErr = [...xml.matchAll(/<LINEERROR>([\s\S]*?)<\/LINEERROR>/gi)].map((m) => m[1].trim()).join(' | ');
+  // TallyPrime 7.1 reports e.g. a missing ledger as EXCEPTIONS=1 with ERRORS=0 (+ LINEERROR) — both mean "not saved"
+  const exceptions = num('EXCEPTIONS');
+  const lineErr = [...xml.matchAll(/<LINEERROR>([\s\S]*?)<\/LINEERROR>/gi)].map((m) => xmlText(m[1])).join(' | ');
   const last = /<LASTVCHID>\s*([^<]*)<\/LASTVCHID>/i.exec(xml)?.[1]?.trim() || null;
   if (http < 200 || http >= 300) return { outcome: http >= 500 ? 'UNKNOWN' : 'FAILED', http, message: `HTTP ${http}`, raw: xml.slice(0, 4000) };
-  if ((errors ?? 0) > 0 || lineErr) return { outcome: 'FAILED', created: created ?? 0, altered: altered ?? 0, errors: errors ?? 1, message: lineErr || 'Tally reported errors', http, raw: xml.slice(0, 4000) };
+  if ((errors ?? 0) > 0 || (exceptions ?? 0) > 0 || lineErr) return { outcome: 'FAILED', created: created ?? 0, altered: altered ?? 0, errors: Math.max(errors ?? 0, exceptions ?? 0, 1), message: lineErr || 'Tally reported errors', http, raw: xml.slice(0, 4000) };
   if ((created ?? 0) + (altered ?? 0) > 0) return { outcome: 'POSTED', created: created ?? 0, altered: altered ?? 0, errors: 0, lastVchId: last, http, raw: xml.slice(0, 4000) };
   // HTTP 200 alone is not proof (§6.3)
   return { outcome: 'UNKNOWN', http, message: 'Tally answered without CREATED / ALTERED counts', raw: xml.slice(0, 4000) };
