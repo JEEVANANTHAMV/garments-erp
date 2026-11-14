@@ -73,12 +73,18 @@ async function voucherData(cid: number, ids: number[]) {
 
 const BILLTYPE: Record<string, string> = { NEW: 'New Ref', AGAINST: 'Agst Ref', ADVANCE: 'Advance', ON_ACCOUNT: 'On Account' };
 
-/** Bill due date as Tally's credit period ("30 Days" from the voucher date). A plain yyyymmdd date is dropped by Tally (blank due date). */
+/**
+ * Bill due date as Tally's credit period. TallyPrime 7.1 only keeps it in its own export form —
+ * <BILLCREDITPERIOD JD="<voucher date as Tally day no>" P="30 Days">30 Days</BILLCREDITPERIOD> (verified 14-Nov-2026);
+ * a plain date or a bare "30 Days" is silently dropped (blank due date). JD = days since 31-Dec-1899 (5-Nov-2026 = 46330).
+ */
 export function creditPeriod(vdate: string | Date | null | undefined, due: string | Date | null | undefined) {
   if (!vdate || !due) return '';
   const day = (d: string | Date) => d instanceof Date ? Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) : Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`);
   const days = Math.round((day(due) - day(vdate)) / 86_400_000);
-  return Number.isFinite(days) && days > 0 ? `<BILLCREDITPERIOD>${days} Days</BILLCREDITPERIOD>` : '';
+  if (!Number.isFinite(days) || days <= 0) return '';
+  const jd = Math.round((day(vdate) - Date.UTC(1899, 11, 31)) / 86_400_000);
+  return `<BILLCREDITPERIOD JD="${jd}" P="${days} Days">${days} Days</BILLCREDITPERIOD>`;
 }
 
 export function voucherXml(v: any, key: string) {
