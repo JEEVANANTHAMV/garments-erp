@@ -193,13 +193,15 @@ async function sendToTally(tc: any, url: string, body: string, timeoutMs?: numbe
  * TallyPrime does NOT keep the REMOTEID we send on a new voucher (it stores its own GUID — verified on the client's
  * TallyPrime 7.1), so REMOTEID alone cannot stop a second copy after a timeout or retry. Instead:
  *   1. the ERP voucher number is kept in Tally — the voucher type must number "Automatic (Manual Override)" or "Manual";
- *   2. before every send the worker looks the voucher up in Tally by type + number on its date; found → marked posted,
- *      never sent again;
+ *   2. before every send the worker looks the voucher up in Tally by type + number (ERP numbers carry the FY, so they are
+ *      unique in the company; Tally ignores the date range on this collection); found → marked posted, never sent again;
  *   3. if the lookup itself fails, nothing is sent (retry later) — a missed lookup must never become a duplicate.
- * Requests are small (one voucher type list, one day of vouchers) so Tally answers fast.
+ * Requests are small (voucher type list; a filtered voucher lookup, 135 ms on the TEST company — re-measure on live data).
  */
 const LOOKUP_MS = 15000;
-const KEEPS_OUR_NUMBER = new Set(['automatic (manual override)', 'manual']);
+// Tally's internal NumberingMethod values: "Default" = Automatic (renumbers what we send — refused). "None" is what TallyPrime 7.1
+// reports after the type is set to keep the typed number; verified 14-Nov-2026: a voucher sent as TESTNUM/0001 stayed TESTNUM/0001.
+const KEEPS_OUR_NUMBER = new Set(['automatic (manual override)', 'manual', 'none']);
 const formulaText = (s: unknown) => String(s ?? '').replace(/"/g, '');
 
 function collectionXml(company: string, id: string, type: string, fetch: string, o: { inner?: string; after?: string; vars?: string } = {}) {
@@ -228,7 +230,7 @@ export function numberingProblem(types: Map<string, string>, vchType: string) {
   return null;
 }
 
-/** Find a voucher in Tally by type + number on its date. Returns its Tally master id, or null when not there. Throws when Tally cannot answer. */
+/** Find a voucher in Tally by type + number (the date only narrows when Tally honours it). Returns its Tally master id, or null when not there. Throws when Tally cannot answer. */
 export async function findTallyVoucher(tc: any, vchType: string, vchNo: string, date: string): Promise<{ masterId: string | null } | null> {
   const d = ymd(date);
   const xml = collectionXml(tc.tally_company_name, 'ERPVchFind', 'Voucher', 'VoucherNumber, VoucherTypeName, MasterId', {
