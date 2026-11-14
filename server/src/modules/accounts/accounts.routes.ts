@@ -893,13 +893,15 @@ accountsRouter.post('/tally/mark-failed', TALLY, ah(async (req, res) => {
 /** Retry: HTTP connector re-sends now (safe: same REMOTEID); XML file connector puts the row back to "waiting". */
 accountsRouter.post('/tally/queue/:id/retry', TALLY, ah(async (req, res) => {
   const cid = cidOf(req); const id = idParam(req);
-  const q = await queryOne<any>(`SELECT q.*, t.connector FROM acc_tally_queue q JOIN acc_tally_company t ON t.id = q.tally_company_id WHERE q.id = ? AND q.company_id = ?`, [id, cid]);
+  const q = await queryOne<any>(`SELECT q.*, t.connector, (q.locked_at IS NOT NULL AND q.locked_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)) lock_fresh
+      FROM acc_tally_queue q JOIN acc_tally_company t ON t.id = q.tally_company_id WHERE q.id = ? AND q.company_id = ?`, [id, cid]);
   if (!q) throw NotFound();
   if (q.status === 'POSTED') throw Conflict('Already posted in Tally — nothing to retry');
+  if (q.status === 'PROCESSING' && q.connector === 'HTTP' && Number(q.lock_fresh)) throw Conflict('Being sent to Tally right now — wait a minute and refresh');
   if (q.connector === 'HTTP') {
     await execute(`UPDATE acc_tally_queue SET status = 'PENDING', locked_at = NULL WHERE id = ?`, [id]);
     const r = await submitQueueRow(cid, id, req.user!.id);
-    return res.json({ data: r, message: r.skipped ? 'Already being sent' : r.outcome === 'POSTED' ? 'Posted in Tally' : `Tally: ${r.message ?? r.outcome}` });
+    return res.json({ data: r, message: r.skipped ? 'Already being sent' : r.outcome === 'POSTED' ? 'Posted in Tally' : r.outcome === 'WAITING' ? `Waiting for Tally: ${r.message}` : `Tally: ${r.message ?? r.outcome}` });
   }
   await execute(`UPDATE acc_tally_queue SET status = 'PENDING', locked_at = NULL WHERE id = ?`, [id]);
   await execute(`UPDATE acc_voucher SET tally_status = 'PENDING' WHERE id = ?`, [q.voucher_id]);

@@ -6,7 +6,7 @@ import { ah } from '../../core/asyncHandler.js';
 import { BadRequest, NotFound, Unprocessable } from '../../core/errors.js';
 import { requireAny, requirePermission } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
-import { tallyRequest } from './tally.js';
+import { tallyRequest, ensureCompanyOpen, TallyNotReady } from './tally.js';
 
 /**
  * Tally ledger list + matching (go-live item, 09-Nov-2026).
@@ -141,8 +141,14 @@ tallyLedgersRouter.post('/tally/companies/:id/ledgers/fetch', ADMIN, ah(async (r
     + `<TDL><TDLMESSAGE><COLLECTION NAME="ERPLedgerList" ISMODIFY="No"><TYPE>Ledger</TYPE>`
     + `<NATIVEMETHOD>Name</NATIVEMETHOD><NATIVEMETHOD>Parent</NATIVEMETHOD><NATIVEMETHOD>OpeningBalance</NATIVEMETHOD><NATIVEMETHOD>PartyGSTIN</NATIVEMETHOD>`
     + `<NATIVEMETHOD>BillAllocations</NATIVEMETHOD></COLLECTION></TDLMESSAGE></TDL></DESC></BODY></ENVELOPE>`;
-  const r = await tallyRequest(tc, body);
+  // the company must be open before any request that names it (a read for a closed company closed TallyPrime)
+  try { await ensureCompanyOpen(tc); } catch (err) {
+    if (err instanceof TallyNotReady) throw Unprocessable(err.message);
+    throw Unprocessable(`Cannot reach Tally: ${(err as Error).name === 'AbortError' ? 'it did not answer in time' : (err as Error).message}`);
+  }
+  const r = await tallyRequest(tc, body, 60000);
   if (r.status !== 200) throw Unprocessable(`Tally answered HTTP ${r.status}`);
+  if (!/<ENVELOPE/i.test(r.text)) throw Unprocessable('Tally sent an empty reply — it may be showing a message on screen');
   const n = await store(req, Number(tc.id), parseTallyLedgersXml(r.text), 'FETCH');
   res.json({ data: { imported: n }, message: `${n} ledger(s) read from Tally` });
 }));

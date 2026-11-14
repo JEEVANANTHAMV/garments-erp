@@ -57,7 +57,8 @@ export function TallyPage() {
     { key: 'status', header: 'Result', render: (r) => (
       <div className="max-w-[340px]">
         {r.status === 'POSTED' ? <p className="text-status-success-text">In Tally{r.tally_voucher_no ? ` · ${r.tally_voucher_no}` : ''}</p>
-          : r.last_error ? <p className="text-status-error-text">{r.status === 'UNKNOWN' ? 'Unknown: ' : ''}{r.last_error}</p> : <p className="text-ink-secondary">{r.status === 'PROCESSING' ? 'Exported / sent — confirm when imported' : 'Waiting'}</p>}
+          : r.last_error && r.last_error_code === 'TALLY_NOT_READY' ? <p className="text-status-info-text">Waiting for Tally: {r.last_error}</p>
+          : r.last_error ? <p className="text-status-error-text">{r.status === 'UNKNOWN' ? 'Unknown: ' : ''}{r.last_error}</p> : <p className="text-ink-secondary">{r.status === 'PROCESSING' ? (r.connector === 'HTTP' ? 'Sending to Tally…' : 'Exported / sent — confirm when imported') : 'Waiting'}</p>}
         <p className="text-caption text-ink-secondary">{r.attempts} attempt(s)</p>
       </div>) },
     { key: 'act', header: '', render: (r) => (
