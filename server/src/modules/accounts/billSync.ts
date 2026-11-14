@@ -45,7 +45,10 @@ export async function syncBillTracker(cid: number) {
     if (erpPosted && notInTally.length && p.status !== 'POSTED') {
       // books are done, Tally not yet: say so on the tracker instead of claiming "posted"
       const msg = `Accounts voucher ${notInTally.map((x) => x.v.voucher_no).join(', ')} posted — ${notInTally.some((x) => x.v.tally_status === 'FAILED' || x.v.tally_status === 'UNKNOWN')
-        ? `Tally problem: ${notInTally.map((x) => x.v.tally_error).filter(Boolean)[0] ?? 'see Accounts → Tally'}` : 'waiting for Tally'}`.slice(0, 500);
+        ? `Tally problem: ${notInTally.map((x) => x.v.tally_error).filter(Boolean)[0] ?? 'see Accounts → Tally'}`
+        : notInTally.some((x) => !x.v.tally_status || x.v.tally_status === 'NOT_SENT')
+          ? 'not queued for Tally yet (posted before Tally was connected) — Accounts → Tally → Queue older vouchers'
+          : 'waiting for Tally'}`.slice(0, 500);
       if (p.response_summary !== msg) await query(`UPDATE trx_bill_posting SET response_summary = ? WHERE id = ?`, [msg, p.id]);
       continue;
     }
