@@ -1,6 +1,7 @@
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, execute, type Tx } from '../../config/db.js';
 import { Unprocessable } from '../../core/errors.js';
 import { openSecret } from '../../core/secretBox.js';
+import { syncBillTracker } from './billSync.js';
 
 /**
  * TallyPrime mirror (spec §6, §9): queue, XML builder, connectors.
@@ -443,6 +444,14 @@ function resumeDestination(tcId: number) {
 }
 const isPaused = (tcId: number) => (paused.get(tcId)?.until ?? 0) > Date.now();
 
+/** Bill tracker follows Tally: one sync per company a few seconds after the last Tally answer (also during a backlog). */
+const billSyncTimers = new Map<number, NodeJS.Timeout>();
+export function scheduleBillSync(cid: number) {
+  const t = billSyncTimers.get(cid); if (t) clearTimeout(t);
+  const nt = setTimeout(() => { billSyncTimers.delete(cid); void syncBillTracker(cid).catch((err) => console.error('[tally] bill tracker sync', cid, (err as Error).message)); }, 5000);
+  nt.unref?.(); billSyncTimers.set(cid, nt);
+}
+
 async function finishQueue(q: any, r: TallyResult, actor: number | null, req?: string, ms?: number, vchNo?: string) {
   let waitMin = 0;
   if (r.transport || r.outcome === 'UNKNOWN') waitMin = pauseDestination(Number(q.tally_company_id)); else resumeDestination(Number(q.tally_company_id));
@@ -471,6 +480,7 @@ async function finishQueue(q: any, r: TallyResult, actor: number | null, req?: s
       await txExecute(tx, `UPDATE acc_voucher SET tally_status = ? WHERE id = ?`, [status, q.voucher_id]);
     }
   });
+  scheduleBillSync(Number(q.company_id));
 }
 
 const typeCache = new Map<number, { at: number; types: Map<string, string> }>();

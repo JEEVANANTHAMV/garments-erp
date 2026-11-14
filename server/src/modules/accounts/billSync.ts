@@ -5,6 +5,8 @@ import { query, queryOne, transaction, txQueryOne, txExecute } from '../../confi
  * A tracked bill's posting is satisfied by the Accounts module: when every Bills Inward / process / contractor bill linked
  * to the tracked bill has a POSTED voucher, the tracker posting becomes POSTED with those voucher numbers. If such a voucher
  * is later reversed / cancelled, the tracker posting goes to RECON_REQUIRED. Nobody types the bill into Tally a second time.
+ * When a Tally company is active for the voucher's year, "posted" means IN TALLY: the voucher must also be confirmed by
+ * Tally (tally_status POSTED); until then the tracker stays queued with the reason (waiting / Tally's error).
  */
 const LINK_KEY: Record<string, string> = {
   SUPPLIER_BILL: 'SUPPLIER_BILL:APPROVE', KNITTING_BILL: 'KNITTING_BILL:POST', FABRIC_PROCESS_BILL: 'FABRIC_PROCESS_BILL:POST',
@@ -29,26 +31,41 @@ export async function syncBillTracker(cid: number) {
       if (p.status !== 'POSTED' && p.response_summary !== msg) await query(`UPDATE trx_bill_posting SET response_summary = ? WHERE id = ?`, [msg, p.id]);
       continue;
     }
-    const vs = await query<any>(`SELECT source_key, status, voucher_no, DATE_FORMAT(voucher_date,'%Y-%m-%d') d FROM acc_voucher
-        WHERE company_id = ? AND source_key IN (?)`, [cid, links.map((l) => `${LINK_KEY[l.link_type]}:${l.target_id}:1`)]);
+    const vs = await query<any>(`SELECT v.id, v.source_key, v.status, v.voucher_no, v.tally_status, DATE_FORMAT(v.voucher_date,'%Y-%m-%d') d,
+          EXISTS (SELECT 1 FROM acc_tally_company t WHERE t.company_id = v.company_id AND t.is_active = 1
+                   AND (t.fy_code IS NULL OR t.fy_code = '' OR t.fy_code = v.fy_code)) tally_on,
+          (SELECT q.last_error FROM acc_tally_queue q JOIN acc_tally_company t ON t.id = q.tally_company_id AND t.is_active = 1
+            WHERE q.voucher_id = v.id ORDER BY q.id DESC LIMIT 1) tally_error
+        FROM acc_voucher v WHERE v.company_id = ? AND v.source_key IN (?)`, [cid, links.map((l) => `${LINK_KEY[l.link_type]}:${l.target_id}:1`)]);
     const by = new Map(vs.map((v) => [v.source_key, v]));
     const each = links.map((l) => ({ l, v: by.get(`${LINK_KEY[l.link_type]}:${l.target_id}:1`) }));
-    const allPosted = each.every((x) => x.v?.status === 'POSTED');
+    const erpPosted = each.every((x) => x.v?.status === 'POSTED');
+    const notInTally = each.filter((x) => x.v?.status === 'POSTED' && Number(x.v.tally_on) && x.v.tally_status !== 'POSTED');
+    const allPosted = erpPosted && !notInTally.length;
+    if (erpPosted && notInTally.length && p.status !== 'POSTED') {
+      // books are done, Tally not yet: say so on the tracker instead of claiming "posted"
+      const msg = `Accounts voucher ${notInTally.map((x) => x.v.voucher_no).join(', ')} posted — ${notInTally.some((x) => x.v.tally_status === 'FAILED' || x.v.tally_status === 'UNKNOWN')
+        ? `Tally problem: ${notInTally.map((x) => x.v.tally_error).filter(Boolean)[0] ?? 'see Accounts → Tally'}` : 'waiting for Tally'}`.slice(0, 500);
+      if (p.response_summary !== msg) await query(`UPDATE trx_bill_posting SET response_summary = ? WHERE id = ?`, [msg, p.id]);
+      continue;
+    }
     if (allPosted && p.status !== 'POSTED') {
       const nos = each.map((x) => x.v.voucher_no).join(', ').slice(0, 60);
       const date = each.map((x) => x.v.d).sort().at(-1);
       await transaction(async (tx) => {
         const cur = await txQueryOne<any>(tx, `SELECT status FROM trx_bill_posting WHERE id = ? FOR UPDATE`, [p.id]);
         if (!cur || cur.status === 'POSTED') return;
+        const inTally = each.some((x) => Number(x.v.tally_on));
         await txExecute(tx, `UPDATE trx_bill_posting SET status = 'POSTED', external_voucher_no = ?, external_voucher_date = ?, posted_at = NOW(), attempts = attempts + 1,
-            response_code = 'ACCOUNTS', response_summary = 'Posted by the Accounts module', last_error_code = NULL, last_error_summary = NULL, row_version = row_version + 1 WHERE id = ?`, [nos, date, p.id]);
+            response_code = 'ACCOUNTS', response_summary = ?, last_error_code = NULL, last_error_summary = NULL, row_version = row_version + 1 WHERE id = ?`,
+          [nos, date, inTally ? 'Posted by the Accounts module — confirmed in Tally' : 'Posted by the Accounts module', p.id]);
         await txExecute(tx, `INSERT INTO trx_bill_posting_attempt (posting_id, attempt_no, action, outcome, voucher_no, reason) VALUES (?,?,'ACCOUNTS_SYNC','POSTED',?,?)`,
           [p.id, Number(p.attempts) + 1, nos, 'Accounts voucher posted']);
         await txExecute(tx, `UPDATE trx_bill_tracker SET posting_status = 'POSTED', external_voucher_no = ?, external_voucher_date = ?, row_version = row_version + 1 WHERE id = ?`,
           [nos, date, p.bill_id]);
       });
       posted += 1;
-    } else if (!allPosted && p.status === 'POSTED') {
+    } else if (!erpPosted && p.status === 'POSTED') {
       const gone = each.filter((x) => x.v?.status !== 'POSTED').map((x) => x.l.target_no).join(', ');
       // only postings this sync made (response_code ACCOUNTS) are flagged; manual postings from before are left alone
       const mine = await queryOne<any>(`SELECT response_code FROM trx_bill_posting WHERE id = ?`, [p.id]);

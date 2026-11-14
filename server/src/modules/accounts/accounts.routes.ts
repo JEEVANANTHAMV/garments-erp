@@ -13,7 +13,7 @@ import {
 } from './voucherEngine.js';
 import { ensureAccountsSetup, POSTING_ROLES, POSTING_EVENTS } from './accountsSetup.js';
 import { SOURCES, sourceByEvent, scanCompany, pendingDocuments, staleVouchers, voucherFromSource } from './sources.js';
-import { enqueueTally, enqueueBacklog, exportXml, healthCheck, submitQueueRow } from './tally.js';
+import { enqueueTally, enqueueBacklog, exportXml, healthCheck, submitQueueRow, scheduleBillSync } from './tally.js';
 import { tallyLedgersRouter } from './tallyLedgers.js';
 import { openingRouter } from './opening.js';
 
@@ -874,6 +874,7 @@ accountsRouter.post('/tally/mark-posted', TALLY, ah(async (req, res) => {
       n += 1;
     }
   });
+  scheduleBillSync(cid);
   res.json({ data: { posted: n }, message: `${n} voucher(s) marked posted in Tally` });
 }));
 
