@@ -782,6 +782,8 @@ async function writeTallyCo(req: Request, id: number | null) {
   if (b.connector === 'HTTP' && !b.host) throw BadRequest('Enter the Tally host / IP (and port, default 9000)');
   if (b.connector === 'API') throw BadRequest('The vendor API connector is added once the client confirms the Tally API — use XML file for now');
   const sec = b.secret === undefined ? undefined : (b.secret ? sealSecret(b.secret) : null);
+  const same = await queryOne<any>(`SELECT id FROM acc_tally_company WHERE company_id = ? AND tally_company_name = ? AND id <> ?`, [cid, b.tally_company_name, id ?? 0]);
+  if (same) throw Conflict(`A Tally company named "${b.tally_company_name}" is already set up — edit that one (Set-up tab) instead of adding it again`);
   if (id) {
     const cur = await queryOne<any>(`SELECT id FROM acc_tally_company WHERE id = ? AND company_id = ?`, [id, cid]);
     if (!cur) throw NotFound('Tally company not found');

@@ -145,13 +145,25 @@ function TallySetup() {
           </tbody>
         </table>
       </div>
+      <div id="acc-tally-server-guide" className="card p-4 text-body">
+        <p className="mb-1 font-semibold">Before connecting to the Tally server (connection "Tally server")</p>
+        <ol className="list-decimal space-y-0.5 pl-5">
+          <li>Run TallyPrime on one always-on Windows user: F1 → Settings → Connectivity → TallyPrime acts as <b>Both</b>, port <b>9000</b>. Only one Tally on that machine can use the port.</li>
+          <li>Open the company and add it to F1 → Settings → Startup → Companies to load, so it is open again after a restart. The name above must match Tally exactly.</li>
+          <li>For each voucher type the ERP sends (Purchase, Payment, Receipt, Sales, Journal, Contra, Debit Note, Credit Note): Alt+G → Alter → Voucher Type → Method of Voucher Numbering = <b>Automatic (Manual Override)</b>, Prevent duplicates = <b>Yes</b>. The ERP refuses to send while a type renumbers.</li>
+          <li>Open TCP 9000 on the Tally PC firewall / antivirus and router, only for the ERP server's IP.</li>
+          <li>Press <b>Test</b> above — it must say "voucher numbering OK". Then Ledger matching → Fetch from Tally → match.</li>
+          <li>If Tally is closed or the company is not open, vouchers simply wait (tab Waiting) and go once it is back — press Test to send them at once.</li>
+        </ol>
+      </div>
       <div className="card p-4 text-body">
         <p className="mb-1 font-semibold">Importing the XML file in TallyPrime</p>
         <ol className="list-decimal space-y-0.5 pl-5">
           <li>Open the company in Tally (the name must match the one above).</li>
+          <li>First load the Tally ledger list (tab Ledger matching) — ledgers already in Tally are then left out of the file. Tally overwrites a ledger that is imported again with the same name.</li>
           <li>Gateway of Tally → Import → Masters → choose the downloaded file (creates missing ledgers under the right groups).</li>
           <li>Import → Transactions / Vouchers → the same file.</li>
-          <li>Back here: tab "Sent / exported" → select → Mark posted. A re-import of the same file does not duplicate vouchers.</li>
+          <li>Back here: tab "Sent / exported" → select → Mark posted. Import each file <b>once</b>: Tally does not recognise a re-imported voucher, so a second import creates it again unless the voucher type has Prevent duplicates = Yes.</li>
         </ol>
       </div>
       {edit && <TallyCompanyEditor row={edit} onClose={() => setEdit(null)} />}
@@ -187,8 +199,8 @@ function TallyCompanyEditor({ row, onClose }: { row: any; onClose: () => void })
         <Field label="Connection" className="md:col-span-2"><Select id="acc-tally-connector" value={f.connector} onChange={(e) => set('connector', e.target.value)}
           options={[{ value: 'XML_FILE', label: 'XML file — download here, import in Tally' }, { value: 'HTTP', label: 'Tally server (XML over HTTP, port 9000)' }]} /></Field>
         {f.connector === 'HTTP' && <>
-          <Field label="Host / IP" required hint="Reachable from the ERP server (VPN / static IP)"><Input value={f.host ?? ''} onChange={(e) => set('host', e.target.value)} /></Field>
-          <Field label="Port"><Input inputMode="numeric" value={f.port ?? ''} onChange={(e) => set('port', e.target.value)} /></Field>
+          <Field label="Host / IP" required hint="Reachable from the ERP server (VPN / static IP)"><Input id="acc-tally-co-host" value={f.host ?? ''} onChange={(e) => set('host', e.target.value)} /></Field>
+          <Field label="Port"><Input id="acc-tally-co-port" inputMode="numeric" value={f.port ?? ''} onChange={(e) => set('port', e.target.value)} /></Field>
           <Field label="Credential (user:password or token)" hint={row.has_secret ? 'Saved — leave blank to keep' : 'Optional'}><Input type="password" value={f.secret} onChange={(e) => set('secret', e.target.value)} autoComplete="new-password" /></Field>
           <Field label="Timeout (ms)"><Input inputMode="numeric" value={f.timeout_ms ?? 20000} onChange={(e) => set('timeout_ms', e.target.value)} /></Field>
         </>}
