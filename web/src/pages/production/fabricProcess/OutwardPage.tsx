@@ -176,14 +176,14 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
     setBusy(true);
     try {
       if (!id) {
-        const r = await http.post<{ data: any }>('/fabric-process/outward', { ...payload(), confirm });
-        toast(`${r.data.fpo_no} ${confirm ? 'confirmed — stock issued' : 'saved as draft'}`, 'success');
+        const r = await http.post<{ data: any; message?: string }>('/fabric-process/outward', { ...payload(), confirm });
+        toast(r.message ?? `${r.data.fpo_no} ${confirm ? 'confirmed — stock issued' : 'saved as draft'}`, 'success');
         void qc.invalidateQueries({ queryKey: ['fabric-process'] });
         onOpen(r.data.id);
       } else {
         await http.put(`/fabric-process/outward/${id}`, payload());
-        if (confirm) await http.post(`/fabric-process/outward/${id}/confirm`, {});
-        toast(confirm ? `${d.fpo_no} confirmed — stock issued` : `${d.fpo_no} saved`, 'success');
+        const c = confirm ? await http.post<{ message?: string }>(`/fabric-process/outward/${id}/confirm`, {}) : null;
+        toast(c?.message ?? (confirm ? `${d.fpo_no} confirmed — stock issued` : `${d.fpo_no} saved`), 'success');
         void qc.invalidateQueries({ queryKey: ['fabric-process'] });
       }
     } catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
@@ -321,7 +321,12 @@ function JobGroup({ g, editable, dyeing, set, remove }: { g: { io_no: string; ro
           <td className="px-2 py-1">{r.dia || '—'}</td>
           <td className="px-2 py-1 text-right tabular-nums text-ink-secondary">{kg(r.available_kg)}</td>
           <td className="px-2 py-1 text-right">{editable
-            ? <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={r.weight_kg} onChange={(e) => set(r.fabric_roll_id, { weight_kg: Number(e.target.value) })} />
+            ? <>
+                <input type="number" step="0.001" className="input w-24 py-0.5 text-right text-xs" value={r.weight_kg} onChange={(e) => set(r.fabric_roll_id, { weight_kg: Number(e.target.value) })} />
+                {n(r.weight_kg) > 0 && n(r.weight_kg) < n(r.available_kg) - 0.0005 && (
+                  <div className="mt-0.5 text-micro text-violet-700" data-cut-hint={r.roll_no} title="On confirm the roll is cut: the piece sent gets its own roll no, the rest stays in store as another piece">
+                    ✂ cut: {kg(r.weight_kg)} sent · {kg(n(r.available_kg) - n(r.weight_kg))} stays</div>)}
+              </>
             : <span className="tabular-nums">{kg(r.weight_kg)}</span>}</td>
           <td className="px-2 py-1 text-right">{n(r.meters) ? n(r.meters).toFixed(2) : ''}</td>
           <td className="px-2 py-1 text-right">{editable && <button className="p-1 text-ink-muted hover:text-red-600" onClick={() => remove(r.fabric_roll_id)}><Trash2 size={13} /></button>}</td>

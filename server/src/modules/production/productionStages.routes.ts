@@ -11,6 +11,7 @@ import {
   KG_EPS, RESERVED_KG_SQL, assertPlanOpen, generateBundlesLegacy, lockPlan, nextUniqueDocNo, num, parseJson, refreshDcRollStatus,
   refreshFabricRollStatus, round,
 } from './cuttingEngine.js';
+import { assertRollLive, receiveBack } from '../fabricRoll/rollEngine.js';
 import { settingFlag } from '../../core/inwardControls.js';
 
 export const productionStagesRouter = Router();
@@ -169,7 +170,7 @@ productionStagesRouter.post('/fabric-issues', requirePermission('PRODUCTION.CREA
         throw BadRequest(`Roll ${roll.roll_no} is a different fabric from the cut order`);
       }
       if (roll.qc_status !== 'ACCEPTED') throw BadRequest(`Roll ${roll.roll_no} is QC ${roll.qc_status} — only ACCEPTED rolls can be issued`);
-      if (roll.stock_status === 'CLOSED') throw BadRequest(`Roll ${roll.roll_no} is CLOSED and cannot be issued`);
+      await assertRollLive(tx, roll, 'issued');
       const held = await txQueryOne<any>(tx, `SELECT ${RESERVED_KG_SQL('?')} AS kg`, [roll.id]);
       const available = round(num(roll.weight_kg) - num(roll.issued_kg) - num(held?.kg), 4);
       if (available <= KG_EPS) throw BadRequest(`Roll ${roll.roll_no} has no available KG${num(held?.kg) > 0 ? ` (${round(num(held?.kg), 3)} KG is reserved for lays)` : ''}`);
@@ -273,9 +274,9 @@ productionStagesRouter.post('/fabric-issues/:id/returns', requirePermission('PRO
       await txExecute(tx, `UPDATE trx_fabric_issue_roll SET returned_kg = returned_kg + ? WHERE id = ?`, [r.return_kg, line.id]);
       await refreshDcRollStatus(tx, line.id);
       if (line.fabric_roll_id) {
-        const roll = await txQueryOne<any>(tx, `SELECT * FROM trx_fabric_roll WHERE id = ? FOR UPDATE`, [line.fabric_roll_id]);
-        await txExecute(tx, `UPDATE trx_fabric_roll SET issued_kg = GREATEST(issued_kg - ?, 0) WHERE id = ?`, [r.return_kg, line.fabric_roll_id]);
-        await refreshFabricRollStatus(tx, line.fabric_roll_id);
+        // back onto the roll; a roll closed / cut since the issue gets a return piece (own roll no) instead
+        const roll = await receiveBack(tx, { cid, userId: req.user!.id, canApprove: false }, Number(line.fabric_roll_id), r.return_kg,
+          { type: 'FAB_RETURN', id: ins.insertId, no: returnNo, event: 'CUT_RETURN', remarks: r.reason ?? 'Returned from cutting', meters: r.return_mtr ?? null });
         await txExecute(tx,
           `INSERT INTO trx_stock_ledger
              (company_id, warehouse_id, material_type, fabric_id, txn_type, ref_type, ref_id, qty_in, qty_out, uom_id, created_by)

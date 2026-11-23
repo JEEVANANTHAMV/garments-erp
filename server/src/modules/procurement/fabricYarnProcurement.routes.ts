@@ -11,6 +11,7 @@ import { audit } from '../../core/audit.js';
 import { nextDocNumber } from '../../core/numbering.js';
 import { computeInvoice, chargesFromRow, invoiceSummaryColumns } from '../../core/invoiceCalc.js';
 import { assertPoExcessById } from '../../core/purchaseExcess.js';
+import { allocRollNo, rollHistory } from '../fabricRoll/rollEngine.js';
 
 export const fabricYarnProcurementRouter = Router();
 
@@ -623,13 +624,15 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
       const rolls = Array.isArray(line.rolls) ? line.rolls : [];
       for (let i = 0; i < rolls.length; i++) {
         const r = rolls[i];
-        const rNo = r.roll_no || `R-${finalGrnNo}-${i + 1}`;
+        // the ERP roll no is unique in the company; a supplier no already used elsewhere becomes <GRN>/<no> (kept as supplier_roll_no)
+        const typedNo = String(r.roll_no ?? '').trim();
+        const rNo = await allocRollNo(tx, companyId, typedNo || `R-${finalGrnNo}-${i + 1}`, typedNo ? `${finalGrnNo}/${typedNo}` : null);
         await txExecute(tx, `
           INSERT INTO trx_fabric_roll (
             company_id, grn_id, grn_line_id, fabric_id,
             roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-            warehouse_id, location_bin, qc_status, stock_status, remarks, so_id, ${ROLL_CALC_COLS}
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            warehouse_id, location_bin, qc_status, stock_status, remarks, so_id, original_weight_kg, supplier_roll_no, roll_origin, ${ROLL_CALC_COLS}
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'RECEIPT',?,?,?,?,?,?,?,?,?,?,?)
         `, [
           companyId,
           newGrnId,
@@ -650,6 +653,8 @@ fabricYarnProcurementRouter.post('/fabric-grns', requirePermission('GRN.CREATE')
           [r.remarks, r._hold ? `QC hold: ${r._hold}` : null].filter(Boolean).join(' — ') || null,
           // the roll belongs to the job it was bought for (job-wise stock / transfers)
           line.so_id ? Number(line.so_id) : (body.so_id ? Number(body.so_id) : null),
+          Number(r.weight_kg) || 0,
+          typedNo && typedNo !== rNo ? typedNo.slice(0, 60) : null,
           ...(r._calc ? rollCalcVals(r._calc) : [null, null, null, null, null, null, null, null, null, null, null]),
         ]);
       }
@@ -712,7 +717,8 @@ fabricYarnProcurementRouter.get('/fabric-grns', requirePermission('GRN.VIEW'), a
            gin.entry_no AS gate_entry_no,
            COALESCE((SELECT SUM(gl.received_qty) FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'FABRIC'), 0) AS total_meters,
            COALESCE((SELECT SUM(gl.received_weight) FROM trx_grn_line gl WHERE gl.grn_id = g.id AND gl.material_type = 'FABRIC'), 0) AS total_weight_kg,
-           COALESCE((SELECT COUNT(*) FROM trx_fabric_roll fr WHERE fr.grn_id = g.id), (SELECT SUM(gl.no_of_rolls) FROM trx_grn_line gl WHERE gl.grn_id = g.id)) AS roll_count
+           COALESCE((SELECT NULLIF(COUNT(*), 0) FROM trx_fabric_roll fr WHERE fr.grn_id = g.id AND fr.roll_origin = 'RECEIPT'), (SELECT SUM(gl.no_of_rolls) FROM trx_grn_line gl WHERE gl.grn_id = g.id)) AS roll_count,
+           (SELECT COUNT(*) FROM trx_fabric_roll fr WHERE fr.grn_id = g.id AND fr.stock_status NOT IN ('CLOSED', 'SPLIT', 'MERGED') AND fr.weight_kg - fr.issued_kg > 0.0005) AS pieces_in_store
       FROM trx_grn g
       LEFT JOIN mst_party sup ON sup.id = g.supplier_id
       LEFT JOIN mst_warehouse wh ON wh.id = g.warehouse_id
@@ -850,7 +856,10 @@ const rollListQuery = z.object({
   lot_no: z.string().trim().max(60).optional().transform((v) => v || undefined),
   shade: z.string().trim().max(80).optional().transform((v) => v || undefined),
   qc_status: z.enum(['PENDING', 'ACCEPTED', 'HOLD', 'REJECTED']).optional(),
-  stock_status: z.enum(['AVAILABLE', 'RESERVED', 'ISSUED', 'PARTIAL', 'CLOSED']).optional(),
+  stock_status: z.enum(['AVAILABLE', 'RESERVED', 'ISSUED', 'PARTIAL', 'CLOSED', 'SPLIT', 'MERGED']).optional(),
+  roll_origin: z.enum(['RECEIPT', 'SPLIT', 'MERGE', 'RETURN', 'TRANSFER']).optional(),
+  /** 1 = also list rolls that are no longer pieces (cut / merged parents); default: physical pieces only */
+  include_history: z.coerce.number().int().optional(),
   search: z.string().trim().max(100).optional().transform((v) => v || undefined),
 });
 
@@ -872,15 +881,17 @@ fabricYarnProcurementRouter.get('/fabric-rolls', requirePermission('INVENTORY.VI
   if (q.shade) { where.push(`t.shade LIKE ?`); params.push(`%${q.shade}%`); }
   if (q.qc_status) { where.push(`t.qc_status = ?`); params.push(q.qc_status); }
   if (q.stock_status) { where.push(`t.stock_status = ?`); params.push(q.stock_status); }
+  else if (!q.include_history) where.push(`t.stock_status NOT IN ('SPLIT', 'MERGED')`);
+  if (q.roll_origin) { where.push(`t.roll_origin = ?`); params.push(q.roll_origin); }
   if (q.warehouse_id) { where.push(`t.warehouse_id = ?`); params.push(q.warehouse_id); }
   if (q.io_no) { where.push(`t.internal_ir_no = ?`); params.push(q.io_no); }
   if (q.style_id) { where.push(`t.style_id = ?`); params.push(q.style_id); }
   if (q.search) {
-    where.push(`(t.roll_no LIKE ? OR t.lot_no LIKE ? OR t.fabric_name LIKE ? OR t.fabric_code LIKE ?
+    where.push(`(t.roll_no LIKE ? OR t.supplier_roll_no LIKE ? OR t.parent_roll_no LIKE ? OR t.lot_no LIKE ? OR t.fabric_name LIKE ? OR t.fabric_code LIKE ?
              OR t.shade LIKE ? OR t.grn_no LIKE ? OR t.po_no LIKE ? OR t.internal_ir_no LIKE ?
              OR t.style_code LIKE ? OR t.style_name LIKE ? OR t.location_bin LIKE ?)`);
     const term = `%${q.search}%`;
-    params.push(term, term, term, term, term, term, term, term, term, term, term);
+    params.push(term, term, term, term, term, term, term, term, term, term, term, term, term);
   }
 
   const rows = await query<any>(`
@@ -895,9 +906,13 @@ fabricYarnProcurementRouter.get('/fabric-rolls', requirePermission('INVENTORY.VI
              ${TRACE_IO_NO}   AS internal_ir_no,
              ${TRACE_STYLE_ID} AS style_id,
              st.style_code, st.style_name,
-             sup.party_name AS supplier_name
+             sup.party_name AS supplier_name,
+             pr.roll_no AS parent_roll_no,
+             ROUND(COALESCE(fr.original_weight_kg, fr.weight_kg), 3) AS original_kg,
+             (SELECT COUNT(*) FROM trx_fabric_roll_label lb WHERE lb.roll_id = fr.id) AS label_prints
         FROM trx_fabric_roll fr
         JOIN trx_grn grn ON grn.id = fr.grn_id AND grn.company_id = fr.company_id
+        LEFT JOIN trx_fabric_roll pr ON pr.id = fr.parent_roll_id
         LEFT JOIN trx_grn_line gl ON gl.id = fr.grn_line_id AND gl.grn_id = grn.id
         ${TRACE_JOINS}
         LEFT JOIN mst_style st ON st.id = ${TRACE_STYLE_ID} AND st.company_id = grn.company_id
@@ -940,13 +955,15 @@ function buildTraceFacets(facets: any[]) {
 
 
 /**
- * 4. POST /api/fabric-rolls/:id/status
- * Update roll stock status (e.g. AVAILABLE, RESERVED, ISSUED, CLOSED)
+ * 4. POST /api/fabric-rolls/:id/status { qc_status?, location_bin?, reason? }
+ * QC status and bin of a roll in stock. The stock status follows the roll's transactions (GRN, DCs, returns, split /
+ * merge, stock audit, scrap) and cannot be set by hand — a manual CLOSED used to hide stock without a ledger entry.
  */
 const rollStatusSchema = z.object({
-  stock_status: z.enum(['AVAILABLE', 'RESERVED', 'ISSUED', 'PARTIAL', 'CLOSED']).optional(),
+  stock_status: z.enum(['AVAILABLE', 'RESERVED', 'ISSUED', 'PARTIAL', 'CLOSED', 'SPLIT', 'MERGED']).optional(),
   qc_status: z.enum(['PENDING', 'ACCEPTED', 'HOLD', 'REJECTED']).optional(),
   location_bin: z.string().trim().max(50).optional(),
+  reason: z.string().trim().max(255).optional(),
 });
 
 fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('INVENTORY.ADJUST'), ah(async (req, res) => {
@@ -954,26 +971,33 @@ fabricYarnProcurementRouter.post('/fabric-rolls/:id/status', requirePermission('
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) throw BadRequest('Invalid roll id');
   const body = rollStatusSchema.parse(req.body ?? {});
-
-  const roll = await queryOne<any>(`
-    SELECT * FROM trx_fabric_roll WHERE id = ? AND company_id = ?
-  `, [id, companyId]);
-
-  if (!roll) throw NotFound('Roll not found');
-
-  await query(`
-    UPDATE trx_fabric_roll
-       SET stock_status = COALESCE(?, stock_status),
-           qc_status = COALESCE(?, qc_status),
-           location_bin = COALESCE(?, location_bin)
-     WHERE id = ? AND company_id = ?
-  `, [body.stock_status ?? null, body.qc_status ?? null, body.location_bin || null, id, companyId]);
-
+  const out = await transaction(async (tx) => {
+    const roll = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ? AND company_id = ? FOR UPDATE', [id, companyId]);
+    if (!roll) throw NotFound('Roll not found');
+    if (body.stock_status && body.stock_status !== roll.stock_status) {
+      throw BadRequest('The stock status follows the roll\'s transactions and cannot be set by hand — use Split, Stock audit, Scrap / rejection or a DC');
+    }
+    if (['SPLIT', 'MERGED', 'CLOSED'].includes(roll.stock_status) && (body.qc_status || body.location_bin)) {
+      throw BadRequest(`${roll.roll_no} is ${String(roll.stock_status).toLowerCase()} — it is no longer a roll in stock`);
+    }
+    const qcChange = body.qc_status && body.qc_status !== roll.qc_status;
+    const binChange = body.location_bin !== undefined && (body.location_bin || null) !== (roll.location_bin || null);
+    if (qcChange && (!body.reason || body.reason.length < 3)) throw BadRequest('Give the reason for the QC change');
+    const left = Number(roll.weight_kg) - Number(roll.issued_kg);
+    // QC decides whether the roll can be used: accepted → available (if not issued), held / rejected / pending → reserved
+    let stock = roll.stock_status;
+    if (qcChange && Number(roll.issued_kg) <= 0.0005 && left > 0.0005) stock = body.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED';
+    await txExecute(tx, 'UPDATE trx_fabric_roll SET qc_status = ?, stock_status = ?, location_bin = ? WHERE id = ?',
+      [qcChange ? body.qc_status : roll.qc_status, stock, binChange ? (body.location_bin || null) : roll.location_bin, id]);
+    if (qcChange) await rollHistory(tx, companyId, req.user!.id, { roll_id: id, roll_no: roll.roll_no, event: 'QC_CHANGE', ref_type: 'ROLL', ref_id: id, ref_no: roll.roll_no, qty: left, so_id: roll.so_id,
+      remarks: `QC ${roll.qc_status} → ${body.qc_status}: ${body.reason}` });
+    if (binChange) await rollHistory(tx, companyId, req.user!.id, { roll_id: id, roll_no: roll.roll_no, event: 'BIN_MOVE', ref_type: 'ROLL', ref_id: id, ref_no: roll.roll_no, qty: left, so_id: roll.so_id,
+      from: roll.location_bin, to: body.location_bin || null, remarks: body.reason ?? null });
+    return { roll, qcChange, binChange };
+  });
   await audit(req, 'trx_fabric_roll', id, 'UPDATE',
-    { stock_status: roll.stock_status, qc_status: roll.qc_status, location_bin: roll.location_bin },
-    body);
-
-  res.json({ data: { success: true, id } });
+    { stock_status: out.roll.stock_status, qc_status: out.roll.qc_status, location_bin: out.roll.location_bin }, body);
+  res.json({ data: { success: true, id }, message: out.qcChange || out.binChange ? `${out.roll.roll_no} updated` : 'Nothing changed' });
 }));
 
 /* ==============================================================================

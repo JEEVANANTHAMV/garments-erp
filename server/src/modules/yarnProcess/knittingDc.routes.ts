@@ -15,6 +15,7 @@ import { assertJobLots, resolveSoId } from '../stock/jobStock.routes.js';
 import { checkDcQuotation, processQuotations, settingFlag, useGateEntry } from '../../core/inwardControls.js';
 import { backfillDcLines, contractorSnapshot, dcAudit } from './knitDcSnapshots.js';
 import { substituteOpen, bookSubstituteIssue } from '../stock/yarnSubstitution.routes.js';
+import { allocRollNo } from '../fabricRoll/rollEngine.js';
 
 /**
  * Knitting DC (yarn outward to the knitter) and grey fabric inward against it.
@@ -662,7 +663,7 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
     const rolls = [];
     for (let i = 0; i < body.rolls.length; i++) {
       const r = body.rolls[i];
-      const rollNo = r.roll_no || `${receiptNo}-${String(i + 1).padStart(2, '0')}`;
+      const rollNo = await allocRollNo(tx, cid, r.roll_no || `${receiptNo}-${String(i + 1).padStart(2, '0')}`, r.roll_no ? `${receiptNo}/${r.roll_no}` : null);
       const c = await calcRollFor(cid, {
         fabric_id: fabricId, weight_kg: r.weight_kg, on: body.receipt_date,
         target_gsm: r.gsm || Number.parseFloat(String(prog.gsm ?? '')) || null, actual_gsm: r.actual_gsm || null,
@@ -672,12 +673,12 @@ knittingDcRouter.post('/knitting-inwards', requirePermission('PROCESS.PRODUCTION
       const fr = await txExecute(tx,
         `INSERT INTO trx_fabric_roll
            (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg,
-            gsm, dia, shade, warehouse_id, qc_status, stock_status, remarks, so_id, ${ROLL_CALC_COLS})
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            gsm, dia, shade, warehouse_id, qc_status, stock_status, remarks, so_id, original_weight_kg, ${ROLL_CALC_COLS})
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [cid, grnId, grnLineId, fabricId, rollNo, lotNo, c.meters, r.weight_kg,
          c.actual_gsm || c.target_gsm ? Math.round(c.actual_gsm ?? c.target_gsm ?? 0) : null,
          r.dia ?? prog.dia ?? null, r.shade ?? null, body.warehouse_id, hold ? 'HOLD' : 'ACCEPTED', 'AVAILABLE',
-         `Grey from knitting ${prog.program_no}${hold ? ` — QC hold: ${c.reasons.join('; ')}` : ''}`, prog.so_id ?? null, ...rollCalcVals(c)]);
+         `Grey from knitting ${prog.program_no}${hold ? ` — QC hold: ${c.reasons.join('; ')}` : ''}`, prog.so_id ?? null, r.weight_kg, ...rollCalcVals(c)]);
       rolls.push({ id: fr.insertId, roll_no: rollNo, weight_kg: r.weight_kg, calc_meters: c.calc_meters, actual_meters: c.actual_meters, meters: c.meters,
         target_gsm: c.target_gsm, actual_gsm: c.actual_gsm, meter_var_pct: c.meter_var_pct, gsm_var_pct: c.gsm_var_pct, qc_status: hold ? 'HOLD' : 'ACCEPTED', hold_reasons: c.reasons });
     }
@@ -803,7 +804,7 @@ knittingDcRouter.get('/knitting-inwards', requirePermission('PRODUCTION.VIEW'), 
   for (const r of rows) {
     r.rolls = await query(
       `SELECT id, roll_no, lot_no, weight_kg, meters, gsm, dia, shade, stock_status, issued_kg
-         FROM trx_fabric_roll WHERE grn_id = ? ORDER BY id`, [r.grn_id]);
+         FROM trx_fabric_roll WHERE grn_id = ? AND roll_origin = 'RECEIPT' ORDER BY id`, [r.grn_id]);
   }
   res.json({ success: true, data: rows });
 }));

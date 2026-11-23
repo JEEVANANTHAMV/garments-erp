@@ -32,7 +32,7 @@ export async function knittingBillSources(cid: number, vendorId?: number | null)
                LEFT JOIN trx_knitting_dc_job j ON j.company_id = r.company_id AND j.dc_no = m.dc_no AND j.program_id = r.src_id
                JOIN trx_quotation q ON q.id = COALESCE(j.quotation_id, kd.quotation_id) WHERE m.receipt_id = r.id) AS quotation_no,
             b.bill_no, b.status AS bill_status, g.grn_no, gi.entry_no AS gate_entry_no, gi.vehicle_no, kp.fabric_type, kp.fabric_colour, r.rejected_qty AS reject_kg, r.loss_qty AS loss_kg,
-            (SELECT COUNT(*) FROM trx_fabric_roll fr WHERE fr.grn_id = g.id) AS rolls
+            (SELECT COUNT(*) FROM trx_fabric_roll fr WHERE fr.grn_id = g.id AND fr.roll_origin = 'RECEIPT') AS rolls
        FROM trx_process_receipt r JOIN trx_knitting_program kp ON kp.id = r.src_id JOIN trx_grn g ON g.id = r.grn_id LEFT JOIN mst_party p ON p.id = g.supplier_id
        LEFT JOIN trx_gate_inward gi ON gi.id = g.gate_inward_id
        LEFT JOIN trx_knitting_bill b ON b.id = r.bill_id

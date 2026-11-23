@@ -2,6 +2,7 @@ import { query, queryOne, txQueryOne, txExecute, type Tx } from '../../config/db
 import { BadRequest } from '../../core/errors.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
+import { requestSplit } from '../fabricRoll/rollEngine.js';
 import { yarnStockRows, yarnStockQuery } from '../procurement/fabricYarnProcurement.routes.js';
 
 /**
@@ -190,9 +191,23 @@ export async function moveStock(ctx: MoveCtx, ref: string, delta: number, opts: 
   } else if (cur.material_type === 'FABRIC') {
     const roll = await txQueryOne<any>(tx, 'SELECT id, roll_no, weight_kg, issued_kg, warehouse_id, so_id FROM trx_fabric_roll WHERE id = ? FOR UPDATE', [id]);
     const whole = delta < 0 && Math.abs(-delta - (n(roll.weight_kg) - n(roll.issued_kg))) <= EPS && n(roll.issued_kg) <= EPS;
-    if (opts.to && whole) {
-      // the whole roll goes to the rejection godown as it is
+    const left = n(roll.weight_kg) - n(roll.issued_kg);
+    if (opts.to && (whole || (delta < 0 && -delta >= left - EPS))) {
+      // the whole roll (or all of it left in store) goes to the rejection godown as it is
       await txExecute(tx, `UPDATE trx_fabric_roll SET warehouse_id = ?, qc_status = 'REJECTED' WHERE id = ?`, [opts.to, id]);
+    } else if (opts.to && delta < 0) {
+      // part of a roll to the rejection godown: the roll is cut — the rejected piece is a roll of its own there,
+      // the rest stays in store as its own piece (the split posts the store-to-store ledger itself)
+      const out = await requestSplit(tx, { cid, userId: ctx.userId, canApprove: true }, {
+        roll_id: id, reason_code: 'DAMAGE_REMOVAL', measurement_source: 'MANUAL', remarks: `${opts.label} ${ctx.refNo}`,
+        pieces: [{ kg: r4(-delta), output_type: 'DAMAGE', warehouse_id: opts.to }, { kg: r4(left + delta), output_type: 'STORE' }],
+      });
+      await txExecute(tx,
+        `INSERT INTO trx_fabric_roll_history (company_id, roll_id, roll_no, event, ref_type, ref_id, ref_no, qty_kg, so_id, remarks, user_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [cid, id, roll.roll_no, opts.label.slice(0, 30), ctx.refType.slice(0, 30), ctx.refId, ctx.refNo, delta, roll.so_id,
+         `${opts.label} ${ctx.refNo}: ${r4(-delta)} KG cut off as ${out.children[0]?.roll_no ?? 'a piece'}`, ctx.userId]);
+      return cur;
     } else {
       await txExecute(tx, 'UPDATE trx_fabric_roll SET weight_kg = COALESCE(weight_kg, 0) + ? WHERE id = ?', [delta, id]);
       await refreshFabricRollStatus(tx, id, { reopen: delta > 0 });

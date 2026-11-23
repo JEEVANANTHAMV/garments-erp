@@ -12,6 +12,7 @@ import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { yarnStockRows, yarnStockQuery } from '../procurement/fabricYarnProcurement.routes.js';
 import { jobBomRequirement } from '../bom/bom.routes.js';
 import { RAW_COLOUR } from '../../core/rawColour.js';
+import { allocRollNo } from '../fabricRoll/rollEngine.js';
 
 /**
  * Job-wise stock (client voice notes 01-Oct-2026):
@@ -227,15 +228,16 @@ export async function postTransferLines(tx: Tx, req: Request, tid: number, no: s
         // part of a roll: split — the moved KG becomes a child roll of the new job (same GRN, traceable)
         await txExecute(tx, 'UPDATE trx_fabric_roll SET issued_kg = COALESCE(issued_kg, 0) + ? WHERE id = ?', [l.qty, fr.id]);
         await refreshFabricRollStatus(tx, fr.id);
+        const childNo = await allocRollNo(tx, cid, `${fr.roll_no}-T${tid}`);
         const ins = await txExecute(tx,
           `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade, warehouse_id, location_bin,
-             qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'ACCEPTED','AVAILABLE',?,?,?,?,?,?)`,
-          [cid, fr.grn_id, fr.grn_line_id, fr.fabric_id, `${fr.roll_no}-T${tid}`, fr.lot_no, n(fr.weight_kg) > 0 ? Math.round(n(fr.meters) * l.qty / n(fr.weight_kg) * 100) / 100 : null,
-           r4(l.qty), fr.gsm, fr.dia, fr.shade, fr.warehouse_id, fr.location_bin, `Transferred ${fromJob} → ${toJob} (${no})`, fr.process_state, fr.color_name, fr.source_fpo_id, b.to_so_id || null, fr.id]);
+             qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id, original_weight_kg, roll_origin)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'ACCEPTED','AVAILABLE',?,?,?,?,?,?,?,'TRANSFER')`,
+          [cid, fr.grn_id, fr.grn_line_id, fr.fabric_id, childNo, fr.lot_no, n(fr.weight_kg) > 0 ? Math.round(n(fr.meters) * l.qty / n(fr.weight_kg) * 100) / 100 : null,
+           r4(l.qty), fr.gsm, fr.dia, fr.shade, fr.warehouse_id, fr.location_bin, `Transferred ${fromJob} → ${toJob} (${no})`, fr.process_state, fr.color_name, fr.source_fpo_id, b.to_so_id || null, fr.id, r4(l.qty)]);
         newRoll = Number(ins.insertId);
         await fabricHistory(tx, req, { roll_id: fr.id, roll_no: fr.roll_no, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.from_so_id || null, related: newRoll, remarks: `${l.qty} KG to ${toJob}: ${b.reason}` });
-        await fabricHistory(tx, req, { roll_id: newRoll, roll_no: `${fr.roll_no}-T${tid}`, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.to_so_id || null, related: fr.id, remarks: `From ${fromJob} roll ${fr.roll_no}` });
+        await fabricHistory(tx, req, { roll_id: newRoll, roll_no: childNo, ref_id: tid, ref_no: no, qty: l.qty, so_id: b.to_so_id || null, related: fr.id, remarks: `From ${fromJob} roll ${fr.roll_no}` });
       }
       await txExecute(tx, 'INSERT INTO trx_job_transfer_line (transfer_id, fabric_roll_id, new_roll_id, item_label, lot_no, qty) VALUES (?,?,?,?,?,?)',
         [tid, fr.id, newRoll, `Roll ${fr.roll_no}`, fr.lot_no, r4(l.qty)]);

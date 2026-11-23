@@ -62,6 +62,7 @@ import { gateBillRouter } from './modules/inventory/gateBill.routes.js';
 import { yarnSubstitutionRouter } from './modules/stock/yarnSubstitution.routes.js';
 import { knittingBillRouter } from './modules/yarnProcess/knittingBill.routes.js';
 import { fabricRollCalcRouter } from './modules/fabricRoll/fabricRollCalc.routes.js';
+import { fabricRollsRouter } from './modules/fabricRoll/fabricRolls.routes.js';
 import { purchaseExcessRouter } from './modules/purchaseExcess/purchaseExcess.routes.js';
 import { storesRouter } from './modules/stores/stores.routes.js';
 import { collarRouter } from './modules/yarnProcess/collar.routes.js';
@@ -149,6 +150,7 @@ export function createApp() {
   api.use('/boms', bomRouter);
   api.use('/yarn-variants', yarnVariantRouter);   // POST /yarn-variants/resolve — yarn base + count → item
   api.use('/', quotationVersionsRouter);     // /quotations/:id/versions
+  api.use('/', fabricRollsRouter);           // /inventory/fabric-rolls/* — roll split (cut) engine, approvals, transfer, labels, reports
   api.use('/', genealogyRouter);             // genealogy doc: roll lookup / split / merge, quotation rolls, snapshot, cost, tree, reports
   api.use('/', jobStockRouter);              // /yarn-stock/job-lots, /job-stock, /job-transfers, /traceability/fabric-roll|job
   api.use('/sales-orders', salesOrderRouter);

@@ -32,6 +32,7 @@ import {
   refreshFabricRollStatus, round,
 } from './cuttingEngine.js';
 import { allocateRolls, perPly, planLays, type CalcMarker } from './layCalc.js';
+import { assertRollLive } from '../fabricRoll/rollEngine.js';
 
 export const layEngineRouter = Router();
 // a non-numeric id is a 404, not a database error
@@ -789,6 +790,7 @@ layEngineRouter.post('/lay-plans/:id/issue', STORE, ah(async (req, res) => {
     for (const a of allocs) {
       const roll = await txQueryOne<any>(tx, `SELECT * FROM trx_fabric_roll WHERE id = ? AND company_id = ? FOR UPDATE`, [a.fabric_roll_id, cid]);
       if (!roll) throw NotFound(`Roll ${a.roll_no} not found`);
+      await assertRollLive(tx, roll, 'issued');
       if (roll.qc_status !== 'ACCEPTED') throw BadRequest(`Roll ${roll.roll_no} is QC ${roll.qc_status} — it cannot be issued`);
       const others = await txQueryOne<any>(tx, `SELECT ${RESERVED_KG_SQL('?', '?')} AS kg`, [roll.id, lay.id]);
       const free = round(num(roll.weight_kg) - num(roll.issued_kg) - num(others?.kg), 4);

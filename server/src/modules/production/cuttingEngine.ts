@@ -150,6 +150,8 @@ export async function refreshPlanStatus(tx: Tx, planId: number) {
 export async function refreshFabricRollStatus(tx: Tx, rollId: number, opts: { close?: boolean; reopen?: boolean } = {}) {
   const r = await q1<any>(tx, `SELECT id, weight_kg, issued_kg, stock_status FROM trx_fabric_roll WHERE id = ? FOR UPDATE`, [rollId]);
   if (!r) return;
+  // a split / merged parent is no longer a physical piece: its status never changes again (KG back → a return piece)
+  if (r.stock_status === 'SPLIT' || r.stock_status === 'MERGED') return;
   if (r.stock_status === 'CLOSED' && !opts.reopen && !opts.close) return;
   const avail = num(r.weight_kg) - num(r.issued_kg);
   let st: string;

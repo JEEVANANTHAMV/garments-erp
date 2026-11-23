@@ -7,6 +7,10 @@ import { requireAny } from '../../middleware/auth.js';
 import { audit } from '../../core/audit.js';
 import { jobBomRequirement } from '../bom/bom.routes.js';
 import { rollTrace, OPEN_ALLOC_SQL, yarnLotOrigin } from './jobStock.routes.js';
+import { assertRollLive, childRollNo, insertRollFrom, requestSplit, rollHistory } from '../fabricRoll/rollEngine.js';
+
+/** Store supervisor: may post a split whose cutting loss is above tolerance (else it waits for approval). */
+export const canApproveSplit = (req: Request) => !!req.user!.isSuperAdmin || req.user!.permissions.has('INVENTORY.ADJUST');
 
 /**
  * Job material genealogy — the remaining sections of the client document (03-Oct-2026):
@@ -254,70 +258,43 @@ genealogyRouter.post('/jobs/:soId/requirement-snapshot', requireAny('BOM.UPDATE'
 
 // ------------------------------------------------------------------ roll split / merge (§5.3, §6)
 
-const COPY_SKIP = new Set(['id', 'created_at', 'updated_at']);
-async function insertRollFrom(tx: Tx, src: any, over: Record<string, unknown>) {
-  const row: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(src)) if (!COPY_SKIP.has(k)) row[k] = v;
-  Object.assign(row, over);
-  const cols = Object.keys(row);
-  const r = await txExecute(tx, `INSERT INTO trx_fabric_roll (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`, cols.map((c) => row[c]));
-  return Number(r.insertId);
-}
-async function uniqueRollNo(tx: Tx, cid: number, base: string) {
-  for (let i = 0; i < 50; i++) {
-    const cand = i ? `${base}-${i}` : base;
-    if (!(await txQueryOne(tx, 'SELECT id FROM trx_fabric_roll WHERE company_id = ? AND roll_no = ? LIMIT 1', [cid, cand]))) return cand;
-  }
-  throw BadRequest(`Could not make a roll no from ${base}`);
-}
 const hist = (tx: Tx, req: Request, h: { roll_id: number; roll_no: string; event: string; qty: number; so_id: number | null; related: number; ref_no: string; remarks: string }) =>
-  txExecute(tx, `INSERT INTO trx_fabric_roll_history (company_id, roll_id, roll_no, event, ref_type, ref_no, qty_kg, so_id, related_roll_id, remarks, user_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`, [req.user!.companyId, h.roll_id, h.roll_no, h.event, 'ROLL_SPLIT_MERGE', h.ref_no, r3(h.qty), h.so_id, h.related, h.remarks, req.user!.id]);
+  rollHistory(tx, req.user!.companyId, req.user!.id, { ...h, ref_type: 'ROLL_SPLIT_MERGE' });
 
-/** A roll that can be split / merged: QC accepted, open, KG left, not on a draft DC or a live quotation. Locked. */
+/** A roll that can be merged: QC accepted, a live piece with KG left, not on a draft DC, a live quotation or a lay. Locked. */
 async function lockedRoll(tx: Tx, cid: number, id: number) {
   const fr = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ? AND company_id = ? FOR UPDATE', [id, cid]);
   if (!fr) throw BadRequest(`Roll #${id} not found`);
+  await assertRollLive(tx, fr, 'merged');
   const info = shapeRoll(await txQueryOne<any>(tx, `${ROLL_SQL(OPEN_ALLOC_SQL('fr.id', '0'))} WHERE fr.id = ?`, [id]));
   if (fr.qc_status !== 'ACCEPTED') throw BadRequest(`${fr.roll_no}: QC is ${String(fr.qc_status).toLowerCase()}`);
-  if (fr.stock_status === 'CLOSED') throw BadRequest(`${fr.roll_no} is closed`);
   if (n(info.draft_kg) > EPS) throw BadRequest(`${fr.roll_no} is on a draft process DC — confirm or remove it first`);
   if (n(info.allocated_kg) > EPS) throw BadRequest(`${fr.roll_no} is on a live process quotation (${r3(info.allocated_kg)} KG) — take it off the quotation first`);
+  const lay = await txQueryOne<any>(tx, `SELECT COALESCE(SUM(alloc_kg), 0) kg FROM trx_lay_roll_alloc WHERE fabric_roll_id = ? AND status = 'RESERVED'`, [id]);
+  if (n(lay?.kg) > EPS) throw BadRequest(`${fr.roll_no} has ${r3(lay.kg)} KG reserved for a lay — release it first`);
   const left = r3(n(fr.weight_kg) - n(fr.issued_kg));
   if (left <= EPS) throw BadRequest(`${fr.roll_no} has no KG left`);
   return { fr, left, mPerKg: n(fr.weight_kg) > 0 ? n(fr.meters || fr.calc_meters) / n(fr.weight_kg) : 0 };
 }
-const scaleM = (fr: any, kg: number, mPerKg: number) => ({
-  meters: fr.meters != null ? r3(kg * mPerKg) : null,
-  ...('calc_meters' in fr ? { calc_meters: fr.calc_meters != null && n(fr.weight_kg) > 0 ? r3(n(fr.calc_meters) * kg / n(fr.weight_kg)) : null } : {}),
-  ...('actual_meters' in fr ? { actual_meters: fr.actual_meters != null && n(fr.weight_kg) > 0 ? r3(n(fr.actual_meters) * kg / n(fr.weight_kg)) : null } : {}),
-});
-const closeRoll = (tx: Tx, fr: any, note: string) =>
-  txExecute(tx, `UPDATE trx_fabric_roll SET issued_kg = weight_kg, stock_status = 'CLOSED', remarks = LEFT(CONCAT(COALESCE(remarks, ''), ?), 255) WHERE id = ?`, [` ${note}`, fr.id]);
 
-/** POST /fabric-rolls/:id/split { parts: [kg, …], reason } — the KG left on the roll into 2+ child rolls (parent closed, genealogy kept). */
+/**
+ * POST /fabric-rolls/:id/split { parts: [kg, …], reason } — kept for older screens: the KG left on the roll into 2+
+ * store pieces. The full split (piece type, measured meter, store, cutting loss + approval) is
+ * POST /inventory/fabric-rolls/:id/split (fabricRolls.routes.ts); both use the roll engine.
+ */
 genealogyRouter.post('/fabric-rolls/:id/split', EDIT, ah(async (req, res) => {
   const cid = req.user!.companyId;
   const id = z.coerce.number().int().positive().parse(req.params.id);
   const b = z.object({ parts: z.array(z.coerce.number().positive()).min(2, 'Split into at least two rolls').max(20), reason: z.string().trim().min(3, 'Give the reason').max(200) }).parse(req.body);
   const out = await transaction(async (tx) => {
-    const { fr, left, mPerKg } = await lockedRoll(tx, cid, id);
-    const sum = r3(b.parts.reduce((a, x) => a + x, 0));
-    if (Math.abs(sum - left) > 0.001) throw BadRequest(`${fr.roll_no}: the parts (${sum} KG) must add up to the KG left on the roll (${left} KG)`);
-    const children: { id: number; roll_no: string; weight_kg: number }[] = [];
-    for (const [i, kg] of b.parts.entries()) {
-      const no = await uniqueRollNo(tx, cid, `${fr.roll_no}-S${i + 1}`);
-      const cidRoll = await insertRollFrom(tx, fr, { roll_no: no, weight_kg: r3(kg), issued_kg: 0, stock_status: 'AVAILABLE', parent_roll_id: fr.id, ...scaleM(fr, kg, mPerKg),
-        remarks: `Split from ${fr.roll_no}: ${b.reason}`.slice(0, 255) });
-      children.push({ id: cidRoll, roll_no: no, weight_kg: r3(kg) });
-      await hist(tx, req, { roll_id: fr.id, roll_no: fr.roll_no, event: 'SPLIT', qty: kg, so_id: fr.so_id, related: cidRoll, ref_no: no, remarks: b.reason });
-      await hist(tx, req, { roll_id: cidRoll, roll_no: no, event: 'SPLIT_FROM', qty: kg, so_id: fr.so_id, related: fr.id, ref_no: fr.roll_no, remarks: b.reason });
-    }
-    await closeRoll(tx, fr, `Split into ${children.map((c) => c.roll_no).join(', ')}`);
-    return { roll_no: fr.roll_no, children };
+    const r = await requestSplit(tx, { cid, userId: req.user!.id, canApprove: canApproveSplit(req) },
+      { roll_id: id, reason_code: 'OTHER', remarks: b.reason, measurement_source: 'MANUAL', pieces: b.parts.map((kg) => ({ kg, output_type: 'STORE' as const })) });
+    return { roll_no: r.plan.roll.roll_no, split_no: r.split_no, status: r.status, children: r.children.map((c) => ({ id: c.id, roll_no: c.roll_no, weight_kg: c.weight_kg })) };
   });
   await audit(req, 'trx_fabric_roll', id, 'UPDATE', undefined, { action: 'SPLIT', ...out, reason: b.reason });
-  res.status(201).json({ data: out, message: `${out.roll_no} split into ${out.children.map((c) => `${c.roll_no} (${c.weight_kg} KG)`).join(', ')}` });
+  res.status(201).json({ data: out, message: out.status === 'POSTED'
+    ? `${out.roll_no} split into ${out.children.map((c) => `${c.roll_no} (${c.weight_kg} KG)`).join(', ')}`
+    : `${out.split_no}: the cutting loss is above tolerance — sent to the store supervisor for approval` });
 }));
 
 /** POST /fabric-rolls/merge { roll_ids, reason } — rolls of the same job / fabric / state / colour / GSM / Dia / store into one roll. */
@@ -335,14 +312,16 @@ genealogyRouter.post('/fabric-rolls/merge', EDIT, ah(async (req, res) => {
     }
     const kg = r3(src.reduce((a, s) => a + s.left, 0));
     const m = src.reduce((a, s) => a + s.left * s.mPerKg, 0);
-    const no = await uniqueRollNo(tx, cid, `${f.roll_no}-M`);
-    const newId = await insertRollFrom(tx, f, { roll_no: no, weight_kg: kg, issued_kg: 0, stock_status: 'AVAILABLE', parent_roll_id: f.id, ...scaleM(f, kg, kg > 0 ? m / kg : 0),
+    const no = await childRollNo(tx, cid, f.roll_no, 'M');
+    const newId = await insertRollFrom(tx, f, { roll_no: no, weight_kg: kg, original_weight_kg: kg, issued_kg: 0, stock_status: 'AVAILABLE', parent_roll_id: f.id, roll_origin: 'MERGE', split_id: null,
+      meters: f.meters != null ? r3(m) : null, calc_meters: f.calc_meters != null && kg > 0 ? r3(m) : null, actual_meters: null, measured_meters: 0,
       lot_no: same('lot_no') ? f.lot_no : [...new Set(src.map((s) => s.fr.lot_no).filter(Boolean))].join('/').slice(0, 60) || null,
       remarks: `Merged from ${src.map((s) => s.fr.roll_no).join(', ')}: ${b.reason}`.slice(0, 255) });
     for (const s of src) {
       await hist(tx, req, { roll_id: s.fr.id, roll_no: s.fr.roll_no, event: 'MERGE', qty: s.left, so_id: s.fr.so_id, related: newId, ref_no: no, remarks: b.reason });
       await hist(tx, req, { roll_id: newId, roll_no: no, event: 'MERGED_FROM', qty: s.left, so_id: s.fr.so_id, related: s.fr.id, ref_no: s.fr.roll_no, remarks: b.reason });
-      await closeRoll(tx, s.fr, `Merged into ${no}`);
+      await txExecute(tx, `UPDATE trx_fabric_roll SET issued_kg = weight_kg, stock_status = 'MERGED', remarks = LEFT(CONCAT(COALESCE(remarks, ''), ?), 255) WHERE id = ?`, [` Merged into ${no}`, s.fr.id]);
+      await txExecute(tx, `UPDATE trx_fabric_roll_label SET status = 'VOID' WHERE roll_id = ? AND status = 'ACTIVE'`, [s.fr.id]);
     }
     return { roll_no: no, id: newId, weight_kg: kg, from: src.map((s) => s.fr.roll_no) };
   });
@@ -618,7 +597,13 @@ const REPORTS: Record<string, (cid: number, f: { so_id?: number; vendor_id?: num
         WHERE l.source_roll_id IN (?) AND COALESCE(pr.status, '') <> 'CANCELLED'`, 'out', 'Returned to process unit');
     await batch(`SELECT l.fabric_roll_id roll_id, t.transfer_date d, t.transfer_no ref, l.qty kg FROM trx_job_transfer_line l JOIN trx_job_transfer t ON t.id = l.transfer_id
         WHERE l.fabric_roll_id IN (?)`, 'out', 'Job transfer');
+    await batch(`SELECT fi.fabric_roll_id roll_id, jc.challan_date d, jc.challan_no ref, fi.issue_kg kg FROM trx_jw_fabric_issue fi JOIN trx_jobwork_challan jc ON jc.id = fi.challan_id
+        WHERE fi.fabric_roll_id IN (?) AND jc.status <> 'CANCELLED'`, 'out', 'Job work DC');
+    await batch(`SELECT fi.fabric_roll_id roll_id, jc.challan_date d, jc.challan_no ref, fi.returned_kg kg FROM trx_jw_fabric_issue fi JOIN trx_jobwork_challan jc ON jc.id = fi.challan_id
+        WHERE fi.fabric_roll_id IN (?) AND jc.status <> 'CANCELLED' AND fi.returned_kg > 0`, 'in', 'Returned by contractor');
     await batch(`SELECT h.roll_id, DATE(h.event_time) d, h.ref_no ref, h.qty_kg kg FROM trx_fabric_roll_history h WHERE h.roll_id IN (?) AND h.event IN ('SPLIT', 'MERGE')`, 'out', 'Split / merge');
+    await batch(`SELECT h.roll_id, DATE(h.event_time) d, h.ref_no ref, h.qty_kg kg FROM trx_fabric_roll_history h WHERE h.roll_id IN (?) AND h.event = 'CUT_LOSS'`, 'out', 'Cutting loss');
+    await batch(`SELECT h.roll_id, DATE(h.event_time) d, h.ref_no ref, h.qty_kg kg FROM trx_fabric_roll_history h WHERE h.roll_id IN (?) AND h.event = 'RETURN_PIECE'`, 'out', 'Came back as a new piece');
     const out: any[] = [];
     for (const r of rolls) {
       const ev: any[] = [{ date: r.grn_date, ref: r.born ? (r.born === 'SPLIT_FROM' ? 'Split' : 'Merge') : r.grn_no, in_kg: n(r.weight_kg), out_kg: 0, movement: r.born ? 'Created by split / merge' : 'Received' },
@@ -668,7 +653,7 @@ const REPORTS: Record<string, (cid: number, f: { so_id?: number; vendor_id?: num
   'split-merge': async (cid, f) => query<any>(
     `SELECT DATE(h.event_time) date, h.event, h.roll_no, rr.roll_no related_roll, h.qty_kg, COALESCE(NULLIF(so.io_no, ''), so.so_no) job_no, h.remarks reason, u.full_name user
        FROM trx_fabric_roll_history h LEFT JOIN trx_fabric_roll rr ON rr.id = h.related_roll_id LEFT JOIN trx_sales_order so ON so.id = h.so_id LEFT JOIN mst_user u ON u.id = h.user_id
-      WHERE h.company_id = ? AND h.event IN ('SPLIT', 'SPLIT_FROM', 'MERGE', 'MERGED_FROM') ${f.so_id ? 'AND h.so_id = ?' : ''} ORDER BY h.id DESC LIMIT 1000`, [cid, ...(f.so_id ? [f.so_id] : [])]),
+      WHERE h.company_id = ? AND h.event IN ('SPLIT', 'SPLIT_FROM', 'MERGE', 'MERGED_FROM', 'CUT_LOSS', 'RETURN_PIECE') ${f.so_id ? 'AND h.so_id = ?' : ''} ORDER BY h.id DESC LIMIT 1000`, [cid, ...(f.so_id ? [f.so_id] : [])]),
 
   /** Complete job lifecycle: yarn → fabric → process → cutting, one row per job. */
   'job-lifecycle': async (cid, f) => query<any>(

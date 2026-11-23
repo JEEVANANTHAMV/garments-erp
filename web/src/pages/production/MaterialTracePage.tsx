@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { RollFamilyPanel } from '../procurement/RollActions';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { http, ApiError } from '../../lib/api';
@@ -13,9 +15,10 @@ import { JobGenealogyTree, RequirementSnapshot, JobCostPanel, RollCostPanel, Spl
  */
 const kg = (v: unknown) => fmtDecimal(Number(v ?? 0), 3);
 export default function MaterialTracePage() {
+  const [sp] = useSearchParams();
   const [tab, setTab] = useState('roll');
-  const [roll, setRoll] = useState('');
-  const [rollQ, setRollQ] = useState('');
+  const [roll, setRoll] = useState(sp.get('roll') ?? '');
+  const [rollQ, setRollQ] = useState(sp.get('roll') ?? '');
   const [job, setJob] = useState('');
   const jobs = useQuery({ queryKey: ['procurement-jobs'], queryFn: async () => (await http.get<{ data: any[] }>('/procurement/jobs')).data ?? [] });
   const rt = useQuery({ queryKey: ['trace-roll', rollQ], queryFn: async () => (await http.get<{ data: any }>(`/traceability/fabric-roll?roll_no=${encodeURIComponent(rollQ)}`)).data, enabled: !!rollQ, retry: false });
@@ -24,7 +27,7 @@ export default function MaterialTracePage() {
   return (
     <>
       <PageHeader breadcrumb={['Production', 'Material Traceability']} title="Material Traceability" subtitle="Yarn PO / GRN / lot → knitting → processing → fabric roll → cutting" />
-      <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'roll', label: 'By fabric roll' }, { key: 'job', label: 'By job' }, { key: 'tools', label: 'Split / merge rolls' }]} active={tab} onChange={setTab} /></div>
+      <div className="card mb-3 px-4 pt-2"><Tabs tabs={[{ key: 'roll', label: 'By fabric roll' }, { key: 'job', label: 'By job' }, { key: 'tools', label: 'Merge rolls' }]} active={tab} onChange={setTab} /></div>
       {tab === 'roll' && (
         <>
           <div className="card mb-3 flex items-end gap-2 p-4">
@@ -63,6 +66,7 @@ export default function MaterialTracePage() {
                 </div>
               ))}
               {rt.data.chain[0] && <RollCostPanel rollId={Number(rt.data.chain[0].roll.id)} />}
+              {rt.data.chain[0] && <RollFamilyPanel rollId={Number(rt.data.chain[0].roll.id)} />}
               {rt.data.chain[0] && rt.data.chain[0].roll.stock_status !== 'CLOSED' && rt.data.chain[0].roll.qc_status === 'ACCEPTED' && Number(rt.data.chain[0].roll.weight_kg) - Number(rt.data.chain[0].roll.issued_kg) > 0.0005 && (
                 <SplitRollPanel roll={rt.data.chain[0].roll} onDone={() => void rt.refetch()} />)}
               <div className="card p-4 text-xs">
@@ -76,7 +80,7 @@ export default function MaterialTracePage() {
       {tab === 'tools' && (
         <div className="space-y-3">
           <MergeRollsPanel onDone={() => {}} />
-          <div className="card p-4 text-xs text-ink-secondary">To split a roll, trace it on <b>By fabric roll</b> — the split box is under its trace. Split / merge history is in Genealogy Reports.</div>
+          <div className="card p-4 text-xs text-ink-secondary">To cut a roll into pieces use <b>Fabric Roll Stock</b> (scissors on the row) or trace it on <b>By fabric roll</b>. Split approvals, the split register and the roll reports are in <b>Stores → Fabric Roll Cutting</b>.</div>
         </div>
       )}
       {tab === 'job' && (

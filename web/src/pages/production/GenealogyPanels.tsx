@@ -7,6 +7,7 @@ import { useToast } from '../../hooks/useToast';
 import { Button, Input } from '../../components/ui';
 import { fmtDecimal } from '../../lib/format';
 import { JobSelect } from '../../components/JobSelect';
+import { RollSplitModal } from '../procurement/RollActions';
 
 /**
  * Job material genealogy panels (client document 03-Oct-2026): the clickable job genealogy tree (§27), the job
@@ -117,28 +118,15 @@ export function RollCostPanel({ rollId }: { rollId: number }) {
 
 /** §5.3 — split the KG left on a roll into child rolls. */
 export function SplitRollPanel({ roll, onDone }: { roll: { id: number; roll_no: string; weight_kg: number; issued_kg?: number }; onDone: (msg: string) => void }) {
-  const toast = useToast(); const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
   const left = Math.round((Number(roll.weight_kg) - Number(roll.issued_kg ?? 0)) * 1000) / 1000;
-  const [parts, setParts] = useState<string[]>([String(Math.round(left / 2 * 1000) / 1000), String(Math.round((left - Math.round(left / 2 * 1000) / 1000) * 1000) / 1000)]);
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const sum = Math.round(parts.reduce((a, x) => a + (Number(x) || 0), 0) * 1000) / 1000;
-  const go = async () => {
-    setBusy(true);
-    try { const r = await http.post<any>(`/fabric-rolls/${roll.id}/split`, { parts: parts.map(Number), reason }); toast(r.message, 'success'); void qc.invalidateQueries(); onDone(r.message); }
-    catch (e) { toast(errText(e), 'error'); } finally { setBusy(false); }
-  };
   return (
     <div className="card p-4 text-xs" id="split-roll">
-      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-ink"><Scissors size={14} /> Split {roll.roll_no} ({kg(left)} KG left)</h3>
-      <div className="flex flex-wrap items-end gap-2">
-        {parts.map((p, i) => <Input key={i} label={`Roll ${i + 1} KG`} type="number" className="w-24" value={p} id={`split-part-${i}`} onChange={(e) => setParts(parts.map((x, k) => (k === i ? e.target.value : x)))} />)}
-        <Button size="sm" variant="secondary" onClick={() => setParts([...parts, '0'])}>+ part</Button>
-        {parts.length > 2 && <Button size="sm" variant="secondary" onClick={() => setParts(parts.slice(0, -1))}>− part</Button>}
-        <Input label="Reason *" className="w-64" value={reason} id="split-reason" onChange={(e) => setReason(e.target.value)} placeholder="e.g. two cut orders" />
-        <Button size="sm" loading={busy} onClick={go} disabled={Math.abs(sum - left) > 0.001 || reason.trim().length < 3} id="btn-split">Split</Button>
-      </div>
-      <p className={`mt-1 ${Math.abs(sum - left) > 0.001 ? 'text-amber-700' : 'text-ink-secondary'}`}>Parts total {kg(sum)} KG — must equal {kg(left)} KG. The roll is closed and each part becomes a child roll of the same job, fabric and lot.</p>
+      <h3 className="mb-2 flex items-center gap-1 text-body font-semibold text-ink"><Scissors size={14} /> Cut {roll.roll_no} ({kg(left)} KG in store)</h3>
+      <p className="mb-2 text-ink-secondary">Cut the roll into 2 or more pieces: each piece gets its own roll no and label, the roll is closed as SPLIT and stays in the genealogy.
+        A cutting loss above tolerance waits for a store supervisor.</p>
+      <Button size="sm" onClick={() => setOpen(true)} id="btn-split-open"><Scissors size={13} /> Cut roll…</Button>
+      <RollSplitModal rollId={open ? Number(roll.id) : null} open={open} onClose={() => setOpen(false)} onDone={(r) => onDone(r?.split_no ?? '')} />
     </div>
   );
 }

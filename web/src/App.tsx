@@ -65,6 +65,7 @@ import FabricPurchaseOrderDetailPage from './pages/procurement/FabricPurchaseOrd
 import FabricGRNsPage from './pages/procurement/FabricGRNs';
 import FabricGRNDetailPage from './pages/procurement/FabricGRNDetail';
 import FabricRollStockPage from './pages/procurement/FabricRollStock';
+import FabricRollCuttingPage from './pages/procurement/FabricRollCuttingPage';
 
 import YarnPurchaseOrdersPage from './pages/procurement/YarnPurchaseOrders';
 import YarnPurchaseOrderDetailPage from './pages/procurement/YarnPurchaseOrderDetail';
@@ -349,6 +350,7 @@ export default function App() {
                   <Route path="fabric/grn/new" element={<FabricGRNDetailPage />} />
                   <Route path="fabric/grn/:id" element={<FabricGRNDetailPage />} />
                   <Route path="fabric/roll-stock" element={<FabricRollStockPage />} />
+                  <Route path="fabric/roll-cutting" element={<FabricRollCuttingPage />} />
 
                   {/* Yarn Procurement */}
                   <Route path="yarn/orders" element={<YarnPurchaseOrdersPage />} />

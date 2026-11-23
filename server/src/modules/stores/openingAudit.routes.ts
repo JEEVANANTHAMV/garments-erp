@@ -12,6 +12,7 @@ import {
   n, r4, cidOf, uidOf, todayStr, idOpt, strOpt, dateStr, reasonSchema, idParam, listQuery, listWhere, mustGet, needStatus,
   can, SO_COLS, soJoins, ITEM_NAME, ITEM_TYPE, ITEM_JOINS, styleOfSo,
 } from './common.js';
+import { allocRollNo } from '../fabricRoll/rollEngine.js';
 
 /**
  * Opening stock entry and stock audit (client tracker 14-Oct-2026).
@@ -121,14 +122,15 @@ async function postOpening(tx: any, cid: number, userId: number, id: number) {
          l.uom_id === UOM_KG ? qty : null, l.material_type === 'FABRIC' ? 1 : null, l.uom_id]);
       let rollId: number | null = null;
       if (l.material_type === 'FABRIC') {
+        const openNo = await allocRollNo(tx, cid, l.roll_no || `${h.doc_no}-R${i}`, l.roll_no ? `${h.doc_no}/${l.roll_no}` : null);
         const rr = await txExecute(tx,
-          `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, weight_kg, warehouse_id, qc_status, stock_status, color_name, so_id, remarks)
-           VALUES (?,?,?,?,?,?,?,?,'ACCEPTED','AVAILABLE',?,?,?)`,
-          [cid, g, gl.insertId, l.fabric_id, l.roll_no || `${h.doc_no}-R${i}`, l.lot_no, qty, h.warehouse_id, l.color_name, l.so_id, `Opening stock ${h.doc_no}`]);
+          `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, weight_kg, warehouse_id, qc_status, stock_status, color_name, so_id, remarks, original_weight_kg)
+           VALUES (?,?,?,?,?,?,?,?,'ACCEPTED','AVAILABLE',?,?,?,?)`,
+          [cid, g, gl.insertId, l.fabric_id, openNo, l.lot_no, qty, h.warehouse_id, l.color_name, l.so_id, `Opening stock ${h.doc_no}`, qty]);
         rollId = rr.insertId;
         await txExecute(tx,
           `INSERT INTO trx_fabric_roll_history (company_id, roll_id, roll_no, event, ref_type, ref_id, ref_no, qty_kg, so_id, remarks, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-          [cid, rollId, l.roll_no || `${h.doc_no}-R${i}`, 'OPENING_STOCK', 'OPENING_STOCK', id, h.doc_no, qty, l.so_id, 'Opening stock', userId]);
+          [cid, rollId, openNo, 'OPENING_STOCK', 'OPENING_STOCK', id, h.doc_no, qty, l.so_id, 'Opening stock', userId]);
       }
       await postLedger(tx, { companyId: cid, warehouseId: h.warehouse_id, materialType: l.material_type, yarnId: l.yarn_id, fabricId: l.fabric_id, batchId,
         soId: l.so_id, txnType: 'ADJUST', refType: 'OPENING_STOCK', refId: id, qtyIn: qty, uomId: l.uom_id, rate, createdBy: userId });

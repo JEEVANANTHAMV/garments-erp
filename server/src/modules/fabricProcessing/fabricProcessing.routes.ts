@@ -7,6 +7,7 @@ import { calcRollFor, ROLL_CALC_COLS, rollCalcVals } from '../../core/fabricRoll
 import { query, queryOne, transaction, txQuery, txQueryOne, txExecute, type Tx } from '../../config/db.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
+import { allocRollNo, assertRollLive, childRollNo, pieceForIssue, receiveBack } from '../fabricRoll/rollEngine.js';
 import { ah } from '../../core/asyncHandler.js';
 import { NotFound, BadRequest, Forbidden } from '../../core/errors.js';
 import { requirePermission } from '../../middleware/auth.js';
@@ -224,7 +225,7 @@ type OutwardBody = z.infer<typeof outwardSchema>;
 export const isDyeing = (code: unknown) => /DYE/i.test(String(code ?? ''));
 
 /** Validates the DC rolls against store stock and writes them (stock is issued only when `issue`). */
-async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, rolls: OutwardBody['rolls'], issue: boolean, opts: { allowReturned?: boolean } = {}) {
+async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, rolls: OutwardBody['rolls'], issue: boolean, opts: { allowReturned?: boolean; cuts?: string[] } = {}) {
   const cid = req.user!.companyId;
   const seen = new Set<number>();
   let total = 0;
@@ -232,10 +233,11 @@ async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, 
   for (const r of rolls) {
     if (seen.has(r.fabric_roll_id)) throw BadRequest('The same roll is on the DC twice');
     seen.add(r.fabric_roll_id);
-    const fr = await txQueryOne<any>(tx,
+    let fr = await txQueryOne<any>(tx,
       `SELECT fr.*, so.io_no, so.so_no, so.buyer_po_no FROM trx_fabric_roll fr LEFT JOIN trx_sales_order so ON so.id = fr.so_id
         WHERE fr.id = ? AND fr.company_id = ? FOR UPDATE`, [r.fabric_roll_id, cid]);
     if (!fr) throw BadRequest('Roll not found in store');
+    await assertRollLive(tx, fr, 'sent');
     if (!(fr.qc_status === 'ACCEPTED' || (opts.allowReturned && fr.process_state === 'RETURNED'))) {
       throw BadRequest(`Roll ${fr.roll_no} is not QC accepted (${fr.qc_status})`);
     }
@@ -259,6 +261,15 @@ async function writeOutwardRolls(tx: Tx, req: Request, fpoId: number, fpo: any, 
       `SELECT so.id, COALESCE(so.io_no, so.so_no) AS io_no, so.buyer_po_no,
               (SELECT sol.style_id FROM trx_sales_order_line sol WHERE sol.so_id = so.id ORDER BY sol.id LIMIT 1) AS style_id
          FROM trx_sales_order so WHERE so.id = ? AND so.company_id = ?`, [soId, cid]) : null;
+    // part of a roll on a confirmed DC: the roll is cut — the piece sent gets its own roll no, the rest stays in store
+    if (issue) {
+      const cut = await pieceForIssue(tx, { cid, userId: req.user!.id, canApprove: true }, fr, r3(r.weight_kg),
+        { source: 'PROCESS_DC', ref_type: 'FPO', ref_id: fpoId, ref_no: fpo.fpo_no, quotation_id: fpo.quotation_id ?? null, fpo_id: fpoId });
+      if (cut.split) {
+        opts.cuts?.push(`${fr.roll_no} cut on ${cut.split.split_no}: ${cut.split.children.map((c) => `${c.roll_no} ${c.weight_kg} KG${c.output_type === 'ISSUE' ? ' sent' : ' in store'}`).join(', ')}`);
+        fr = { ...cut.roll, io_no: fr.io_no, so_no: fr.so_no, buyer_po_no: fr.buyer_po_no };
+      }
+    }
     const meters = r.meters || (n(fr.weight_kg) > 0 ? r2(n(fr.meters) * (r.weight_kg / n(fr.weight_kg))) : 0);
     // fabric colour = the roll as it goes out (Cora / Raw when undyed, melange …); color_name = the dye colour on a dyeing DC
     const fabricColor = fr.color_name || (fr.process_state === 'GREY' ? RAW_COLOUR : null);
@@ -431,11 +442,12 @@ fabricProcessingRouter.post('/fabric-process/outward', requirePermission(FP.CREA
   if (confirm && !can(req, FP.CONFIRM)) throw Forbidden('You can save the DC as draft; confirming needs the confirm right');
   const out = await transaction(async (tx) => {
     const h = await insertOutwardHeader(tx, req, body, { status: confirm ? 'DISPATCHED' : 'DRAFT' });
-    const kg = await writeOutwardRolls(tx, req, h.id, h, body.rolls, confirm);
-    return { id: h.id, fpo_no: h.fpo_no, status: confirm ? 'DISPATCHED' : 'DRAFT', outward_kg: kg };
+    const cuts: string[] = [];
+    const kg = await writeOutwardRolls(tx, req, h.id, h, body.rolls, confirm, { cuts });
+    return { id: h.id, fpo_no: h.fpo_no, status: confirm ? 'DISPATCHED' : 'DRAFT', outward_kg: kg, cuts };
   });
   await audit(req, 'trx_fabric_process_order', out.id, 'INSERT', undefined, out);
-  res.status(201).json({ data: out });
+  res.status(201).json({ data: out, ...(out.cuts.length ? { message: `${out.fpo_no} saved — ${out.cuts.join('; ')}` } : {}) });
 }));
 
 /** PUT /fabric-process/outward/:id — edit a DRAFT DC (header + rolls replaced). */
@@ -474,17 +486,18 @@ fabricProcessingRouter.post('/fabric-process/outward/:id/confirm', requirePermis
     const rolls = await txQuery<any>(tx, 'SELECT * FROM trx_fabric_process_roll_in WHERE fpo_id = ? ORDER BY id', [id]);
     if (!rolls.length) throw BadRequest('The DC has no rolls');
     await txExecute(tx, 'DELETE FROM trx_fabric_process_roll_in WHERE fpo_id = ?', [id]);
+    const cuts: string[] = [];
     const kg = await writeOutwardRolls(tx, req, id, o,
-      rolls.map((r) => ({ fabric_roll_id: Number(r.fabric_roll_id), so_id: r.so_id ? Number(r.so_id) : null, weight_kg: n(r.weight_kg), meters: n(r.meters), color_name: r.color_name })), true);
+      rolls.map((r) => ({ fabric_roll_id: Number(r.fabric_roll_id), so_id: r.so_id ? Number(r.so_id) : null, weight_kg: n(r.weight_kg), meters: n(r.meters), color_name: r.color_name })), true, { cuts });
     if (!o.is_reprocess) {
       const quote = await checkDcQuotation(cid, { vendor_id: Number(o.vendor_id), quotation_id: o.quotation_id, quotation_line_id: o.quotation_line_id, rate: o.rate_per_kg, label: `${o.fpo_no}` });
       await txExecute(tx, 'UPDATE trx_fabric_process_order SET rate_per_kg = ? WHERE id = ?', [quote.rate, id]);
     }
     await txExecute(tx, `UPDATE trx_fabric_process_order SET status = 'DISPATCHED', confirmed_by = ?, confirmed_at = NOW() WHERE id = ?`, [req.user!.id, id]);
-    return { id, fpo_no: o.fpo_no, outward_kg: kg };
+    return { id, fpo_no: o.fpo_no, outward_kg: kg, cuts };
   });
   await audit(req, 'trx_fabric_process_order', id, 'UPDATE', undefined, { confirm: out });
-  res.json({ data: out, message: `${out.fpo_no} confirmed — ${out.outward_kg.toFixed(3)} KG issued` });
+  res.json({ data: out, message: `${out.fpo_no} confirmed — ${out.outward_kg.toFixed(3)} KG issued${out.cuts.length ? `. ${out.cuts.join('; ')}` : ''}` });
 }));
 
 /** POST /fabric-process/outward/:id/cancel — draft: cancelled; confirmed with nothing received: rolls back to store. */
@@ -504,10 +517,12 @@ fabricProcessingRouter.post(['/fabric-process/outward/:id/cancel', '/fabric-proc
       const rolls = await txQuery<any>(tx, 'SELECT * FROM trx_fabric_process_roll_in WHERE fpo_id = ?', [id]);
       for (const r of rolls) {
         if (!r.fabric_roll_id) continue;
-        const fr = await txQueryOne<any>(tx, 'SELECT id, roll_no, fabric_id, warehouse_id FROM trx_fabric_roll WHERE id = ? FOR UPDATE', [r.fabric_roll_id]);
-        if (!fr) continue;
-        await txExecute(tx, 'UPDATE trx_fabric_roll SET issued_kg = GREATEST(COALESCE(issued_kg, 0) - ?, 0) WHERE id = ?', [r.weight_kg, fr.id]);
-        await refreshFabricRollStatus(tx, fr.id, { reopen: true });
+        const src = await txQueryOne<any>(tx, 'SELECT id FROM trx_fabric_roll WHERE id = ? FOR UPDATE', [r.fabric_roll_id]);
+        if (!src) continue;
+        // back to the same piece; a piece cut / closed since then gets a return piece instead
+        const back = await receiveBack(tx, { cid, userId: req.user!.id, canApprove: false }, Number(src.id), n(r.weight_kg),
+          { type: 'FPO', id, no: o.fpo_no, event: 'DC_CANCELLED', remarks: reason ?? 'DC cancelled' });
+        const fr = { id: back.roll_id, roll_no: back.roll_no, fabric_id: back.fabric_id, warehouse_id: back.warehouse_id };
         const wh = Number(r.warehouse_id || fr.warehouse_id) || 0;
         if (wh) {
           await postLedger(tx, { companyId: cid, warehouseId: wh, materialType: 'FABRIC', fabricId: Number(fr.fabric_id) || null,
@@ -720,7 +735,7 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
     const src = ri.fabric_roll_id ? await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ?', [ri.fabric_roll_id]) : null;
     let goodRollId: number | null = null;
     let rejectRollId: number | null = null;
-    const outNo = l.output_roll_no || `${inwardNo}-${String(++seq).padStart(2, '0')}`;
+    const outNo = await allocRollNo(tx, cid, l.output_roll_no || `${inwardNo}-${String(++seq).padStart(2, '0')}`, l.output_roll_no ? `${inwardNo}/${l.output_roll_no}` : null);
     if (l.good_kg > 0) {
       // GSM / Dia / meter of the processed roll: target = the GSM entered on the GRN (finished GSM) else the input roll's;
       // a measured meter gives the actual GSM. Recorded with the variance (the process QC decides hold / reject).
@@ -731,27 +746,28 @@ async function postInward(tx: Tx, req: Request, body: InwardBody, existing?: { i
       }, tx);
       const fr = await txExecute(tx,
         `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id, ${ROLL_CALC_COLS})
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id, original_weight_kg, ${ROLL_CALC_COLS})
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [cid, grnId, glId, ri.fabric_id ?? src?.fabric_id ?? null, outNo, src?.lot_no ?? null, c.meters ?? (l.meters || null), r3(l.good_kg),
          Number.parseInt(String(l.gsm ?? ri.gsm ?? ''), 10) || null, l.dia ?? ri.dia ?? null, l.shade_no ?? o.shade_code ?? colour,
          body.warehouse_id, l.qc_status, l.qc_status === 'ACCEPTED' ? 'AVAILABLE' : 'RESERVED', `${pt.name} on ${o.fpo_no}`,
-         pt.output_state, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null, ...rollCalcVals(c)]);
+         pt.output_state, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null, r3(l.good_kg), ...rollCalcVals(c)]);
       goodRollId = Number(fr.insertId);
       await history(tx, req, { roll_id: goodRollId, roll_no: outNo, event: o.is_reprocess ? 'REPROCESS_INWARD' : 'PROCESS_INWARD', ref_type: 'FPI', ref_id: inwardId,
         ref_no: inwardNo, sub_process: o.sub_process, from: vendor, to: goodStore, qty: l.good_kg, so_id: ri.so_id, related_roll_id: ri.fabric_roll_id,
         remarks: `${pt.output_state}${colour ? ` — ${colour}` : ''} from ${ri.roll_no}` });
     }
     if (l.reject_kg > 0) {
+      const rejNo = await allocRollNo(tx, cid, `${outNo}-RJ`);
       const rr = await txExecute(tx,
         `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'REJECTED','RESERVED',?,'RETURNED',?,?,?,?)`,
-        [cid, grnId, glId, ri.fabric_id ?? null, `${outNo}-RJ`, src?.lot_no ?? null, null, r3(l.reject_kg),
+           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id, original_weight_kg)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'REJECTED','RESERVED',?,'RETURNED',?,?,?,?,?)`,
+        [cid, grnId, glId, ri.fabric_id ?? null, rejNo, src?.lot_no ?? null, null, r3(l.reject_kg),
          Number.parseInt(String(l.gsm ?? ri.gsm ?? ''), 10) || null, l.dia ?? ri.dia ?? null, colour,
-         rejectWh, `Reject: ${l.reject_reason}`, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null]);
+         rejectWh, `Reject: ${l.reject_reason}`, colour, o.id, ri.so_id ?? null, ri.fabric_roll_id ?? null, r3(l.reject_kg)]);
       rejectRollId = Number(rr.insertId);
-      await history(tx, req, { roll_id: rejectRollId, roll_no: `${outNo}-RJ`, event: 'REJECT', ref_type: 'FPI', ref_id: inwardId, ref_no: inwardNo,
+      await history(tx, req, { roll_id: rejectRollId, roll_no: rejNo, event: 'REJECT', ref_type: 'FPI', ref_id: inwardId, ref_no: inwardNo,
         sub_process: o.sub_process, from: vendor, to: rejStore, qty: l.reject_kg, so_id: ri.so_id, related_roll_id: ri.fabric_roll_id, remarks: l.reject_reason });
     }
     if (l.loss_kg > 0 && ri.fabric_roll_id) {
@@ -1055,16 +1071,19 @@ fabricProcessingRouter.post('/fabric-process/returns', requirePermission(FP.RETU
       if (!fr) throw BadRequest('Roll not found');
       if (!fr.source_fpo_id) throw BadRequest(`Roll ${fr.roll_no} is not a processed roll`);
       if (inw && Number(fr.grn_id) !== Number(inw.grn_id)) throw BadRequest(`Roll ${fr.roll_no} is not from GRN ${inw.inward_no}`);
+      await assertRollLive(tx, fr, 'returned');
       const avail = n(fr.weight_kg) - n(fr.issued_kg);
       if (l.qty_kg > avail + 1e-9) throw BadRequest(`Roll ${fr.roll_no} has only ${avail.toFixed(3)} KG left`);
       await txExecute(tx, 'UPDATE trx_fabric_roll SET issued_kg = COALESCE(issued_kg, 0) + ? WHERE id = ?', [r3(l.qty_kg), fr.id]);
       await refreshFabricRollStatus(tx, fr.id);
+      // the returned KG is a piece of its own (own roll no / label) in the return store
+      const returnNo2 = await childRollNo(tx, cid, fr.roll_no, 'R');
       const rr = await txExecute(tx,
         `INSERT INTO trx_fabric_roll (company_id, grn_id, grn_line_id, fabric_id, roll_no, lot_no, meters, weight_kg, gsm, dia, shade,
-           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'REJECTED','RESERVED',?,'RETURNED',?,?,?,?)`,
-        [cid, fr.grn_id, fr.grn_line_id, fr.fabric_id, `${fr.roll_no}-R`, fr.lot_no, n(fr.weight_kg) > 0 ? r2(n(fr.meters) * l.qty_kg / n(fr.weight_kg)) : null,
-         r3(l.qty_kg), fr.gsm, fr.dia, fr.shade, body.warehouse_id, `Returned on ${returnNo}: ${l.defect_reason ?? ''}`, fr.color_name, fr.source_fpo_id, fr.so_id, fr.id]);
+           warehouse_id, qc_status, stock_status, remarks, process_state, color_name, source_fpo_id, so_id, parent_roll_id, original_weight_kg, roll_origin)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'REJECTED','RESERVED',?,'RETURNED',?,?,?,?,?,'RETURN')`,
+        [cid, fr.grn_id, fr.grn_line_id, fr.fabric_id, returnNo2, fr.lot_no, n(fr.weight_kg) > 0 ? r2(n(fr.meters) * l.qty_kg / n(fr.weight_kg)) : null,
+         r3(l.qty_kg), fr.gsm, fr.dia, fr.shade, body.warehouse_id, `Returned on ${returnNo}: ${l.defect_reason ?? ''}`, fr.color_name, fr.source_fpo_id, fr.so_id, fr.id, r3(l.qty_kg)]);
       const returnRollId = Number(rr.insertId);
       await txExecute(tx,
         `INSERT INTO trx_fabric_process_return_line (return_id, source_roll_id, return_roll_id, so_id, roll_no, color_name, qty_kg, meters, defect_reason)
@@ -1074,7 +1093,7 @@ fabricProcessingRouter.post('/fabric-process/returns', requirePermission(FP.RETU
       await postLedger(tx, { companyId: cid, warehouseId: body.warehouse_id, materialType: 'FABRIC', fabricId: Number(fr.fabric_id) || null, txnType: 'RETURN', refType: 'FAB_PROC_RETURN', refId: returnId, qtyIn: r3(l.qty_kg), uomId: UOM_KG, createdBy: req.user!.id });
       await history(tx, req, { roll_id: fr.id, roll_no: fr.roll_no, event: 'RETURN', ref_type: 'FPR', ref_id: returnId, ref_no: returnNo, sub_process: inw?.sub_process ?? null,
         from: await whName(tx, fr.warehouse_id ? Number(fr.warehouse_id) : null), to: toStore, qty: l.qty_kg, so_id: fr.so_id, related_roll_id: returnRollId, remarks: l.defect_reason });
-      await history(tx, req, { roll_id: returnRollId, roll_no: `${fr.roll_no}-R`, event: 'RETURN', ref_type: 'FPR', ref_id: returnId, ref_no: returnNo, sub_process: inw?.sub_process ?? null,
+      await history(tx, req, { roll_id: returnRollId, roll_no: returnNo2, event: 'RETURN', ref_type: 'FPR', ref_id: returnId, ref_no: returnNo, sub_process: inw?.sub_process ?? null,
         to: toStore, qty: l.qty_kg, so_id: fr.so_id, related_roll_id: fr.id, remarks: l.defect_reason });
       total += l.qty_kg;
     }

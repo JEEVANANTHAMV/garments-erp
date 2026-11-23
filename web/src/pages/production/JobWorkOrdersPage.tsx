@@ -391,7 +391,7 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
         rolls: Object.entries(kg).filter(([, v]) => num(v) > 0).map(([id, v]) => ({ fabric_roll_id: Number(id), issue_kg: num(v) })),
         outputs: Object.entries(qty).filter(([, v]) => num(v) > 0).map(([k, v]) => { const [c, s] = k.split('|'); return { color_id: Number(c), size_id: Number(s), qty: num(v) }; }),
       });
-      toast(`Fabric DC ${r.data.data.challan_no} — ${r.data.data.total_kg} KG from ${r.data.data.rolls} roll(s), ${r.data.data.expected_pcs} PCS expected`); onDone();
+      toast(`Fabric DC ${r.data.data.challan_no} — ${r.data.data.total_kg} KG from ${r.data.data.rolls} roll(s), ${r.data.data.expected_pcs} PCS expected${r.data.data.cuts?.length ? `. ${r.data.data.cuts.join('; ')}` : ''}`); onDone();
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
   return (
@@ -422,7 +422,10 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
                   <td className="px-2 py-1 text-right">{num(r.free_kg)}</td>
                   <td className="px-2 py-1 text-right"><div className="flex justify-end gap-1">
                     <input className={`input h-7 w-20 text-right ${num(kg[r.id]) > num(r.free_kg) ? 'input-error' : ''}`} type="number" min={0} step="0.001" id={`jwf-roll-${r.id}`} value={kg[r.id] ?? ''} onChange={(e) => setKg({ ...kg, [r.id]: e.target.value })} />
-                    <button className="text-caption text-brand-700" onClick={() => setKg({ ...kg, [r.id]: String(num(r.free_kg)) })}>all</button></div></td>
+                    <button className="text-caption text-brand-700" onClick={() => setKg({ ...kg, [r.id]: String(num(r.free_kg)) })}>all</button></div>
+                    {num(kg[r.id]) > 0 && num(kg[r.id]) < num(r.weight_kg) - num(r.issued_kg) - 0.0005 && (
+                      <div className="mt-0.5 text-micro text-violet-700" data-cut-hint={r.roll_no} title="The roll is cut: the piece sent gets its own roll no, the rest stays in store as another piece">
+                        ✂ cut: {num(kg[r.id])} sent · {Math.round((num(r.weight_kg) - num(r.issued_kg) - num(kg[r.id])) * 1000) / 1000} stays</div>)}</td>
                 </tr>
               ))}</tbody>
             </table>

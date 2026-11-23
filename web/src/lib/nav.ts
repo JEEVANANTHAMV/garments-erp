@@ -101,6 +101,7 @@ export const NAV: NavSection[] = [
       { label: 'Stock on Hand',      to: '/inventory/stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Yarn Stock List',    to: '/procurement/yarn/stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
       { label: 'Fabric Roll Stock',  to: '/procurement/fabric/roll-stock', icon: Boxes, perms: ['INVENTORY.VIEW'] },
+      { label: 'Fabric Roll Cutting', to: '/procurement/fabric/roll-cutting', icon: GitBranch, perms: ['INVENTORY.VIEW'] },
       { label: 'Material Issue',     to: '/inventory/issues', icon: PackageCheck, perms: ['ISSUE.VIEW'] },
       { label: 'Stock Transfers',    to: '/inventory/transfers', icon: Truck, perms: ['INVENTORY.VIEW'] },
       { label: 'Job Stock Transfer', to: '/inventory/job-transfers', icon: GitBranch, perms: ['INVENTORY.VIEW'] },

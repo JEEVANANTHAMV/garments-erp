@@ -21,6 +21,7 @@ import { s } from '../resources/schemas.js';
 import { orderLineBalances, refreshJwOrder, resolveJwRate } from './jwOrderStatus.js';
 import { postReceipt, DC_PENDING } from './processDc.routes.js';
 import { RESERVED_KG_SQL, refreshFabricRollStatus } from './cuttingEngine.js';
+import { assertRollLive, pieceForIssue, receiveBack } from '../fabricRoll/rollEngine.js';
 import { resolveSoId } from '../stock/jobStock.routes.js';
 import { postFgReceipt } from './fgReceipt.routes.js';
 
@@ -291,6 +292,7 @@ jobWorkRouter.post('/job-work/orders/:id/fabric-outward', requireAny('PRODUCTION
     for (const r of b.rolls) {
       const roll = await txQueryOne<any>(tx, `SELECT fr.*, ${RESERVED_KG_SQL('fr.id')} AS reserved_kg FROM trx_fabric_roll fr WHERE fr.id = ? AND fr.company_id = ? FOR UPDATE`, [r.fabric_roll_id, cid]);
       if (!roll) throw NotFound(`Roll #${r.fabric_roll_id} not found`);
+      await assertRollLive(tx, roll, 'sent');
       if (roll.qc_status !== 'ACCEPTED') throw BadRequest(`Roll ${roll.roll_no} is QC ${roll.qc_status}`);
       if (o.so_id && roll.so_id && Number(roll.so_id) !== Number(o.so_id)) throw BadRequest(`Roll ${roll.roll_no} belongs to another job`);
       const free = r3(n(roll.weight_kg) - n(roll.issued_kg) - n(roll.reserved_kg));
@@ -315,7 +317,14 @@ jobWorkRouter.post('/job-work/orders/:id/fabric-outward', requireAny('PRODUCTION
         [dcId, sku?.id ?? null, o.io_no, `Garments from fabric (${line.output_desc ?? line.output_kind})`.slice(0, 255), x.qty, o.style_id, x.color_id ?? null, x.size_id ?? null, null]);
     }
     const uom = await txQueryOne<any>(tx, `SELECT id FROM cfg_uom WHERE code = 'KG' LIMIT 1`);
+    const cuts: string[] = [];
     for (const r of rolls) {
+      // part of a roll: the roll is cut — the piece sent gets its own roll no, the rest stays in store
+      const cut = await pieceForIssue(tx, { cid, userId: req.user!.id, canApprove: true }, r.roll, r.kg, { source: 'JOBWORK_DC', ref_type: 'JW_DC', ref_id: dcId, ref_no: challanNo });
+      if (cut.split) {
+        cuts.push(`${r.roll.roll_no} cut on ${cut.split.split_no}: ${cut.split.children.map((c) => `${c.roll_no} ${c.weight_kg} KG${c.output_type === 'ISSUE' ? ' sent' : ' in store'}`).join(', ')}`);
+        r.roll = cut.roll;
+      }
       await txExecute(tx, `INSERT INTO trx_jw_fabric_issue (company_id, challan_id, jw_order_line_id, fabric_roll_id, roll_no, lot_no, issue_kg, issue_m, created_by) VALUES (?,?,?,?,?,?,?,?,?)`,
         [cid, dcId, line.id, r.roll.id, r.roll.roll_no, r.roll.lot_no, r.kg, r.m, req.user!.id]);
       await txExecute(tx, `UPDATE trx_fabric_roll SET issued_kg = issued_kg + ? WHERE id = ?`, [r.kg, r.roll.id]);
@@ -329,10 +338,10 @@ jobWorkRouter.post('/job-work/orders/:id/fabric-outward', requireAny('PRODUCTION
         [cid, r.roll.id, r.roll.roll_no, dcId, challanNo, o.vendor_name ?? 'Contractor', r.kg, o.so_id ?? null, `Job work ${o.jw_no}`, req.user!.id]);
     }
     await refreshJwOrder(tx, o.id);
-    return { id: dcId, challan_no: challanNo, total_kg: totalKg, expected_pcs: totalPcs, rolls: rolls.length };
+    return { id: dcId, challan_no: challanNo, total_kg: totalKg, expected_pcs: totalPcs, rolls: rolls.length, cuts };
   });
   await audit(req, 'trx_jobwork_challan', out.id, 'INSERT', undefined, { ...out, jw_order_id: id, kind: 'FABRIC' });
-  res.status(201).json({ data: out });
+  res.status(201).json({ data: out, ...(out.cuts.length ? { message: `${out.challan_no} saved — ${out.cuts.join('; ')}` } : {}) });
 }));
 
 const fabricInSchema = z.object({
@@ -391,9 +400,9 @@ jobWorkRouter.post('/job-work/fabric-dcs/:id/inward', requireAny('PRODUCTION.CRE
       await txExecute(tx, `UPDATE trx_jw_fabric_issue SET consumed_kg = consumed_kg + ?, returned_kg = returned_kg + ?, waste_kg = waste_kg + ? WHERE id = ?`,
         [r.consumed_kg, r.returned_kg, r.waste_kg, fi.id]);
       if (r.returned_kg > 0) {
-        const roll = await txQueryOne<any>(tx, `SELECT * FROM trx_fabric_roll WHERE id = ? FOR UPDATE`, [fi.fabric_roll_id]);
-        await txExecute(tx, `UPDATE trx_fabric_roll SET issued_kg = GREATEST(issued_kg - ?, 0) WHERE id = ?`, [r.returned_kg, fi.fabric_roll_id]);
-        await refreshFabricRollStatus(tx, fi.fabric_roll_id);
+        // back onto the piece that went out; if it was closed / cut since, the KG becomes a return piece
+        const roll = await receiveBack(tx, { cid, userId: req.user!.id, canApprove: false }, Number(fi.fabric_roll_id), r.returned_kg,
+          { type: 'JW_DC', id, no: dc.challan_no, event: 'JW_FABRIC_BACK', remarks: `Returned by ${dc.vendor_name ?? 'contractor'}` });
         await txExecute(tx,
           `INSERT INTO trx_stock_ledger (company_id, warehouse_id, material_type, fabric_id, txn_type, ref_type, ref_id, qty_in, qty_out, uom_id, created_by)
            VALUES (?,?,'FABRIC',?,'RETURN','JW_FABRIC_RETURN',?,?,0,?,?)`, [cid, roll.warehouse_id, roll.fabric_id, id, r.returned_kg, uom?.id ?? 5, req.user!.id]);
