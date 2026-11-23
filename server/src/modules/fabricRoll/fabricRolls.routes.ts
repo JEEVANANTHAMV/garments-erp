@@ -191,7 +191,8 @@ fabricRollsRouter.post(`${BASE}/transfer`, EDIT, ah(async (req, res) => {
     reason: z.string().trim().min(3, 'Give the reason').max(255),
     transfer_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   }).parse(req.body ?? {});
-  if (b.transfer_date && b.transfer_date > today()) throw BadRequest('The transfer date cannot be in the future');
+  // roll moves / cuts are posted with today's date only (doc §9: no backdated store movements without a period lock)
+  if (b.transfer_date && b.transfer_date !== today()) throw BadRequest(`Roll moves are posted with today's date (${today()})`);
   const out = await transaction(async (tx) => transferRolls(tx, ctxOf(req), { roll_ids: b.roll_ids, to_warehouse_id: b.to_warehouse_id, to_location_bin: b.to_location_bin, reason: b.reason, date: b.transfer_date ?? today() }));
   await audit(req, 'trx_fabric_roll_transfer', out.id, 'INSERT', undefined, { ...out, roll_ids: b.roll_ids });
   res.status(201).json({ data: out, message: `${out.transfer_no}: ${out.rolls} roll(s), ${out.total_kg} KG moved to ${out.to}${b.to_location_bin ? ` / ${b.to_location_bin}` : ''}` });
