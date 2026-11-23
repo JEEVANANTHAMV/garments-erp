@@ -119,10 +119,10 @@ export default function FabricRollStockPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" onClick={() => nav('/procurement/fabric/roll-cutting')} id="btn-roll-cutting"><GitBranch size={14} className="text-purple-600" /> Roll cutting &amp; reports
+          <Button variant="secondary" onClick={() => nav('/procurement/fabric/roll-cutting')} id="btn-roll-cutting"><GitBranch size={14} className="text-purple-600" /> Roll cutting &amp; reports
             {n(s?.pending_approvals) > 0 && <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-micro font-semibold text-amber-800">{s.pending_approvals}</span>}</Button>
-          <Button variant="outline" onClick={() => nav('/procurement/fabric/orders')}><Layers size={14} className="text-emerald-600" /> Fabric Orders</Button>
-          <Button variant="outline" onClick={() => nav('/procurement/fabric/grn')}><PackageCheck size={14} className="text-emerald-600" /> Fabric GRNs</Button>
+          <Button variant="secondary" onClick={() => nav('/procurement/fabric/orders')}><Layers size={14} className="text-emerald-600" /> Fabric Orders</Button>
+          <Button variant="secondary" onClick={() => nav('/procurement/fabric/grn')}><PackageCheck size={14} className="text-emerald-600" /> Fabric GRNs</Button>
           <Button onClick={() => nav('/procurement/fabric/grn/new')}><PackageCheck size={14} /> Inward New Rolls</Button>
         </div>
       </div>
