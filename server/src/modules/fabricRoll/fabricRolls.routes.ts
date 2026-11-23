@@ -240,6 +240,57 @@ fabricRollsRouter.post(`${BASE}/labels`, EDIT, ah(async (req, res) => {
   res.json({ data: out });
 }));
 
+// ------------------------------------------------------------------ mix check (lot / shade / GSM / Dia on one DC)
+
+/**
+ * POST /mix-check { roll_ids } — rolls picked for one DC, grouped by job + fabric: warns (never blocks) when a group
+ * mixes lots, shades / colours, grey with processed fabric, Dia, or GSM further apart than ROLL_GSM_TOLERANCE_PCT —
+ * mixed lots / shades in one dye batch or lay show up as shade variation in the garments.
+ */
+fabricRollsRouter.post(`${BASE}/mix-check`, VIEW, ah(async (req, res) => {
+  const cid = req.user!.companyId;
+  const b = z.object({ roll_ids: z.array(z.coerce.number().int().positive()).max(1000) }).parse(req.body ?? {});
+  const ids = [...new Set(b.roll_ids)];
+  if (ids.length < 2) { res.json({ data: { ok: true, groups: [] } }); return; }
+  const rows = await query<any>(`SELECT fr.id, fr.roll_no, fr.so_id, fr.fabric_id, fb.fabric_name, fr.lot_no, fr.shade, fr.color_name, fr.process_state,
+      COALESCE(NULLIF(fr.actual_gsm, 0), fr.gsm) gsm, fr.dia, COALESCE(NULLIF(so.io_no, ''), so.so_no) job_no
+     FROM trx_fabric_roll fr LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id LEFT JOIN trx_sales_order so ON so.id = fr.so_id
+    WHERE fr.company_id = ? AND fr.id IN (?)`, [cid, ids]);
+  const tol = await queryOne<any>(`SELECT setting_value v FROM cfg_system_setting WHERE company_id = ? AND setting_key = 'ROLL_GSM_TOLERANCE_PCT'`, [cid]);
+  const gsmTol = Number(tol?.v) > 0 ? Number(tol.v) : 5;
+  const norm = (v: unknown) => String(v ?? '').trim().toUpperCase().replace(/["”″]|\s*INCH(ES)?$/g, '').replace(/\s+/g, ' ');
+  const groups = new Map<string, any[]>();
+  for (const r of rows) { const k = `${r.so_id ?? 0}|${r.fabric_id ?? 0}`; groups.set(k, [...(groups.get(k) ?? []), r]); }
+  const out: any[] = [];
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const issues: { kind: string; text: string }[] = [];
+    const distinct = (f: (r: any) => unknown) => {
+      const m = new Map<string, string[]>();
+      for (const r of g) { const v = norm(f(r)); if (v) m.set(v, [...(m.get(v) ?? []), r.roll_no]); }
+      return m;
+    };
+    const say = (m: Map<string, string[]>) => [...m].map(([v, rs]) => `${v} (${rs.length} roll${rs.length > 1 ? 's' : ''})`).join(', ');
+    const lots = distinct((r) => r.lot_no);
+    if (lots.size > 1) issues.push({ kind: 'LOT', text: `different lots: ${say(lots)}` });
+    const shades = distinct((r) => r.shade);
+    if (shades.size > 1) issues.push({ kind: 'SHADE', text: `different shades: ${say(shades)}` });
+    const colours = distinct((r) => r.color_name);
+    if (colours.size > 1) issues.push({ kind: 'COLOUR', text: `different colours: ${say(colours)}` });
+    const states = distinct((r) => r.process_state);
+    if (states.size > 1) issues.push({ kind: 'STATE', text: `grey and processed fabric together: ${say(states)}` });
+    const dias = distinct((r) => r.dia);
+    if (dias.size > 1) issues.push({ kind: 'DIA', text: `different Dia: ${say(dias)}` });
+    const gsms = g.map((r) => Number(r.gsm)).filter((x) => x > 0);
+    if (gsms.length > 1) {
+      const lo = Math.min(...gsms), hi = Math.max(...gsms);
+      if ((hi - lo) / lo * 100 > gsmTol + 1e-9) issues.push({ kind: 'GSM', text: `GSM from ${lo} to ${hi} (more than ${gsmTol}% apart)` });
+    }
+    if (issues.length) out.push({ job_no: g[0].job_no ?? 'General stock', fabric_name: g[0].fabric_name, rolls: g.length, issues });
+  }
+  res.json({ data: { ok: !out.length, groups: out, gsm_tolerance_pct: gsmTol } });
+}));
+
 // ------------------------------------------------------------------ family tree
 
 /** GET /:id/family — the root roll of the family and every piece made from it (split / merge / return / transfer), as a tree. */
@@ -267,7 +318,27 @@ fabricRollsRouter.get(`${BASE}/:id/family`, VIEW, ah(async (req, res) => {
 
 // ------------------------------------------------------------------ reports
 
-type F = { from?: string; to?: string; grn_id?: number; warehouse_id?: number; fabric_id?: number };
+type F = { from?: string; to?: string; grn_id?: number; warehouse_id?: number; fabric_id?: number; vendor_id?: number };
+
+/** Roll lines of process DCs and job-work fabric DCs (not draft / cancelled), with what came back. DC dates from / to filter. */
+async function contractorFabricLines(cid: number, f: F) {
+  const dW = (col: string) => `${f.from ? ` AND ${col} >= ?` : ''}${f.to ? ` AND ${col} <= ?` : ''}`;
+  const dP = [...(f.from ? [f.from] : []), ...(f.to ? [f.to] : [])];
+  const vW = (col: string) => (f.vendor_id ? ` AND ${col} = ?` : '');
+  const vP = f.vendor_id ? [f.vendor_id] : [];
+  const proc = await query<any>(`SELECT 'Process DC' kind, o.vendor_id, v.party_name contractor, o.id dc_id, o.fpo_no dc_no, o.fpo_date dc_date, o.sub_process process,
+      COALESCE(NULLIF(ri.io_no, ''), 'STOCK') job_no, ri.weight_kg sent_kg, ri.good_kg back_kg, ri.reject_kg returned_kg, ri.loss_kg loss_kg,
+      GREATEST(ri.weight_kg - ri.good_kg - ri.reject_kg - ri.loss_kg, 0) balance_kg
+     FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order o ON o.id = ri.fpo_id LEFT JOIN mst_party v ON v.id = o.vendor_id
+    WHERE o.company_id = ? AND o.status NOT IN ('DRAFT', 'CANCELLED') AND ri.status <> 'DRAFT'${vW('o.vendor_id')}${dW('o.fpo_date')}`, [cid, ...vP, ...dP]);
+  const jw = await query<any>(`SELECT 'Job work' kind, jc.vendor_id, v.party_name contractor, jc.id dc_id, jc.challan_no dc_no, jc.challan_date dc_date, ps.stage_name process,
+      COALESCE(NULLIF(jc.io_no, ''), 'STOCK') job_no, fi.issue_kg sent_kg, fi.consumed_kg back_kg, fi.returned_kg returned_kg, fi.waste_kg loss_kg,
+      GREATEST(fi.issue_kg - fi.consumed_kg - fi.returned_kg - fi.waste_kg, 0) balance_kg
+     FROM trx_jw_fabric_issue fi JOIN trx_jobwork_challan jc ON jc.id = fi.challan_id LEFT JOIN mst_party v ON v.id = jc.vendor_id
+     LEFT JOIN cfg_process_stage ps ON ps.id = jc.stage_id
+    WHERE jc.company_id = ? AND jc.status <> 'CANCELLED'${vW('jc.vendor_id')}${dW('jc.challan_date')}`, [cid, ...vP, ...dP]);
+  return [...proc, ...jw];
+}
 const REPORTS: Record<string, (cid: number, f: F) => Promise<any[]>> = {
   /** Per GRN line: rolls / KG received (never change) vs pieces now, in store, issued, cut loss. */
   'grn-reconciliation': async (cid, f) => (await query<any>(
@@ -334,6 +405,41 @@ const REPORTS: Record<string, (cid: number, f: F) => Promise<any[]>> = {
     return out.sort((a, b) => Math.abs(b.difference_kg) - Math.abs(a.difference_kg));
   },
 
+  /**
+   * Fabric with each contractor / process unit: process DCs (sent → processed back, rejected back, process loss) and
+   * job-work fabric DCs (sent → used, returned unused, waste); balance = still with them; oldest open DC and its age.
+   */
+  'contractor-fabric': async (cid, f) => {
+    const rows = await contractorFabricLines(cid, f);
+    const by = new Map<string, any>();
+    for (const r of rows) {
+      const k = `${r.vendor_id}|${r.kind}`;
+      const a = by.get(k) ?? { contractor: r.contractor, kind: r.kind, dcs: new Set(), open_dcs: new Set(), sent_kg: 0, back_kg: 0, returned_kg: 0, loss_kg: 0, balance_kg: 0, oldest_open: null as string | null };
+      a.dcs.add(r.dc_no); a.sent_kg += n(r.sent_kg); a.back_kg += n(r.back_kg); a.returned_kg += n(r.returned_kg); a.loss_kg += n(r.loss_kg); a.balance_kg += n(r.balance_kg);
+      if (n(r.balance_kg) > 0.0005) { a.open_dcs.add(r.dc_no); const d = String(r.dc_date).slice(0, 10); if (!a.oldest_open || d < a.oldest_open) a.oldest_open = d; }
+      by.set(k, a);
+    }
+    return [...by.values()].map((a) => ({ ...a, dcs: a.dcs.size, open_dcs: a.open_dcs.size, sent_kg: r3(a.sent_kg), back_kg: r3(a.back_kg), returned_kg: r3(a.returned_kg),
+      loss_kg: r3(a.loss_kg), balance_kg: r3(a.balance_kg), oldest_open_days: a.oldest_open ? Math.floor((Date.now() - new Date(`${a.oldest_open}T00:00:00+05:30`).getTime()) / 86400000) : null }))
+      .sort((x, y) => y.balance_kg - x.balance_kg);
+  },
+
+  /** The open DCs behind the contractor report: one row per DC with the KG still with the contractor. */
+  'contractor-fabric-dcs': async (cid, f) => {
+    const rows = await contractorFabricLines(cid, f);
+    const by = new Map<string, any>();
+    for (const r of rows) {
+      const k = `${r.kind}|${r.dc_id}`;
+      const a = by.get(k) ?? { contractor: r.contractor, kind: r.kind, dc_no: r.dc_no, dc_date: r.dc_date, process: r.process, job_no: r.job_no, rolls: 0, sent_kg: 0, back_kg: 0, returned_kg: 0, loss_kg: 0, balance_kg: 0 };
+      a.rolls += 1; a.sent_kg += n(r.sent_kg); a.back_kg += n(r.back_kg); a.returned_kg += n(r.returned_kg); a.loss_kg += n(r.loss_kg); a.balance_kg += n(r.balance_kg);
+      by.set(k, a);
+    }
+    return [...by.values()].filter((a) => a.balance_kg > 0.0005)
+      .map((a) => ({ ...a, sent_kg: r3(a.sent_kg), back_kg: r3(a.back_kg), returned_kg: r3(a.returned_kg), loss_kg: r3(a.loss_kg), balance_kg: r3(a.balance_kg),
+        age_days: Math.floor((Date.now() - new Date(`${String(a.dc_date).slice(0, 10)}T00:00:00+05:30`).getTime()) / 86400000) }))
+      .sort((x, y) => y.age_days - x.age_days);
+  },
+
   /** Label prints and reprints (who, when, why). */
   labels: async (cid, f) => query<any>(
     `SELECT l.printed_at, l.roll_no, l.print_kind, l.reprint_reason, l.balance_kg, l.status, u.full_name printed_by
@@ -346,7 +452,8 @@ fabricRollsRouter.get(`${BASE}/reports/:key`, VIEW, ah(async (req, res) => {
   const fn = REPORTS[String(req.params.key)];
   if (!fn) throw NotFound('Unknown report');
   const f = z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    grn_id: z.coerce.number().int().positive().optional(), warehouse_id: z.coerce.number().int().positive().optional(), fabric_id: z.coerce.number().int().positive().optional() })
+    grn_id: z.coerce.number().int().positive().optional(), warehouse_id: z.coerce.number().int().positive().optional(), fabric_id: z.coerce.number().int().positive().optional(),
+    vendor_id: z.coerce.number().int().positive().optional() })
     .parse(Object.fromEntries(Object.entries(req.query).filter(([, v]) => v !== '' && v != null)));
   res.json({ data: await fn(req.user!.companyId, f) });
 }));

@@ -313,3 +313,28 @@ export function RollFamilyPanel({ rollId }: { rollId: number }) {
     </div>
   );
 }
+
+// ------------------------------------------------------------------ mix warning on DCs
+
+/**
+ * Warning (never a block) when the rolls picked for one DC mix lots, shades / colours, grey with processed fabric, Dia, or
+ * GSM beyond tolerance within the same job + fabric — mixed lots in one dye batch or lay show as shade variation.
+ */
+export function RollMixWarning({ rollIds, context = 'DC' }: { rollIds: number[]; context?: string }) {
+  const ids = useMemo(() => [...new Set(rollIds.filter((x) => x > 0))].sort((a, b) => a - b), [rollIds]);
+  const dIds = useDebounced(ids, 400);
+  const chk = useQuery({ queryKey: ['roll-mix', dIds], enabled: dIds.length > 1, staleTime: 30_000,
+    queryFn: async () => (await http.post<{ data: any }>('/inventory/fabric-rolls/mix-check', { roll_ids: dIds })).data });
+  if (ids.length < 2 || !chk.data || chk.data.ok) return null;
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-caption text-amber-900" id="roll-mix-warning" role="alert">
+      <b>⚠ Check before sending — these rolls on one {context} are not alike:</b>
+      {chk.data.groups.map((g: any, i: number) => (
+        <div key={i} className="mt-1">
+          <span className="font-semibold">{g.job_no} · {g.fabric_name}</span> ({g.rolls} rolls):{' '}
+          {g.issues.map((x: any) => <span key={x.kind} data-mix={x.kind} className="mr-2">{x.text};</span>)}
+        </div>))}
+      <div className="mt-1 text-amber-800">Mixed lots / shades in one dye batch or lay show up as shade variation in the garments. You can still save if this is intended.</div>
+    </div>
+  );
+}

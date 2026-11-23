@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { SearchSelect, ScanInput, StatusChip, Qty, UomInput, errMsg } from './cuttingUi';
+import { RollMixWarning } from '../procurement/RollActions';
 
 /**
  * Fabric DC (doc §6) — roll-wise issue of real roll stock to a cut order.
@@ -155,6 +156,7 @@ function NewDcModal({ plans, onClose, onSaved }: { plans: any[]; onClose: () => 
           <Input label="From Location (store)" value={header.from_location} onChange={e => setHeader({ ...header, from_location: e.target.value })} />
           <Input label="To Location (cutting)" value={header.to_location} onChange={e => setHeader({ ...header, to_location: e.target.value })} />
         </FormSection>
+        <RollMixWarning rollIds={lines.map((l) => Number(l.fabric_roll_id))} context="cutting DC" />
         {plan && (
           <div className="flex flex-wrap gap-4 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-900">
             <span>I/O <b className="tabular-nums">{plan.io_no}</b></span>

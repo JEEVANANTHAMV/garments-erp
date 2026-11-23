@@ -41,6 +41,16 @@ const REPORTS: Record<string, { label: string; help: string; cols: Col[] }> = {
   'ledger-reconciliation': { label: 'Roll book vs stock ledger', help: 'Per fabric and store: KG on the rolls vs the stock ledger. A difference means a movement posted only one side.', cols: [
     { key: 'fabric_name', label: 'Fabric' }, { key: 'warehouse_name', label: 'Store' }, { key: 'pieces', label: 'Pieces', num: true }, { key: 'roll_kg', label: 'Roll KG', kgCol: true },
     { key: 'ledger_kg', label: 'Ledger KG', kgCol: true }, { key: 'difference_kg', label: 'Difference', kgCol: true }] },
+  'contractor-fabric': { label: 'Fabric with contractors', help: 'KG with each contractor / process unit: sent on process and job-work DCs, back (processed or used), returned, loss / waste, and the balance still with them.', cols: [
+    { key: 'contractor', label: 'Contractor / unit' }, { key: 'kind', label: 'DC type' }, { key: 'dcs', label: 'DCs', num: true }, { key: 'open_dcs', label: 'Open DCs', num: true },
+    { key: 'sent_kg', label: 'Sent KG', kgCol: true }, { key: 'back_kg', label: 'Processed / used KG', kgCol: true }, { key: 'returned_kg', label: 'Returned / rejected KG', kgCol: true },
+    { key: 'loss_kg', label: 'Loss / waste KG', kgCol: true }, { key: 'balance_kg', label: 'With them KG', kgCol: true }, { key: 'oldest_open', label: 'Oldest open DC', date: true },
+    { key: 'oldest_open_days', label: 'Days', num: true }] },
+  'contractor-fabric-dcs': { label: 'Fabric with contractors — open DCs', help: 'Every DC with fabric still at the contractor / unit, oldest first.', cols: [
+    { key: 'contractor', label: 'Contractor / unit' }, { key: 'kind', label: 'DC type' }, { key: 'dc_no', label: 'DC' }, { key: 'dc_date', label: 'Date', date: true },
+    { key: 'process', label: 'Process / stage' }, { key: 'job_no', label: 'Job' }, { key: 'rolls', label: 'Rolls', num: true }, { key: 'sent_kg', label: 'Sent KG', kgCol: true },
+    { key: 'back_kg', label: 'Processed / used KG', kgCol: true }, { key: 'returned_kg', label: 'Returned KG', kgCol: true }, { key: 'loss_kg', label: 'Loss KG', kgCol: true },
+    { key: 'balance_kg', label: 'With them KG', kgCol: true }, { key: 'age_days', label: 'Days out', num: true }] },
   labels: { label: 'Label prints', help: 'Every roll label printed or reprinted (who, when, why).', cols: [
     { key: 'printed_at', label: 'When', fmt: (r) => fmtDateTime(r.printed_at) }, { key: 'roll_no', label: 'Roll' }, { key: 'print_kind', label: 'Kind' }, { key: 'reprint_reason', label: 'Reason' },
     { key: 'balance_kg', label: 'KG on label', kgCol: true }, { key: 'status', label: 'Status' }, { key: 'printed_by', label: 'By' }] },
@@ -112,7 +122,7 @@ export default function FabricRollCuttingPage() {
         actions={<Button variant="secondary" onClick={() => nav('/procurement/fabric/roll-stock')}>Fabric Roll Stock</Button>} />
       <div className="card mb-3 px-4 pt-2"><Tabs active={tab} onChange={setTab} tabs={[
         { key: 'approvals', label: 'Approvals', count: pending.data?.length ?? 0 }, { key: 'splits', label: 'Split register' },
-        { key: 'transfers', label: 'Roll moves' }, { key: 'reports', label: 'Reports' }]} /></div>
+        { key: 'transfers', label: 'Roll moves' }, { key: 'reports', label: 'Reports' }, { key: 'guide', label: 'Store guide' }]} /></div>
 
       {tab === 'approvals' && (pending.isLoading ? <LoadingBlock /> : table(['Split', 'Requested', 'Roll', 'Fabric', 'Reason', 'Roll KG', 'Pieces', 'Loss KG', 'Tolerance', 'By', ''], pending.data ?? [], (s) => (
         <tr key={s.id} className="border-t border-surface-divider" data-split={s.split_no}>
@@ -165,10 +175,43 @@ export default function FabricRollCuttingPage() {
           </table>
         </div>))}
 
+      {tab === 'guide' && <StoreGuide />}
+
       <Modal open={!!reject} onClose={() => setReject(null)} size="sm" title={`Reject ${reject?.split_no ?? ''}`} subtitle="The roll stays as it is; the store can cut it again with the right weights."
         footer={<><Button variant="secondary" onClick={() => setReject(null)}>Cancel</Button><Button variant="danger" onClick={doReject} loading={!!busy} disabled={rejectWhy.trim().length < 3} id="btn-split-reject">Reject</Button></>}>
         <Input label="Reason *" value={rejectWhy} onChange={(e) => setRejectWhy(e.target.value)} id="split-reject-reason" placeholder="e.g. re-weigh the pieces" />
       </Modal>
     </>
+  );
+}
+
+/** One-page guide for the store team (client doc §15: store-user guide). Printable. */
+function StoreGuide() {
+  const step = (n: number, title: string, body: React.ReactNode) => (
+    <div className="flex gap-3 border-t border-surface-divider py-3 first:border-t-0">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 text-body font-bold text-brand-700">{n}</span>
+      <div><h4 className="text-body font-semibold text-ink">{title}</h4><div className="mt-0.5 space-y-1 text-body text-ink-secondary">{body}</div></div>
+    </div>
+  );
+  return (
+    <div className="card p-5" id="store-guide">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div><h3 className="text-title font-semibold text-ink">Fabric rolls — store guide</h3>
+          <p className="text-body text-ink-secondary">One roll = one physical piece with its own roll no and label. Cutting a roll never changes the KG or the rolls received on the GRN.</p></div>
+        <Button variant="secondary" onClick={() => window.print()}>Print</Button>
+      </div>
+      {step(1, 'Receive', <p>Enter every roll on the fabric GRN with its weighed KG (and meter if measured). If the supplier's roll no is already used, the ERP makes it <b>GRN no / roll no</b> and keeps the supplier's no. Print the labels from <b>Fabric Roll Stock</b> (tick the rolls → Print labels).</p>)}
+      {step(2, 'Cut a roll by hand', <>
+        <p>Fabric Roll Stock → scissors on the roll → enter each piece's KG (weigh it). <b>Cut off</b> fills two pieces for you; <b>Last piece = rest of the roll</b> fills the last one.</p>
+        <p>Choose where each piece goes: in store, QC hold, or damaged; another store / bin if it moves. Click <b>Cut roll</b>, then <b>Print piece labels</b> and stick a new label on every piece. Throw away the old label.</p>
+      </>)}
+      {step(3, 'Send part of a roll on a DC', <p>On a process DC or job-work DC just type the KG you send. The screen shows <b>✂ cut: X sent · Y stays</b>; on confirm the ERP cuts the roll: the piece sent gets a new roll no (on the DC), the rest stays as another piece. Print the label of the piece that stays. Cutting DCs keep the same roll (the roll goes to the cutting table).</p>)}
+      {step(4, 'Cutting loss', <p>If the pieces weigh less than the roll, the difference is the cutting loss. A small loss (up to the tolerance shown on the screen) is booked at once. A bigger loss waits for the store supervisor in <b>Fabric Roll Cutting → Approvals</b>; the roll does not change until approved. Never round the weights to hide a loss.</p>)}
+      {step(5, 'Mixed rolls warning', <p>When the rolls on one DC are from different lots, shades, Dia or GSM, the DC shows an amber warning. Check with the supervisor before sending — mixed lots in one dye batch or lay give shade variation.</p>)}
+      {step(6, 'Fabric coming back', <p>Returns from a contractor or cutting go back onto the same piece. If that piece was cut meanwhile, the ERP makes a <b>return piece</b> (roll no ending -R1) — print its label.</p>)}
+      {step(7, 'Move rolls', <p>Fabric Roll Stock → tick the rolls → <b>Move to store / bin</b> → store, bin and reason. Moves are dated today.</p>)}
+      {step(8, 'Labels and reprints', <p>A label can be printed once; a reprint needs a reason and the Inventory Update right. Every print is logged (Reports → Label prints).</p>)}
+      {step(9, 'Check every day', <p><b>Reports</b>: <i>Fabric with contractors</i> (what is out and for how long), <i>Remnant pieces</i> (use them first), <i>GRN: received vs pieces now</i> (KG received = in store + out + loss), <i>Roll book vs stock ledger</i> (should show no difference).</p>)}
+    </div>
   );
 }

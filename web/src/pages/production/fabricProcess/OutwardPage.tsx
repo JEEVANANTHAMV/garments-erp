@@ -12,6 +12,7 @@ import { Button, Modal, Input, Select, Textarea, SearchInput, LoadingBlock } fro
 import { fmtDate, today } from '../../../lib/format';
 import { DocPdfActions } from '../../../components/DocPdfActions';
 import { FpTitle, FpStatus, ReconCards, useProcessTypes, useJobs, errText, kg, n, r3, groupByJob, isDyeing, quoteColour, type StoreRoll, type Job } from './shared';
+import { RollMixWarning } from '../../procurement/RollActions';
 
 /**
  * Fabric Process — Outward DC (doc §5): one DC, many jobs, many rolls per job.
@@ -247,6 +248,7 @@ function OutwardEditor({ id, onBack, onOpen }: { id: number | null; onBack: () =
             <Button size="sm" variant="danger" disabled={!rows.length} onClick={() => setRows([])}><Trash2 size={13} className="mr-1" /> Clear all</Button>
           </div>}
         </div>
+        {editable && rows.length > 1 && <div className="px-4 pt-2"><RollMixWarning rollIds={rows.map((r) => r.fabric_roll_id)} context="process DC" /></div>}
         <div className="max-h-[55vh] overflow-auto">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 bg-surface-muted text-ink-secondary"><tr>

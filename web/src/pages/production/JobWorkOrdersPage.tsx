@@ -7,6 +7,7 @@ import { fmtDate, fmtNumber, today } from '../../lib/format';
 import { useToast } from '../../hooks/useToast';
 import { useLookup, toOptions } from '../../hooks/useLookup';
 import { JobSelect } from '../../components/JobSelect';
+import { RollMixWarning } from '../procurement/RollActions';
 
 /**
  * External job work / subcontracting (client document "External Job Work Subcontracting" + voice note 05-Oct-2026).
@@ -412,6 +413,7 @@ function FabricOutwardModal({ order, line, onClose, onDone }: { order: any; line
       <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <div>
           <h3 className="mb-2.5 border-b border-surface-divider pb-1.5 text-small font-semibold uppercase tracking-wider text-ink-secondary">Fabric rolls (free stock of the job)</h3>
+          <div className="mb-2"><RollMixWarning rollIds={Object.entries(kg).filter(([, v]) => num(v) > 0).map(([id]) => Number(id))} context="job-work DC" /></div>
           {!opts ? <LoadingBlock rows={3} /> : opts.rolls.length === 0 ? <p className="text-xs text-ink-secondary">No free QC-accepted roll for this job.</p> : (
             <table className="w-full text-xs">
               <thead className="bg-surface-muted text-ink-secondary"><tr><th className="px-2 py-1 text-left">Roll</th><th className="px-2 py-1 text-left">Lot</th><th className="px-2 py-1 text-left">Fabric</th>
