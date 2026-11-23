@@ -269,7 +269,7 @@ fabricRollsRouter.get(`${BASE}/:id/family`, VIEW, ah(async (req, res) => {
 type F = { from?: string; to?: string; grn_id?: number; warehouse_id?: number; fabric_id?: number };
 const REPORTS: Record<string, (cid: number, f: F) => Promise<any[]>> = {
   /** Per GRN line: rolls / KG received (never change) vs pieces now, in store, issued, cut loss. */
-  'grn-reconciliation': async (cid, f) => query<any>(
+  'grn-reconciliation': async (cid, f) => (await query<any>(
     `SELECT ANY_VALUE(g.grn_no) grn_no, ANY_VALUE(g.grn_date) grn_date, ANY_VALUE(sup.party_name) supplier, ANY_VALUE(fb.fabric_name) fabric_name, ANY_VALUE(gl.lot_no) lot_no, ANY_VALUE(g.id) grn_id,
             SUM(fr.roll_origin = 'RECEIPT') received_rolls, ROUND(SUM(IF(fr.roll_origin = 'RECEIPT', COALESCE(fr.original_weight_kg, fr.weight_kg), 0)), 3) received_kg,
             SUM(${LIVE_ROLL_SQL()}) pieces_now, SUM(${LIVE_ROLL_SQL()} AND fr.weight_kg - fr.issued_kg > 0.0005) pieces_in_store,
@@ -280,7 +280,9 @@ const REPORTS: Record<string, (cid: number, f: F) => Promise<any[]>> = {
        LEFT JOIN mst_party sup ON sup.id = g.supplier_id LEFT JOIN mst_fabric fb ON fb.id = fr.fabric_id
       WHERE fr.company_id = ? ${f.grn_id ? 'AND fr.grn_id = ?' : ''} ${f.fabric_id ? 'AND fr.fabric_id = ?' : ''} ${f.from ? 'AND g.grn_date >= ?' : ''} ${f.to ? 'AND g.grn_date <= ?' : ''}
       GROUP BY gl.id ORDER BY ANY_VALUE(g.grn_date) DESC, ANY_VALUE(g.id) DESC, gl.id LIMIT 2000`,
-    [cid, ...(f.grn_id ? [f.grn_id] : []), ...(f.fabric_id ? [f.fabric_id] : []), ...(f.from ? [f.from] : []), ...(f.to ? [f.to] : [])]),
+    [cid, ...(f.grn_id ? [f.grn_id] : []), ...(f.fabric_id ? [f.fabric_id] : []), ...(f.from ? [f.from] : []), ...(f.to ? [f.to] : [])]))
+    // out of store = on DCs / with contractors / consumed / adjusted: received − in store − cutting loss
+    .map((r) => ({ ...r, out_of_store_kg: r3(n(r.received_kg) - n(r.in_store_kg) - n(r.cut_loss_kg)) })),
 
   /** Remnants: pieces left in store after a cut / a return, with age and where they came from. */
   remnants: async (cid, f) => query<any>(

@@ -2,7 +2,7 @@ import { query, queryOne, txQueryOne, txExecute, type Tx } from '../../config/db
 import { BadRequest } from '../../core/errors.js';
 import { postLedger, UOM_KG } from '../../core/processEngine.js';
 import { refreshFabricRollStatus } from '../production/cuttingEngine.js';
-import { requestSplit } from '../fabricRoll/rollEngine.js';
+import { isDeadRoll, receiveBack, requestSplit } from '../fabricRoll/rollEngine.js';
 import { yarnStockRows, yarnStockQuery } from '../procurement/fabricYarnProcurement.routes.js';
 
 /**
@@ -192,6 +192,14 @@ export async function moveStock(ctx: MoveCtx, ref: string, delta: number, opts: 
     const roll = await txQueryOne<any>(tx, 'SELECT id, roll_no, weight_kg, issued_kg, warehouse_id, so_id FROM trx_fabric_roll WHERE id = ? FOR UPDATE', [id]);
     const whole = delta < 0 && Math.abs(-delta - (n(roll.weight_kg) - n(roll.issued_kg))) <= EPS && n(roll.issued_kg) <= EPS;
     const left = n(roll.weight_kg) - n(roll.issued_kg);
+    const full = await txQueryOne<any>(tx, 'SELECT stock_status FROM trx_fabric_roll WHERE id = ?', [id]);
+    if (delta > 0 && isDeadRoll(full?.stock_status)) {
+      // KG back to a roll that was cut / merged / closed since: a return piece of its own (never added to a closed roll)
+      const back = await receiveBack(tx, { cid, userId: ctx.userId, canApprove: false }, id, delta,
+        { type: ctx.refType, id: ctx.refId, no: ctx.refNo, event: opts.label, remarks: `${opts.label} ${ctx.refNo}`, parentEvent: 'STORE_RETURN_PIECE' });
+      await ledger(back.warehouse_id ?? cur.warehouse_id, delta, 0, opts.txnType);
+      return cur;
+    }
     if (opts.to && (whole || (delta < 0 && -delta >= left - EPS))) {
       // the whole roll (or all of it left in store) goes to the rejection godown as it is
       await txExecute(tx, `UPDATE trx_fabric_roll SET warehouse_id = ?, qc_status = 'REJECTED' WHERE id = ?`, [opts.to, id]);

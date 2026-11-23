@@ -24,7 +24,7 @@ const REPORTS: Record<string, { label: string; help: string; cols: Col[] }> = {
   'grn-reconciliation': { label: 'GRN: received vs pieces now', help: 'Rolls and KG received on each GRN line never change; a cut only adds pieces. In store + issued + cutting loss explains every KG.', cols: [
     { key: 'grn_no', label: 'GRN' }, { key: 'grn_date', label: 'Date', date: true }, { key: 'supplier', label: 'Supplier' }, { key: 'fabric_name', label: 'Fabric' }, { key: 'lot_no', label: 'Lot' },
     { key: 'received_rolls', label: 'Rolls received', num: true }, { key: 'received_kg', label: 'KG received', kgCol: true }, { key: 'cut_rolls', label: 'Rolls cut', num: true },
-    { key: 'pieces_now', label: 'Pieces now', num: true }, { key: 'pieces_in_store', label: 'Pieces in store', num: true }, { key: 'in_store_kg', label: 'KG in store', kgCol: true }, { key: 'cut_loss_kg', label: 'Cutting loss KG', kgCol: true }] },
+    { key: 'pieces_now', label: 'Pieces now', num: true }, { key: 'pieces_in_store', label: 'Pieces in store', num: true }, { key: 'in_store_kg', label: 'KG in store', kgCol: true }, { key: 'out_of_store_kg', label: 'KG out (DCs / used)', kgCol: true }, { key: 'cut_loss_kg', label: 'Cutting loss KG', kgCol: true }] },
   remnants: { label: 'Remnant pieces', help: 'Pieces left in store after a cut or a return — use them first.', cols: [
     { key: 'roll_no', label: 'Piece' }, { key: 'parent_roll_no', label: 'Cut from' }, { key: 'roll_origin', label: 'Origin' }, { key: 'fabric_name', label: 'Fabric' }, { key: 'lot_no', label: 'Lot' },
     { key: 'color_name', label: 'Colour' }, { key: 'job_no', label: 'Job' }, { key: 'warehouse_name', label: 'Store' }, { key: 'location_bin', label: 'Bin' }, { key: 'balance_kg', label: 'KG', kgCol: true },

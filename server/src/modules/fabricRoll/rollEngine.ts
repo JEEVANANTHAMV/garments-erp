@@ -407,7 +407,11 @@ export async function pieceForIssue(tx: Tx, ctx: RollCtx, roll: any, kg: number,
  * back (same piece, same label). A roll that is closed / split / merged is no longer a piece, so the KG becomes a new
  * return piece (child roll, its own roll no and label) — stock is never hidden on a closed roll.
  */
-export async function receiveBack(tx: Tx, ctx: RollCtx, rollId: number, kg: number, ref: { type: string; id?: number | null; no?: string | null; event: string; remarks?: string | null; meters?: number | null }) {
+export async function receiveBack(tx: Tx, ctx: RollCtx, rollId: number, kg: number, ref: {
+  type: string; id?: number | null; no?: string | null; event: string; remarks?: string | null; meters?: number | null;
+  /** event written on the closed roll (RETURN_PIECE counts as an out in the roll ledger; stores returns use STORE_RETURN_PIECE) */
+  parentEvent?: string;
+}) {
   const roll = await txQueryOne<any>(tx, 'SELECT * FROM trx_fabric_roll WHERE id = ? FOR UPDATE', [rollId]);
   if (!roll) throw BadRequest(`Roll #${rollId} not found`);
   const q = r3(kg);
@@ -425,7 +429,7 @@ export async function receiveBack(tx: Tx, ctx: RollCtx, rollId: number, kg: numb
     actual_meters: ref.meters != null ? r3(ref.meters) : null, measured_meters: ref.meters != null ? 1 : 0,
     remarks: `Returned on ${ref.no ?? ref.type} from ${roll.roll_no}`.slice(0, 255),
   });
-  await rollHistory(tx, ctx.cid, ctx.userId, { roll_id: roll.id, roll_no: roll.roll_no, event: 'RETURN_PIECE', ref_type: ref.type, ref_id: ref.id ?? null, ref_no: ref.no ?? null, qty: q, so_id: roll.so_id, related: id,
+  await rollHistory(tx, ctx.cid, ctx.userId, { roll_id: roll.id, roll_no: roll.roll_no, event: ref.parentEvent ?? 'RETURN_PIECE', ref_type: ref.type, ref_id: ref.id ?? null, ref_no: ref.no ?? null, qty: q, so_id: roll.so_id, related: id,
     remarks: `${q} KG came back as ${no}${ref.remarks ? `: ${ref.remarks}` : ''}` });
   await rollHistory(tx, ctx.cid, ctx.userId, { roll_id: id, roll_no: no, event: ref.event, ref_type: ref.type, ref_id: ref.id ?? null, ref_no: ref.no ?? null, qty: q, so_id: roll.so_id, related: roll.id,
     to: await whName(tx, roll.warehouse_id), remarks: `Returned piece of ${roll.roll_no}` });
