@@ -326,12 +326,12 @@ async function contractorFabricLines(cid: number, f: F) {
   const dP = [...(f.from ? [f.from] : []), ...(f.to ? [f.to] : [])];
   const vW = (col: string) => (f.vendor_id ? ` AND ${col} = ?` : '');
   const vP = f.vendor_id ? [f.vendor_id] : [];
-  const proc = await query<any>(`SELECT 'Process DC' kind, o.vendor_id, v.party_name contractor, o.id dc_id, o.fpo_no dc_no, o.fpo_date dc_date, o.sub_process process,
+  const proc = await query<any>(`SELECT 'Process DC' kind, o.vendor_id, COALESCE(v.party_name, 'No vendor on DC') contractor, o.id dc_id, o.fpo_no dc_no, o.fpo_date dc_date, o.sub_process process,
       COALESCE(NULLIF(ri.io_no, ''), 'STOCK') job_no, ri.weight_kg sent_kg, ri.good_kg back_kg, ri.reject_kg returned_kg, ri.loss_kg loss_kg,
       GREATEST(ri.weight_kg - ri.good_kg - ri.reject_kg - ri.loss_kg, 0) balance_kg
      FROM trx_fabric_process_roll_in ri JOIN trx_fabric_process_order o ON o.id = ri.fpo_id LEFT JOIN mst_party v ON v.id = o.vendor_id
     WHERE o.company_id = ? AND o.status NOT IN ('DRAFT', 'CANCELLED') AND ri.status <> 'DRAFT'${vW('o.vendor_id')}${dW('o.fpo_date')}`, [cid, ...vP, ...dP]);
-  const jw = await query<any>(`SELECT 'Job work' kind, jc.vendor_id, v.party_name contractor, jc.id dc_id, jc.challan_no dc_no, jc.challan_date dc_date, ps.stage_name process,
+  const jw = await query<any>(`SELECT 'Job work' kind, jc.vendor_id, COALESCE(v.party_name, 'No vendor on DC') contractor, jc.id dc_id, jc.challan_no dc_no, jc.challan_date dc_date, ps.stage_name process,
       COALESCE(NULLIF(jc.io_no, ''), 'STOCK') job_no, fi.issue_kg sent_kg, fi.consumed_kg back_kg, fi.returned_kg returned_kg, fi.waste_kg loss_kg,
       GREATEST(fi.issue_kg - fi.consumed_kg - fi.returned_kg - fi.waste_kg, 0) balance_kg
      FROM trx_jw_fabric_issue fi JOIN trx_jobwork_challan jc ON jc.id = fi.challan_id LEFT JOIN mst_party v ON v.id = jc.vendor_id
